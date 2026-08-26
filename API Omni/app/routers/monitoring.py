@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.dependencies import verify_api_key, get_ov_service
 from app.services.omnivista_service import OmniVistaService
@@ -7,7 +7,7 @@ from app.schemas.catalogs import InfrastructureStatsResponse
 
 router = APIRouter(
     prefix="/api/v1/monitoring",
-    tags=["Monitoreo y Métricas de Red"],
+    tags=["Monitoreo e Infraestructura"],
     dependencies=[Depends(verify_api_key)]
 )
 
@@ -15,8 +15,8 @@ router = APIRouter(
 @router.get(
     "/infrastructure-stats",
     response_model=ApiResponse[InfrastructureStatsResponse],
-    summary="Resumen de Métricas de Infraestructura",
-    description="Devuelve el conteo de APs, switches, dispositivos totales, cuentas de empleados y MACs registradas.",
+    summary="Resumen Métrico de Infraestructura",
+    description="Devuelve el conteo consolidado de Access Points, Switches, otros equipos, cuentas de empleados y MACs registradas.",
 )
 def get_infrastructure_stats(
     service: OmniVistaService = Depends(get_ov_service)
@@ -36,7 +36,7 @@ def get_infrastructure_stats(
     "/devices",
     response_model=ApiResponse[List[Dict[str, Any]]],
     summary="Inventario de Equipos de Red (Switches y APs)",
-    description="Lista todos los dispositivos administrados en OmniVista con su IP, MAC, modelo y estado operacional.",
+    description="Lista todos los dispositivos administrados en OmniVista con su IP, MAC, modelo de chasis y estado operacional.",
 )
 def get_devices(
     service: OmniVistaService = Depends(get_ov_service)
@@ -53,10 +53,38 @@ def get_devices(
 
 
 @router.get(
+    "/devices/{ip_address}",
+    response_model=ApiResponse[Dict[str, Any]],
+    summary="Consultar Equipo de Red por IP",
+    description="Busca la información detallada de un switch o AP por su dirección IP de gestión.",
+)
+def get_device_by_ip(
+    ip_address: str,
+    service: OmniVistaService = Depends(get_ov_service)
+):
+    try:
+        device = service.get_device_by_ip(ip_address)
+        if not device:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No se encontró ningún equipo de red con la IP '{ip_address}'."
+            )
+        return ApiResponse(
+            success=True,
+            message=f"Equipo con IP {ip_address} encontrado",
+            data=device
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.get(
     "/online-devices",
     response_model=ApiResponse[List[Dict[str, Any]]],
-    summary="Dispositivos Actualmente Conectados y Online",
-    description="Lista los dispositivos de Company Property autenticados en vivo en los APs y switches de la red.",
+    summary="Dispositivos Actualmente Conectados (Sesiones Online)",
+    description="Consulta los clientes y terminales de Company Property autenticados en vivo en los APs y switches de la red.",
 )
 def get_online_devices(
     service: OmniVistaService = Depends(get_ov_service)
@@ -67,6 +95,46 @@ def get_online_devices(
             success=True,
             message="Dispositivos online obtenidos",
             data=online
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.get(
+    "/topology",
+    response_model=ApiResponse[Any],
+    summary="Topología de Red",
+    description="Obtiene el mapa de topología y enlaces físicos/lógicos entre equipos de red.",
+)
+def get_topology(
+    service: OmniVistaService = Depends(get_ov_service)
+):
+    try:
+        topology = service.get_topology()
+        return ApiResponse(
+            success=True,
+            message="Topología de red obtenida",
+            data=topology
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.get(
+    "/notifications",
+    response_model=ApiResponse[Any],
+    summary="Alarmas y Notificaciones Activas",
+    description="Consulta las alarmas, trampas y eventos activos registrados en el NMS OmniVista 2500.",
+)
+def get_notifications(
+    service: OmniVistaService = Depends(get_ov_service)
+):
+    try:
+        notifications = service.get_notifications()
+        return ApiResponse(
+            success=True,
+            message="Notificaciones y alarmas obtenidas",
+            data=notifications
         )
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

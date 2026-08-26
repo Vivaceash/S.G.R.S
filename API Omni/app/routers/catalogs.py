@@ -1,12 +1,13 @@
+from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.dependencies import verify_api_key, get_ov_service
 from app.services.omnivista_service import OmniVistaService
 from app.schemas.common import ApiResponse
-from app.schemas.catalogs import AccessRoleProfileResponse, DeviceOptionsResponse
+from app.schemas.catalogs import AccessRoleProfileResponse, DeviceOptionsResponse, VlanCatalogResponse
 
 router = APIRouter(
     prefix="/api/v1/catalogs",
-    tags=["Catálogos y Opciones (Para Frontend)"],
+    tags=["Catálogos y Redes"],
     dependencies=[Depends(verify_api_key)]
 )
 
@@ -14,8 +15,8 @@ router = APIRouter(
 @router.get(
     "/access-role-profiles",
     response_model=ApiResponse[AccessRoleProfileResponse],
-    summary="Listar Redes y Perfiles de Acceso (AccessRoleProfile)",
-    description="Devuelve la lista de nombres de SSIDs y perfiles de red disponibles para poblar el dropdown en el formulario de alta.",
+    summary="Listar Redes y Perfiles de Acceso (AccessRoleProfile / SSIDs)",
+    description="Devuelve la lista de perfiles de red y SSIDs configurados en OmniVista para asignación de políticas de acceso.",
 )
 def get_access_role_profiles(
     service: OmniVistaService = Depends(get_ov_service)
@@ -37,8 +38,8 @@ def get_access_role_profiles(
 @router.get(
     "/device-options",
     response_model=ApiResponse[DeviceOptionsResponse],
-    summary="Opciones de Categorías y Sistemas Operativos para Dispositivos",
-    description="Devuelve los listados de categorías, familias y sistemas operativos para los dropdowns de Company Property.",
+    summary="Opciones Estándar de Dispositivos y Sistemas Operativos",
+    description="Devuelve las categorías, familias y sistemas operativos clasificados por el NMS OmniVista.",
 )
 def get_device_options(
     service: OmniVistaService = Depends(get_ov_service)
@@ -47,8 +48,31 @@ def get_device_options(
         options = service.get_device_options()
         return ApiResponse(
             success=True,
-            message="Opciones de dispositivos obtenidas",
+            message="Opciones de dispositivos obtenidas correctamente",
             data=DeviceOptionsResponse(**options)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.get(
+    "/vlans",
+    response_model=ApiResponse[VlanCatalogResponse],
+    summary="Listar Catálogo de VLANs",
+    description="Obtiene la lista de VLANs configuradas en los conmutadores y switches administrados por OmniVista.",
+)
+def get_vlans(
+    service: OmniVistaService = Depends(get_ov_service)
+):
+    try:
+        vlans = service.get_vlans()
+        return ApiResponse(
+            success=True,
+            message="Catálogo de VLANs obtenido correctamente",
+            data=VlanCatalogResponse(
+                vlans=vlans,
+                total=len(vlans)
+            )
         )
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

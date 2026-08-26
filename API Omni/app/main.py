@@ -6,7 +6,6 @@ from scalar_fastapi import get_scalar_api_reference
 
 from app.config import settings
 from app.routers import (
-    enrollment_router,
     employees_router,
     company_properties_router,
     catalogs_router,
@@ -14,47 +13,57 @@ from app.routers import (
     system_router,
 )
 
-# Inicialización de FastAPI
+# Inicialización de FastAPI: Únicamente Scalar (Swagger y ReDoc 100% deshabilitados)
 app = FastAPI(
-    title="OmniVista 2500 - Network Access & Employee Management API",
+    title="OmniVista 2500 - Network Query & Monitoring API",
     description="""
-    ## API REST para Gestión de Acceso a Red y Altas de Empleados en Alcatel-Lucent OmniVista 2500 NMS.
+    ## API REST Exclusiva de Consultas para Alcatel-Lucent OmniVista 2500 NMS.
     
-    Esta API sirve como backend para el dashboard externo en React + Vite.
+    Esta API proporciona acceso de **solo lectura** para auditoría, monitoreo e inventario de red.
     
-    ### Flujos Principales:
-    1. **Alta Unificada (`/api/v1/enrollment/complete-user`)**: Registro de cuenta de empleado y asociación de dirección MAC en una sola petición.
-    2. **Cuentas de Empleados (`/api/v1/employees`)**: CRUD para Employee Accounts en OmniVista UPAM.
-    3. **Dispositivos y MACs (`/api/v1/company-properties`)**: CRUD para direcciones MAC en Company Property.
-    4. **Catálogos (`/api/v1/catalogs`)**: Lista de redes/SSIDs y categorías de dispositivos.
-    5. **Monitoreo (`/api/v1/monitoring`)**: Dispositivos conectados e infraestructura de switches y APs.
+    ### Módulos de Consulta:
+    1. **Cuentas y Empleados (`/api/v1/employees`)**: Directorio de usuarios y cuentas de acceso en OmniVista UPAM.
+    2. **Dispositivos y MACs (`/api/v1/company-properties`)**: Direcciones MAC autorizadas y terminales en Company Property.
+    3. **Monitoreo e Infraestructura (`/api/v1/monitoring`)**: Switches, Access Points, sesiones activas en vivo, topología y alarmas.
+    4. **Catálogos y Redes (`/api/v1/catalogs`)**: Perfiles de red / SSIDs, opciones de equipos y catálogo de VLANs.
+    5. **Sistema y Diagnóstico (`/api/v1/system`)**: Comprobación de salud, enlace con OmniVista y versión del NMS.
+    
+    *Documentación interactiva renderizada exclusivamente con **Scalar**.*
     """,
-    version="1.0.0",
-    docs_url=None,       # Deshabilitar Swagger por defecto para usar Scalar
-    redoc_url=None,      # Deshabilitar ReDoc
+    version="2.0.0",
+    docs_url=None,       # Swagger UI deshabilitado
+    redoc_url=None,      # ReDoc deshabilitado
     openapi_url="/openapi.json",
 )
 
-# Configuración de CORS
+# Configuración de CORS (solo métodos de consulta GET y preflight OPTIONS)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS if settings.CORS_ORIGINS else ["*"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "OPTIONS"],
     allow_headers=["*"],
 )
 
-# Integración de Documentación Interactiva Scalar
+# Integración Exclusiva de Documentación Interactiva Scalar
 @app.get("/docs", include_in_schema=False)
 async def scalar_docs():
     return get_scalar_api_reference(
         openapi_url=app.openapi_url,
-        title="OmniVista 2500 API Reference",
+        title="OmniVista 2500 Query API - Scalar Reference",
+        show_sidebar=True,
+        default_open_all_tags=True,
+        persist_auth=True,
         hide_models=False,
     )
 
 @app.get("/scalar", include_in_schema=False)
 async def scalar_docs_alias():
+    return RedirectResponse(url="/docs")
+
+@app.get("/swagger", include_in_schema=False)
+async def swagger_redirect_to_scalar():
+    """Redirige cualquier intento de acceso a /swagger directamente a Scalar (/docs)"""
     return RedirectResponse(url="/docs")
 
 @app.get("/", include_in_schema=False)
@@ -73,15 +82,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "success": False,
-            "message": "Error de validación en los datos enviados.",
+            "message": "Parámetros de consulta no válidos.",
             "error": "; ".join(errors),
             "data": None
         },
     )
 
 
-# Registrar Routers
-app.include_router(enrollment_router)
+# Registrar Routers de Consulta
 app.include_router(employees_router)
 app.include_router(company_properties_router)
 app.include_router(catalogs_router)
