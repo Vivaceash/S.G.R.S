@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="es-MX">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="SGRS — Centro de monitoreo de redes y seguridad" />
+    <title>Centro de monitoreo — SGRS</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#contenido">Ir al contenido</a>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar" aria-label="Navegación principal">
+        <a class="brand" href="#resumen" aria-label="SGRS, ir al resumen">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span><strong>SGRS</strong><small>Redes + seguridad</small></span>
+        </a>
+
+        <nav class="main-nav">
+          <p class="nav-label">OPERACIÓN</p>
+          <a class="nav-item active" href="#resumen" aria-current="page"><span aria-hidden="true">⌁</span>Resumen</a>
+          <a class="nav-item" href="#dispositivos"><span aria-hidden="true">▧</span>Dispositivos <b>248</b></a>
+          <a class="nav-item" href="#direcciones"><span aria-hidden="true">⌘</span>Direcciones IP</a>
+          <a class="nav-item" href="#actividad"><span aria-hidden="true">↕</span>Altas y bajas</a>
+          <p class="nav-label">SEGURIDAD</p>
+          <a class="nav-item" href="#alertas"><span aria-hidden="true">◇</span>Alertas <b class="danger-count">3</b></a>
+          <a class="nav-item" href="#topologia"><span aria-hidden="true">⌬</span>Topología</a>
+          <a class="nav-item" href="#reportes"><span aria-hidden="true">▥</span>Reportes</a>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="system-mini"><span class="status-dot"></span><span><strong>Sistema operativo</strong><small>Última sincronización: ahora</small></span></div>
+          <button class="user-chip" id="userButton" type="button" aria-label="Abrir opciones del usuario">
+            <span class="avatar">IR</span><span><strong>Israel R.</strong><small>Administrador</small></span><span aria-hidden="true">•••</span>
+          </button>
+        </div>
+      </aside>
+
+      <main id="contenido" class="main-content">
+        <header class="topbar">
+          <button class="menu-button" id="menuButton" type="button" aria-label="Abrir navegación" aria-expanded="false" aria-controls="sidebar">☰</button>
+          <div>
+            <p class="eyebrow">CENTRO DE MONITOREO</p>
+            <h1>Estado general de la red</h1>
+          </div>
+          <div class="topbar-actions">
+            <span class="live-indicator"><i></i>En vivo</span>
+            <button class="icon-button" type="button" id="refreshButton" aria-label="Actualizar datos"><span aria-hidden="true">↻</span></button>
+            <button class="primary-button" type="button" id="movementButton"><span aria-hidden="true">＋</span> Registrar movimiento</button>
+          </div>
+        </header>
+
+        <section class="network-status" id="resumen" aria-labelledby="networkTitle">
+          <div class="status-copy">
+            <div class="health-badge"><span></span>OPERACIÓN ESTABLE</div>
+            <h2 id="networkTitle">La red está <em>saludable</em></h2>
+            <p>Todos los servicios críticos responden con normalidad. Se detectaron 3 eventos que requieren revisión.</p>
+          </div>
+          <div class="signal-route" aria-label="Ruta de señal: Internet, Firewall, Núcleo y Acceso operando correctamente">
+            <div class="route-line"><span></span></div>
+            <div class="route-node"><i>IN</i><strong>Internet</strong><small>842 Mbps</small></div>
+            <div class="route-node"><i>FW</i><strong>Firewall</strong><small>12 ms</small></div>
+            <div class="route-node"><i>CO</i><strong>Núcleo</strong><small>99.99%</small></div>
+            <div class="route-node"><i>AC</i><strong>Acceso</strong><small>24 switches</small></div>
+          </div>
+        </section>
+
+        <section class="metric-grid" aria-label="Indicadores principales">
+          <article class="metric-card"><div class="metric-label"><span class="metric-icon cyan">▧</span>Dispositivos conectados</div><div class="metric-value">248 <small>/ 276</small></div><div class="progress"><i style="width: 89.8%"></i></div><p><span class="trend positive">↑ 8</span> desde ayer</p></article>
+          <article class="metric-card"><div class="metric-label"><span class="metric-icon violet">⌘</span>Direcciones disponibles</div><div class="metric-value">1,284 <small>IP libres</small></div><div class="progress violet-bar"><i style="width: 62%"></i></div><p>62% de capacidad total</p></article>
+          <article class="metric-card"><div class="metric-label"><span class="metric-icon amber">↯</span>Consumo de ancho de banda</div><div class="metric-value">68<small>%</small></div><div class="progress amber-bar"><i style="width: 68%"></i></div><p><span class="trend neutral">842 Mbps</span> de 1.2 Gbps</p></article>
+          <article class="metric-card alert-card" id="alertas"><div class="metric-label"><span class="metric-icon coral">◇</span>Alertas activas</div><div class="metric-value">3 <small>eventos</small></div><div class="alert-breakdown"><span><i class="severity high"></i>1 crítica</span><span><i class="severity medium"></i>2 medias</span></div><a href="#actividad">Revisar eventos <span aria-hidden="true">→</span></a></article>
+        </section>
+
+        <div class="content-grid">
+          <section class="panel device-panel" id="dispositivos" aria-labelledby="deviceTitle">
+            <div class="panel-header">
+              <div><p class="eyebrow">INVENTARIO ACTIVO</p><h2 id="deviceTitle">Dispositivos en la red</h2></div>
+              <a href="#direcciones">Ver inventario completo <span aria-hidden="true">→</span></a>
+            </div>
+            <div class="toolbar">
+              <div class="search-wrap">
+                <span aria-hidden="true">⌕</span>
+                <label class="sr-only" for="deviceSearch">Buscar dispositivos</label>
+                <input id="deviceSearch" type="search" placeholder="Buscar nombre, IP o área…" autocomplete="off" />
+                <button id="clearSearch" class="clear-search" type="button" aria-label="Limpiar búsqueda">×</button>
+              </div>
+              <div class="segmented" aria-label="Filtrar por estado">
+                <button class="selected" type="button" data-filter="all" aria-pressed="true">Todos</button>
+                <button type="button" data-filter="online" aria-pressed="false">En línea</button>
+                <button type="button" data-filter="offline" aria-pressed="false">Fuera de línea</button>
+              </div>
+            </div>
+            <div class="table-wrap" tabindex="0" aria-label="Tabla de dispositivos, desplazable horizontalmente">
+              <table>
+                <thead><tr><th aria-sort="ascending"><button type="button" data-sort="name">Dispositivo <span>↕</span></button></th><th>Dirección IP</th><th>Tipo</th><th>Ubicación</th><th><button type="button" data-sort="status">Estado <span>↕</span></button></th><th>Última actividad</th></tr></thead>
+                <tbody id="deviceRows"></tbody>
+              </table>
+              <div class="empty-state" id="emptyState" hidden><span>⌕</span><strong>Sin coincidencias</strong><p>Ajusta la búsqueda o cambia el filtro de estado.</p></div>
+            </div>
+            <div class="table-footer"><span id="resultCount">Mostrando 5 de 248 dispositivos</span><span>Actualización automática cada 30 s</span></div>
+          </section>
+
+          <aside class="right-column">
+            <section class="panel" id="actividad" aria-labelledby="activityTitle">
+              <div class="panel-header compact"><div><p class="eyebrow">BITÁCORA</p><h2 id="activityTitle">Actividad reciente</h2></div><button class="icon-button small" id="activityOptions" type="button" aria-label="Más opciones de actividad">•••</button></div>
+              <ol class="activity-list">
+                <li><span class="activity-icon up">↑</span><div><strong>Alta de dispositivo</strong><p>AP-SALA-JUNTAS se agregó a Corporativo.</p><small>Hace 12 min · Laura M.</small></div></li>
+                <li><span class="activity-icon warn">!</span><div><strong>Latencia elevada</strong><p>SW-PISO-03 superó 120 ms durante 8 min.</p><small>Hace 34 min · Automatización</small></div></li>
+                <li><span class="activity-icon down">↓</span><div><strong>Baja programada</strong><p>CAM-EXT-02 se retiró del inventario.</p><small>Hace 1 h · Israel R.</small></div></li>
+                <li><span class="activity-icon info">↻</span><div><strong>Cambio de dirección</strong><p>IMP-VENTAS-04 recibió la IP 10.20.4.86.</p><small>Hace 2 h · DHCP</small></div></li>
+              </ol>
+              <a class="full-link" href="#reportes">Abrir bitácora completa <span aria-hidden="true">→</span></a>
+            </section>
+
+            <section class="panel capacity-panel" id="direcciones" aria-labelledby="capacityTitle">
+              <div class="panel-header compact"><div><p class="eyebrow">CAPACIDAD IPv4</p><h2 id="capacityTitle">Uso por segmento</h2></div><span class="capacity-total">2,048 total</span></div>
+              <div class="capacity-item"><div><strong>Corporativo</strong><span>421 / 512</span></div><div class="progress"><i style="width:82%"></i></div></div>
+              <div class="capacity-item"><div><strong>Operaciones</strong><span>216 / 512</span></div><div class="progress violet-bar"><i style="width:42%"></i></div></div>
+              <div class="capacity-item"><div><strong>Invitados</strong><span>127 / 512</span></div><div class="progress amber-bar"><i style="width:25%"></i></div></div>
+              <div class="capacity-item"><div><strong>Infraestructura</strong><span>89 / 512</span></div><div class="progress coral-bar"><i style="width:17%"></i></div></div>
+            </section>
+          </aside>
+        </div>
+
+        <section class="placeholder-section" id="topologia"><p class="eyebrow">PRÓXIMO MÓDULO</p><h2>Topología de red</h2><p>Este espacio conectará visualmente sedes, segmentos y equipos críticos.</p></section>
+        <section class="placeholder-section" id="reportes"><p class="eyebrow">PRÓXIMO MÓDULO</p><h2>Reportes y auditoría</h2><p>Aquí se concentrarán históricos, exportaciones y trazabilidad de cambios.</p></section>
+      </main>
+    </div>
+
+    <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+    <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+
+    <dialog id="movementDialog" aria-labelledby="movementTitle" aria-describedby="movementDescription">
+      <div class="dialog-head"><div><p class="eyebrow">CONTROL DE INVENTARIO</p><h2 id="movementTitle">Registrar movimiento</h2></div><button class="icon-button" id="closeDialog" type="button" aria-label="Cerrar">×</button></div>
+      <p id="movementDescription">Selecciona el tipo de cambio que deseas documentar en la red.</p>
+      <div class="movement-options">
+        <button type="button" data-movement="alta"><span class="activity-icon up">↑</span><span><strong>Registrar alta</strong><small>Incorporar un dispositivo o segmento</small></span><span>→</span></button>
+        <button type="button" data-movement="baja"><span class="activity-icon down">↓</span><span><strong>Registrar baja</strong><small>Retirar un elemento del inventario</small></span><span>→</span></button>
+      </div>
+      <div class="dialog-actions"><button class="secondary-button" id="cancelDialog" type="button">Cancelar</button></div>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>

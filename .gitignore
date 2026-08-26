@@ -1,0 +1,83 @@
+﻿# ==========================================
+# Archivos de Entorno, Credenciales y API Keys
+# ==========================================
+*.env
+*.env.*
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.cert
+*.crt
+*.pfx
+*.p12
+*token*
+*secret*
+*credential*
+
+# ==========================================
+# Scripts de exploracion e investigacion interna con credenciales
+# ==========================================
+API Omni/discover_*.py
+API Omni/explore_*.py
+API Omni/find_*.py
+API Omni/inspect_*.py
+API Omni/scan_*.py
+API Omni/search_*.py
+API Omni/test_*.py
+API Omni/check_connectivity.py
+
+# ==========================================
+# Python & Bytecode
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ==========================================
+# Entornos Virtuales (Virtual Environments)
+# ==========================================
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ==========================================
+# Caches de Pruebas y Cobertura
+# ==========================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+
+# ==========================================
+# IDEs y Editores de Codigo
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# ==========================================
+# Archivos del Sistema Operativo
+# ==========================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==========================================
+# Logs y Temporales
+# ==========================================
+*.log
+logs/
+tmp/
+temp/
