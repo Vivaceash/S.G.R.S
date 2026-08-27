@@ -57,7 +57,7 @@ def _extract_metric_num(val: Any) -> Optional[float]:
     response_model=BaseResponse[SystemStatusData],
     summary="Obtener estado general del FortiGate (Hostname, Serial, Versión, Uptime)",
 )
-async def get_system_status(vdom: Optional[str] = Query(None, description="VDOM a consultar")):
+async def get_system_status(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar")):
     raw = await fortios_client.get_system_status(vdom=vdom)
     results: Dict[str, Any] = raw.get("results", {}) if isinstance(raw.get("results"), dict) else {}
 
@@ -100,7 +100,7 @@ async def get_system_status(vdom: Optional[str] = Query(None, description="VDOM 
     response_model=BaseResponse[SystemResourceUsage],
     summary="Obtener consumo de CPU, Memoria RAM y Sesiones activas",
 )
-async def get_system_resources(vdom: Optional[str] = Query(None, description="VDOM a consultar")):
+async def get_system_resources(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar")):
     raw = await fortios_client.get_system_resources(vdom=vdom)
     results: Dict[str, Any] = raw.get("results", {}) if isinstance(raw.get("results"), dict) else {}
 
@@ -130,7 +130,7 @@ async def get_system_resources(vdom: Optional[str] = Query(None, description="VD
     response_model=BaseResponse[Dict[str, Any]],
     summary="Obtener información detallada de Firmware y particiones",
 )
-async def get_system_firmware(vdom: Optional[str] = Query(None, description="VDOM a consultar")):
+async def get_system_firmware(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar")):
     raw = await fortios_client.get_system_firmware(vdom=vdom)
     return BaseResponse(
         success=True,

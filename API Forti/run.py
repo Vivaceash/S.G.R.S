@@ -2,13 +2,17 @@ import uvicorn
 from app.core.config import settings
 
 
+from app.security.logging import mask_sensitive_ip
+
+
 def main():
+    target = mask_sensitive_ip(settings.fortios_base_url) if settings.MASK_INTERNAL_IPS else settings.fortios_base_url
     print(f"==================================================")
-    print(f"🔥 Iniciando {settings.APP_NAME}")
-    print(f"🌐 Escuchando en: http://{settings.HOST}:{settings.PORT}")
-    print(f"📖 Documentación Scalar: http://localhost:{settings.PORT}/scalar")
-    print(f"🛡️  X-API-Key configurada: {'[ACTIVADA]' if settings.APP_API_KEY else '[DESACTIVADA]'}")
-    print(f"🎯 FortiGate Target: {settings.fortios_base_url}")
+    print(f"Iniciando {settings.APP_NAME}")
+    print(f"Escuchando en: http://{settings.HOST}:{settings.PORT}")
+    print(f"Documentación Scalar: http://localhost:{settings.PORT}/scalar")
+    print(f"X-API-Key configurada: {'[ACTIVADA]' if settings.api_keys else '[DESACTIVADA]'} ({len(settings.api_keys)} activa(s))")
+    print(f"FortiGate Target: {target}")
     print(f"==================================================")
 
     uvicorn.run(

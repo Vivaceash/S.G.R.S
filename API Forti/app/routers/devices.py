@@ -1,5 +1,5 @@
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
 from app.core.security import verify_api_key
 from app.clients.fortios import fortios_client
@@ -53,10 +53,10 @@ def _parse_device(item: Dict[str, Any]) -> DeviceItem:
 )
 async def list_connected_devices(
     online_only: bool = Query(False, description="Filtrar únicamente dispositivos actualmente activos/online"),
-    vendor: Optional[str] = Query(None, description="Filtrar por fabricante (ej. Apple, Samsung, Intel, Cisco)"),
-    search: Optional[str] = Query(None, description="Búsqueda por texto en IP, MAC o Hostname"),
-    interface: Optional[str] = Query(None, description="Filtrar por interfaz (ej. port1, lan, wifi)"),
-    vdom: Optional[str] = Query(None, description="VDOM a consultar"),
+    vendor: Optional[str] = Query(None, max_length=100, description="Filtrar por fabricante (ej. Apple, Samsung, Intel, Cisco)"),
+    search: Optional[str] = Query(None, max_length=100, description="Búsqueda por texto en IP, MAC o Hostname"),
+    interface: Optional[str] = Query(None, max_length=50, description="Filtrar por interfaz (ej. port1, lan, wifi)"),
+    vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar"),
 ):
     """
     Obtiene la lista completa de dispositivos conectados e inventariados por el motor Device Detection de FortiOS.
@@ -117,8 +117,8 @@ async def list_connected_devices(
     summary="Buscar información detallada de un dispositivo por su MAC o IP",
 )
 async def get_device_by_mac_or_ip(
-    mac_or_ip: str,
-    vdom: Optional[str] = Query(None, description="VDOM a consultar"),
+    mac_or_ip: str = Path(..., max_length=50, pattern=r"^[a-zA-Z0-9:\-\.]{3,50}$", description="Dirección MAC o IP del dispositivo"),
+    vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar"),
 ):
     """
     Busca un dispositivo en particular utilizando su dirección MAC o dirección IP.
