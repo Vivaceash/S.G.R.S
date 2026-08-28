@@ -27,6 +27,7 @@ from app.routers import (
     network_router,
     firewall_router,
     vpn_router,
+    auth_router,
 )
 
 # Configuración de Logging
@@ -120,7 +121,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=allow_creds,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
 )
@@ -206,3 +207,4 @@ app.include_router(traffic_router, prefix=api_v1_prefix)
 app.include_router(network_router, prefix=api_v1_prefix)
 app.include_router(firewall_router, prefix=api_v1_prefix)
 app.include_router(vpn_router, prefix=api_v1_prefix)
+app.include_router(auth_router, prefix=api_v1_prefix)

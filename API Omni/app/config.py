@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     API_SECRET_KEY_CONFIG: Optional[str] = None
     ALLOW_UNAUTHENTICATED: bool = False
 
+    # Autenticación de Dos Pasos (2FA / TOTP) y Sesiones
+    ENABLE_2FA: bool = False
+    TOTP_SECRET_KEY: Optional[str] = None
+    JWT_SECRET_KEY: str = "sgrs-secure-jwt-secret-key-change-in-production-2026"
+    SESSION_EXPIRE_HOURS: int = 12
+
     # Límite de tasa de peticiones (Rate Limiting)
     RATE_LIMIT_PER_MINUTE: int = 60
 

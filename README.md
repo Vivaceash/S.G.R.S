@@ -118,14 +118,16 @@ Microservicio estructurado con **FastAPI** y **Scalar** en su versión **v2.0**,
 ---
 
 ### 3. 📊 Dashboard de Monitoreo (`Dashboard/`)
-Interfaz de usuario para operadores de red construida bajo el principio de **cero dependencias externas** (Vanilla JavaScript ES6+, HTML5 semántico y CSS3 responsive compatible con lineamientos de accesibilidad WCAG 2.1 AA).
+Centro de control visual moderno para operadores de red desarrollado desde cero con **React 19**, **TypeScript**, **Vite** y **Tailwind CSS v4** bajo la estética NOC Console (paleta azul carbón `#071018`, superficie `#0e1c28`, acentos cyan/signal `#34d5e7`).
 
-- **Puerto Predeterminado:** `3000`
+- **Puerto Predeterminado:** `5173` (autorizado en la lista blanca de CORS del backend)
 - **Características:**
-  - **Indicadores Clave en Tiempo Real:** Total de equipos en línea, porcentaje de capacidad de direccionamiento IPv4 y saturación de ancho de banda.
-  - **Ruta de Señal Visual:** Diagrama interactivo de salud entre Internet, Firewall perimetral, Núcleo (Core) y switches de Acceso.
-  - **Inventario Buscable y Ordenable:** Tabla de filtrado rápido con búsqueda por IP, nombre o área, ordenamiento por columnas y filtros de estado.
-  - **Distribución de Capacidad IPv4:** Gráficas de barra con el consumo de direccionamiento por segmento (Corporativo, Operaciones, Invitados, Infraestructura).
+  - **Indicadores Clave en Tiempo Real:** Total de equipos en línea vs inventario, capacidad de direccionamiento IPv4 (concesiones DHCP), consumo de hardware (CPU %, Memoria RAM % y sesiones concurrentes de FortiGate) y notificaciones activas de OmniVista.
+  - **Ruta de Señal Visual:** Diagrama interactivo de salud entre Internet, Firewall perimetral, Núcleo (OmniVista) y switches de Acceso con latencia y versiones.
+  - **Tabla de Inventario de Alto Rendimiento:** Soporte fluido para **+3,300 dispositivos**, búsqueda reactiva instantánea (por nombre, IP, MAC o fabricante), filtros segmentados de estado (*Todos*, *En línea*, *Fuera de línea*, *Switches & APs*), paginación y **exportación a CSV**.
+  - **Inspector de Telemetría Técnica:** Modal deslizable para inspeccionar parámetros técnicos de cualquier dispositivo al hacer clic en su fila, con copiado rápido de IP y MAC al portapapeles.
+  - **Configuración de Enlace Dinámica:** Diálogo para modificar URLs de backend y credencial `X-API-Key` en vivo con prueba de conectividad de enlaces.
+  - **Distribución de Capacidad IPv4 y Bitácora:** Gráficas de barra con el consumo de direccionamiento por VLAN y bitácora de eventos en tiempo real.
 
 ---
 
@@ -262,11 +264,16 @@ Desde la raíz del repositorio, ejecuta el script orquestador:
 ```powershell
 python run.py
 ```
-Este script ejecutará ambas APIs en subprocesos aislados con **streaming unificado de logs etiquetados** (`[API-FORTI]` y `[API-OMNI]`). Para detener ambos servicios de forma ordenada, simplemente presiona **`Ctrl + C`** en la consola (el script limpiará el árbol de procesos en Windows mediante `taskkill /F /T` para liberar los puertos de inmediato).
+Este script arrancará automáticamente **los tres servicios en paralelo**:
+- **API Alcatel OmniVista 2500** en `http://localhost:8000`
+- **API Fortinet FortiGate** en `http://localhost:8001`
+- **Dashboard Web (React + Vite)** en `http://localhost:5173`
+
+Con **streaming unificado de logs etiquetados** (`[API-FORTI]`, `[API-OMNI]`, `[DASHBOARD]`). Para detener todos los servicios de forma ordenada, simplemente presiona **`Ctrl + C`** en la consola (el script limpiará el árbol de procesos en Windows mediante `taskkill /F /T` para liberar los puertos de inmediato).
 
 ---
 
-### 2. Inicio Individual por Microservicio
+### 2. Inicio Individual por Servicio
 
 Si prefieres ejecutar cada servicio en consolas dedicadas:
 
@@ -286,11 +293,13 @@ pip install -r requirements.txt
 python run.py
 ```
 
-#### Iniciar el Dashboard Web (Puerto 3000):
+#### Iniciar el Dashboard Web (Puerto 5173):
 ```powershell
-python -m http.server 3000 --directory Dashboard
+cd "Dashboard"
+npm install                # (Solo la primera vez)
+npm run dev
 ```
-Abre tu navegador en `http://localhost:3000`.
+Abre tu navegador en `http://localhost:5173`.
 
 ---
 

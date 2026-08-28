@@ -19,6 +19,7 @@ from app.routers import (
     catalogs_router,
     monitoring_router,
     system_router,
+    auth_router,
 )
 
 # Inicialización de FastAPI: Scalar condicionado por ENABLE_DOCS
@@ -53,7 +54,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=not has_wildcard,
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
 )
@@ -174,9 +175,11 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Registrar Routers de Consulta
+# Registrar Routers de Consulta y Autenticación
 app.include_router(employees_router)
 app.include_router(company_properties_router)
 app.include_router(catalogs_router)
 app.include_router(monitoring_router)
 app.include_router(system_router)
+app.include_router(auth_router)
+

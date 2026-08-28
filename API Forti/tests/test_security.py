@@ -164,3 +164,81 @@ def test_sensitive_data_sanitizer():
     assert sanitized["psksecret"] == "******"
     assert sanitized["auth_password"] == "******"
     assert sanitized["nested"]["private_key"] == "******"
+
+
+@pytest.mark.anyio
+async def test_disallowed_http_methods_rejected():
+    """14. Rechazo de POST en endpoint exclusivo de lectura (405 Method Not Allowed)"""
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.post("/api/v1/devices", headers={"X-API-Key": VALID_KEY})
+        assert r.status_code == 405
+
+
+@pytest.mark.anyio
+async def test_auth_status_endpoint():
+    """15. Consulta del estado de autenticación y 2FA"""
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get("/api/v1/auth/status")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["success"] is True
+        assert "mode" in data
+        assert "2fa_enabled" in data
+
+
+@pytest.mark.anyio
+async def test_2fa_setup_and_verification_flow():
+    """16. Flujo completo de enrolamiento 2FA (TOTP) y autenticación con sesión JWT"""
+    from app.core.security import get_totp_token
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Setup 2FA con clave de API correcta
+        r_setup = await client.post(
+            "/api/v1/auth/setup-2fa",
+            json={"api_key": VALID_KEY, "account_name": "TestOperator"},
+        )
+        assert r_setup.status_code == 200
+        setup_data = r_setup.json()
+        assert setup_data["success"] is True
+        secret = setup_data["secret"]
+        assert "otpauth://" in setup_data["otpauth_uri"]
+
+        # 2. Generar código TOTP válido para el secreto
+        totp_code = get_totp_token(secret)
+
+        # 3. Verificar código y obtener token de sesión JWT
+        r_verify = await client.post(
+            "/api/v1/auth/verify-2fa",
+            json={
+                "api_key": VALID_KEY,
+                "totp_code": totp_code,
+                "account_name": "TestOperator",
+            },
+        )
+        assert r_verify.status_code == 200
+        verify_data = r_verify.json()
+        assert verify_data["success"] is True
+        access_token = verify_data["access_token"]
+        assert len(access_token.split(".")) == 3
+
+        # 4. Consumir endpoint protegido usando el token Bearer emitido
+        r_query = await client.get(
+            "/api/v1/health",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert r_query.status_code == 200
+
+        # 5. Rechazar código TOTP falso
+        r_bad_totp = await client.post(
+            "/api/v1/auth/verify-2fa",
+            json={
+                "api_key": VALID_KEY,
+                "totp_code": "000000",
+                "account_name": "TestOperator",
+            },
+        )
+        assert r_bad_totp.status_code == 401
+

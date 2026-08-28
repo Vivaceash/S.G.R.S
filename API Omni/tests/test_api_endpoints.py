@@ -58,13 +58,16 @@ def test_openapi_json_endpoint():
     assert "/api/v1/system/health" in paths
     assert "/api/v1/system/version" in paths
 
-    # Endpoints de mutación NO deben existir
+    # Endpoints de mutación sobre recursos de red NO deben existir
     assert "/api/v1/enrollment/complete-user" not in paths
     for path, methods in paths.items():
-        assert "post" not in methods, f"Endpoint {path} tiene POST no permitido"
+        if path.startswith("/api/v1/auth"):
+            continue  # Endpoints de autenticación 2FA usan POST
+        assert "post" not in methods, f"Endpoint de consulta {path} tiene POST no permitido"
         assert "put" not in methods, f"Endpoint {path} tiene PUT no permitido"
         assert "delete" not in methods, f"Endpoint {path} tiene DELETE no permitido"
         assert "patch" not in methods, f"Endpoint {path} tiene PATCH no permitido"
+
 
 
 # =============================================================================
@@ -246,3 +249,81 @@ def test_request_size_limit_blocks_large_payload():
     response = client.get("/api/v1/catalogs/device-options", headers=headers)
     assert response.status_code == 413
     assert response.json()["error"] == "PayloadTooLarge"
+
+
+# =============================================================================
+# 8. Pruebas de Métodos Prohibidos y 405 Method Not Allowed
+# =============================================================================
+
+def test_disallowed_mutation_methods_rejected():
+    """Verifica que métodos de mutación (POST) en endpoints de solo lectura retornen 405"""
+    headers = {"X-API-KEY": VALID_API_KEY}
+    response = client.post("/api/v1/employees", json={"test": "data"}, headers=headers)
+    assert response.status_code == 405
+
+
+# =============================================================================
+# 9. Pruebas del Módulo 2FA (TOTP RFC 6238) y Sesiones JWT
+# =============================================================================
+
+def test_auth_status_endpoint():
+    """Verifica el estado del módulo de autenticación y 2FA"""
+    response = client.get("/api/v1/auth/status")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert "mode" in data
+    assert "2fa_enabled" in data
+
+
+def test_2fa_setup_and_verify_flow():
+    """Verifica el flujo completo de enrolamiento 2FA, generación TOTP y validación de sesión JWT"""
+    from app.dependencies import get_totp_token
+
+    # 1. Setup 2FA con clave de API
+    res_setup = client.post(
+        "/api/v1/auth/setup-2fa",
+        json={"api_key": VALID_API_KEY, "account_name": "NOC-Admin"},
+    )
+    assert res_setup.status_code == 200
+    setup_data = res_setup.json()
+    assert setup_data["success"] is True
+    secret = setup_data["secret"]
+    assert "otpauth://" in setup_data["otpauth_uri"]
+
+    # 2. Generar código TOTP válido
+    totp_code = get_totp_token(secret)
+
+    # 3. Verificar código y obtener token de sesión
+    res_verify = client.post(
+        "/api/v1/auth/verify-2fa",
+        json={
+            "api_key": VALID_API_KEY,
+            "totp_code": totp_code,
+            "account_name": "NOC-Admin",
+        },
+    )
+    assert res_verify.status_code == 200
+    verify_data = res_verify.json()
+    assert verify_data["success"] is True
+    token = verify_data["access_token"]
+    assert len(token.split(".")) == 3
+
+    # 4. Consumir endpoint protegido usando el token Bearer emitido
+    res_query = client.get(
+        "/api/v1/catalogs/device-options",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_query.status_code == 200
+
+    # 5. Rechazar código TOTP inválido
+    res_bad = client.post(
+        "/api/v1/auth/verify-2fa",
+        json={
+            "api_key": VALID_API_KEY,
+            "totp_code": "999999",
+            "account_name": "NOC-Admin",
+        },
+    )
+    assert res_bad.status_code == 401
+
