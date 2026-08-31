@@ -22,8 +22,11 @@ export interface FortiDevice {
 }
 
 export interface FortiDeviceListSummary {
-  total_devices: number;
+  total_inventory?: number;
   online_devices: number;
+  offline_devices?: number;
+  returned_count?: number;
+  total_devices: number;
   devices: FortiDevice[];
 }
 
@@ -55,6 +58,31 @@ export interface FortiDhcpLease {
   hostname?: string | null;
   interface: string;
   expire_time?: number | null;
+}
+
+export interface DhcpPoolScope {
+  id: number;
+  interface: string;
+  default_gateway?: string;
+  netmask?: string;
+  ip_ranges: string[];
+  capacity: number;
+  active_leases: number;
+  available_ips: number;
+  utilization_percent: number;
+  status: 'normal' | 'warning' | 'critical';
+  lease_time_seconds?: number;
+}
+
+export interface DhcpPoolSummary {
+  total_pools: number;
+  total_capacity: number;
+  total_active_leases: number;
+  total_available_ips: number;
+  global_saturation_percent: number;
+  critical_pools_count: number;
+  warning_pools_count: number;
+  pools: DhcpPoolScope[];
 }
 
 export interface OmniInfrastructureStats {

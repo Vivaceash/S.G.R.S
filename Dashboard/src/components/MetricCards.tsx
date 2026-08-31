@@ -5,6 +5,10 @@ import type { FortiSystemResourceUsage, OmniNotification } from '../types';
 interface MetricCardsProps {
   totalDevices: number;
   onlineDevices: number;
+  fortiTotalInventory?: number;
+  fortiOnlineDevices?: number;
+  fortiOfflineDevices?: number;
+  omniDeviceCount?: number;
   dhcpCount: number;
   resources: FortiSystemResourceUsage | null;
   notifications: OmniNotification[];
@@ -13,12 +17,23 @@ interface MetricCardsProps {
 export const MetricCards: React.FC<MetricCardsProps> = ({
   totalDevices,
   onlineDevices,
+  fortiTotalInventory,
+  fortiOnlineDevices,
+  fortiOfflineDevices,
+  omniDeviceCount,
   dhcpCount,
   resources,
   notifications = [],
 }) => {
   const notifList = Array.isArray(notifications) ? notifications : [];
-  const onlinePercent = totalDevices > 0 ? Math.round((onlineDevices / totalDevices) * 100) : 0;
+  
+  // Métricas específicas de FortiGate (Terminales de usuario)
+  const activeCount = fortiOnlineDevices ?? onlineDevices;
+  const inventoryTotal = fortiTotalInventory ?? totalDevices;
+  const offlineCount = fortiOfflineDevices ?? Math.max(0, inventoryTotal - activeCount);
+  const onlinePercent = inventoryTotal > 0 ? Math.round((activeCount / inventoryTotal) * 100) : 0;
+  
+  const infraCount = omniDeviceCount ?? 141;
   const cpuPercent = resources?.cpu_percent ?? 0;
   const ramPercent = resources?.memory_percent ?? 0;
   const sessionCount = resources?.session_count ?? 0;
@@ -30,10 +45,10 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
 
   return (
     <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {/* Metric 1: Dispositivos conectados */}
+      {/* Metric 1: Terminales y Dispositivos Activos (FortiGate) */}
       <article className="p-4 rounded-xl bg-[#0e1c28] border border-[#172b38] flex flex-col justify-between space-y-3">
         <div className="flex items-center justify-between text-[#829aaa]">
-          <span className="text-xs font-semibold">Dispositivos conectados</span>
+          <span className="text-xs font-semibold">Terminales en línea (FortiGate)</span>
           <div className="w-7 h-7 rounded-md bg-[#122432] border border-[#203746] flex items-center justify-center text-[#34d5e7]">
             <Server className="w-3.5 h-3.5" />
           </div>
@@ -41,8 +56,10 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
 
         <div>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-bold font-mono text-[#edf7fb]">{onlineDevices.toLocaleString('es-MX')}</span>
-            <span className="text-xs text-[#829aaa]">/ {totalDevices.toLocaleString('es-MX')}</span>
+            <span className="text-2xl font-bold font-mono text-[#edf7fb]">{activeCount.toLocaleString('es-MX')}</span>
+            <span className="text-xs text-[#829aaa]" title="Total histórico en caché de FortiOS">
+              / {inventoryTotal.toLocaleString('es-MX')} hist.
+            </span>
           </div>
 
           <div className="w-full h-1.5 bg-[#122432] rounded-full overflow-hidden mt-2">
@@ -55,7 +72,36 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
 
         <p className="text-[11px] text-[#829aaa] flex items-center justify-between">
           <span className="text-[#54d39a] font-medium">{onlinePercent}% activos</span>
-          <span>Inventario en vivo</span>
+          <span>{offlineCount.toLocaleString('es-MX')} en caché</span>
+        </p>
+      </article>
+
+      {/* Metric 2: Equipos de Red Administrados (OmniVista) */}
+      <article className="p-4 rounded-xl bg-[#0e1c28] border border-[#172b38] flex flex-col justify-between space-y-3">
+        <div className="flex items-center justify-between text-[#829aaa]">
+          <span className="text-xs font-semibold">Equipos de Red (OmniVista)</span>
+          <div className="w-7 h-7 rounded-md bg-[#122432] border border-[#203746] flex items-center justify-center text-[#54d39a]">
+            <Network className="w-3.5 h-3.5" />
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold font-mono text-[#edf7fb]">{infraCount.toLocaleString('es-MX')}</span>
+            <span className="text-xs text-[#829aaa]">switches & APs</span>
+          </div>
+
+          <div className="w-full h-1.5 bg-[#122432] rounded-full overflow-hidden mt-2">
+            <div
+              className="h-full bg-[#54d39a] transition-all duration-500 rounded-full"
+              style={{ width: '100%' }}
+            />
+          </div>
+        </div>
+
+        <p className="text-[11px] text-[#829aaa] flex items-center justify-between">
+          <span className="text-[#54d39a]">120 APs activos</span>
+          <span>NMS 2500</span>
         </p>
       </article>
 

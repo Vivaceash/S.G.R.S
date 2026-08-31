@@ -27,11 +27,21 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
   onSelectDevice,
 }) => {
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'online' | 'offline' | 'infrastructure'>('all');
+  const [filter, setFilter] = useState<'all' | 'online' | 'offline' | 'infrastructure'>('online');
   const [sortKey, setSortKey] = useState<keyof UnifiedDevice>('name');
   const [sortAsc, setSortAsc] = useState(true);
   const [page, setPage] = useState(1);
   const pageSize = 50;
+
+  // Conteo rápido para las pestañas
+  const counts = useMemo(() => {
+    return {
+      all: devices.length,
+      online: devices.filter(d => d.status === 'online' && d.source === 'fortigate').length,
+      offline: devices.filter(d => d.status === 'offline').length,
+      infrastructure: devices.filter(d => d.source === 'omnivista' || d.type.includes('Switch') || d.type.includes('Access Point')).length,
+    };
+  }, [devices]);
 
   // Filtrado y ordenamiento en memoria reactivo
   const filteredDevices = useMemo(() => {
@@ -41,7 +51,7 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
       .filter(dev => {
         if (filter === 'online') return dev.status === 'online';
         if (filter === 'offline') return dev.status === 'offline';
-        if (filter === 'infrastructure') return dev.type.includes('Switch') || dev.type.includes('Access Point');
+        if (filter === 'infrastructure') return dev.source === 'omnivista' || dev.type.includes('Switch') || dev.type.includes('Access Point');
         return true;
       })
       .filter(dev => {
@@ -159,12 +169,12 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
         </div>
 
         {/* Filter buttons */}
-        <div className="inline-flex rounded-lg bg-[#09141e] p-1 border border-[#203746] text-xs">
+        <div className="inline-flex rounded-lg bg-[#09141e] p-1 border border-[#203746] text-xs flex-wrap gap-1">
           {[
-            { id: 'all', label: 'Todos' },
-            { id: 'online', label: 'En línea' },
-            { id: 'offline', label: 'Fuera de línea' },
-            { id: 'infrastructure', label: 'Switches / APs' },
+            { id: 'online', label: 'En línea', count: counts.online },
+            { id: 'all', label: 'Todo el inventario', count: counts.all },
+            { id: 'offline', label: 'Inactivos en caché', count: counts.offline },
+            { id: 'infrastructure', label: 'Switches / APs', count: counts.infrastructure },
           ].map(tab => (
             <button
               key={tab.id}
@@ -172,13 +182,18 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
                 setFilter(tab.id as typeof filter);
                 setPage(1);
               }}
-              className={`px-3 py-1 rounded-md font-medium transition-colors ${
+              className={`px-3 py-1 rounded-md font-medium transition-colors flex items-center gap-1.5 ${
                 filter === tab.id
                   ? 'bg-[#122432] text-[#34d5e7] border border-[#203746] shadow-xs'
                   : 'text-[#829aaa] hover:text-[#edf7fb]'
               }`}
             >
-              {tab.label}
+              <span>{tab.label}</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                filter === tab.id ? 'bg-[#34d5e7]/20 text-[#34d5e7]' : 'bg-[#122432] text-[#829aaa]'
+              }`}>
+                {tab.count.toLocaleString('es-MX')}
+              </span>
             </button>
           ))}
         </div>

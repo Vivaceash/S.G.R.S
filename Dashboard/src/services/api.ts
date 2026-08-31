@@ -5,6 +5,7 @@ import type {
   FortiSystemStatus,
   FortiTrafficDestination,
   FortiDhcpLease,
+  DhcpPoolSummary,
   OmniInfrastructureStats,
   OmniDevice,
   OmniNotification,
@@ -67,11 +68,15 @@ export class ApiService {
 
   // --- API Fortinet FortiGate (Puerto 8001) ---
 
-  public static async getFortiDevices(): Promise<FortiDeviceListSummary> {
-    const res = await this.request<BaseResponse<FortiDeviceListSummary>>(`${this.fortiBase}/devices`);
+  public static async getFortiDevices(status?: 'all' | 'online' | 'offline'): Promise<FortiDeviceListSummary> {
+    const query = status ? `?status=${status}` : '';
+    const res = await this.request<BaseResponse<FortiDeviceListSummary>>(`${this.fortiBase}/devices${query}`);
     return {
+      total_inventory: res.data?.total_inventory ?? res.data?.total_devices ?? 0,
       total_devices: res.data?.total_devices ?? 0,
       online_devices: res.data?.online_devices ?? 0,
+      offline_devices: res.data?.offline_devices ?? 0,
+      returned_count: res.data?.returned_count ?? (Array.isArray(res.data?.devices) ? res.data.devices.length : 0),
       devices: Array.isArray(res.data?.devices) ? res.data.devices : [],
     };
   }
@@ -92,6 +97,15 @@ export class ApiService {
       return Array.isArray(res.data) ? res.data : [];
     } catch {
       return [];
+    }
+  }
+
+  public static async getFortiDhcpPools(): Promise<DhcpPoolSummary | null> {
+    try {
+      const res = await this.request<BaseResponse<DhcpPoolSummary>>(`${this.fortiBase}/network/dhcp-pools`);
+      return res.data || null;
+    } catch {
+      return null;
     }
   }
 

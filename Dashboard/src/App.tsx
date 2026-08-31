@@ -5,7 +5,8 @@ import { SignalRoute } from './components/SignalRoute';
 import { MetricCards } from './components/MetricCards';
 import { DeviceTable } from './components/DeviceTable';
 import { ActivityFeed } from './components/ActivityFeed';
-import { CapacityPanel } from './components/CapacityPanel';
+import { DhcpSaturationCard } from './components/DhcpSaturationCard';
+import { NetworkDistributionCard } from './components/NetworkDistributionCard';
 import { DeviceDetailModal } from './components/DeviceDetailModal';
 import { ConfigModal } from './components/ConfigModal';
 import { ApiService } from './services/api';
@@ -16,6 +17,7 @@ import {
   MOCK_OMNI_STATS,
   MOCK_NOTIFICATIONS,
   MOCK_DHCP_LEASES,
+  MOCK_DHCP_POOLS,
 } from './services/mockData';
 import type {
   UnifiedDevice,
@@ -24,6 +26,7 @@ import type {
   OmniInfrastructureStats,
   OmniNotification,
   FortiDhcpLease,
+  DhcpPoolSummary,
 } from './types';
 import { AlertCircle, Sparkles } from 'lucide-react';
 
@@ -42,6 +45,7 @@ export function App() {
   const [omniStats, setOmniStats] = useState<OmniInfrastructureStats | null>(null);
   const [notifications, setNotifications] = useState<OmniNotification[]>([]);
   const [dhcpLeases, setDhcpLeases] = useState<FortiDhcpLease[]>([]);
+  const [dhcpPools, setDhcpPools] = useState<DhcpPoolSummary | null>(null);
   const [isFortiOnline, setIsFortiOnline] = useState(false);
   const [isOmniOnline, setIsOmniOnline] = useState(false);
   const [hardwareOfflineNotice, setHardwareOfflineNotice] = useState(false);
@@ -64,6 +68,7 @@ export function App() {
     setOmniStats(MOCK_OMNI_STATS);
     setNotifications(MOCK_NOTIFICATIONS);
     setDhcpLeases(MOCK_DHCP_LEASES);
+    setDhcpPools(MOCK_DHCP_POOLS);
     setIsFortiOnline(true);
     setIsOmniOnline(true);
     setHardwareOfflineNotice(false);
@@ -90,11 +95,12 @@ export function App() {
 
       // 2. Cargar datos de Fortinet FortiGate (Puerto 8001)
       if (health.forti) {
-        const [devicesRes, statusRes, resRes, dhcpRes] = await Promise.allSettled([
+        const [devicesRes, statusRes, resRes, dhcpRes, poolsRes] = await Promise.allSettled([
           ApiService.getFortiDevices(),
           ApiService.getFortiStatus(),
           ApiService.getFortiResources(),
           ApiService.getFortiDhcpLeases(),
+          ApiService.getFortiDhcpPools(),
         ]);
 
         if (devicesRes.status === 'fulfilled' && devicesRes.value?.devices) {
@@ -121,6 +127,7 @@ export function App() {
         }
         if (resRes.status === 'fulfilled') setFortiResources(resRes.value);
         if (dhcpRes.status === 'fulfilled') setDhcpLeases(dhcpRes.value);
+        if (poolsRes.status === 'fulfilled' && poolsRes.value) setDhcpPools(poolsRes.value);
       }
 
       // 3. Cargar datos de Alcatel OmniVista 2500 (Puerto 8000)
@@ -189,7 +196,11 @@ export function App() {
     };
   }, [autoRefresh, loadDashboardData]);
 
-  const onlineCount = devices.filter(d => d.status === 'online').length;
+  const fortiDevices = devices.filter(d => d.source === 'fortigate');
+  const omniDevices = devices.filter(d => d.source === 'omnivista');
+  const fortiOnlineCount = fortiDevices.filter(d => d.status === 'online').length;
+  const fortiOfflineCount = fortiDevices.length - fortiOnlineCount;
+  const omniCount = omniStats?.total_network_devices || omniDevices.length || 141;
 
   return (
     <div className="min-h-screen bg-[#071018] text-[#edf7fb] flex">
@@ -199,7 +210,7 @@ export function App() {
         setActiveTab={setActiveTab}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
-        deviceCount={devices.length}
+        deviceCount={fortiOnlineCount || devices.length}
         alertCount={notifications.length}
         onOpenConfig={() => setIsConfigOpen(true)}
       />
@@ -273,7 +284,11 @@ export function App() {
           {/* 2. Tarjetas de métricas e indicadores clave */}
           <MetricCards
             totalDevices={devices.length}
-            onlineDevices={onlineCount}
+            onlineDevices={fortiOnlineCount}
+            fortiTotalInventory={fortiDevices.length}
+            fortiOnlineDevices={fortiOnlineCount}
+            fortiOfflineDevices={fortiOfflineCount}
+            omniDeviceCount={omniCount}
             dhcpCount={dhcpLeases.length}
             resources={fortiResources}
             notifications={notifications}
@@ -290,10 +305,11 @@ export function App() {
               />
             </div>
 
-            {/* Columna derecha: Actividad y Capacidad de direccionamiento */}
+            {/* Columna derecha: Saturación de Pools, Distribución de Clientes y Actividad */}
             <div className="space-y-6">
+              <DhcpSaturationCard dhcpPools={dhcpPools} isLoading={isLoading} />
+              <NetworkDistributionCard dhcpPools={dhcpPools} isLoading={isLoading} />
               <ActivityFeed notifications={notifications} />
-              <CapacityPanel totalLeases={dhcpLeases.length || onlineCount} />
             </div>
           </div>
         </main>

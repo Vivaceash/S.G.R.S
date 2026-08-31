@@ -11,6 +11,7 @@ endpoints = [
     "/api/v1/devices",
     "/api/v1/devices/d4:f0:c9:01:f5:eb",
     "/api/v1/network/dhcp-leases",
+    "/api/v1/network/dhcp-pools",
     "/api/v1/network/arp-table",
     "/api/v1/network/interfaces",
     "/api/v1/traffic/sessions",
