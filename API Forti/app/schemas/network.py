@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Union
+from typing import List, Optional, Union
 from pydantic import BaseModel, Field
 
 
@@ -9,7 +9,6 @@ class DHCPLeaseItem(BaseModel):
     interface: Optional[str] = Field(None, description="Interfaz o servidor DHCP")
     expires: Optional[Union[str, int]] = Field(None, description="Tiempo restante de la concesión (lease)")
     status: Optional[str] = Field(None, description="Estado del lease (ej. bound, reserved)")
-    raw_data: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Datos crudos de FortiOS")
 
 
 class ARPEntry(BaseModel):

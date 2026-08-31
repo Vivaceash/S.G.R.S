@@ -12,9 +12,13 @@ import type {
 } from '../types';
 
 export class ApiService {
-  private static fortiBase = localStorage.getItem('sgrs_forti_url') || 'http://localhost:8001/api/v1';
-  private static omniBase = localStorage.getItem('sgrs_omni_url') || 'http://localhost:8000/api/v1';
-  private static apiKey = localStorage.getItem('sgrs_api_key') || 'admin';
+  private static fortiBase = localStorage.getItem('sgrs_forti_url')
+    || import.meta.env.VITE_FORTI_API_URL
+    || 'http://localhost:8001/api/v1';
+  private static omniBase = localStorage.getItem('sgrs_omni_url')
+    || import.meta.env.VITE_OMNI_API_URL
+    || 'http://localhost:8000/api/v1';
+  private static apiKey = import.meta.env.DEV ? 'admin' : '';
 
   public static getFortiUrl(): string {
     return this.fortiBase;
@@ -28,13 +32,37 @@ export class ApiService {
     return this.apiKey;
   }
 
+  private static validateBaseUrl(value: string, serviceName: string): string {
+    let parsed: URL;
+    try {
+      parsed = new URL(value.trim());
+    } catch {
+      throw new Error(`La URL de ${serviceName} no tiene un formato válido.`);
+    }
+
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.hash) {
+      throw new Error(`La URL de ${serviceName} debe usar HTTP(S) y no incluir credenciales ni fragmentos.`);
+    }
+
+    const isLocal = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
+    if (parsed.protocol === 'http:' && !isLocal) {
+      throw new Error(`La URL de ${serviceName} debe usar HTTPS fuera del equipo local.`);
+    }
+    if (import.meta.env.PROD && parsed.protocol !== 'https:') {
+      throw new Error(`La URL de ${serviceName} debe usar HTTPS en una compilación de producción.`);
+    }
+
+    parsed.search = '';
+    return parsed.toString().replace(/\/$/, '');
+  }
+
   public static updateConfig(fortiUrl: string, omniUrl: string, key: string) {
-    this.fortiBase = fortiUrl.replace(/\/$/, '');
-    this.omniBase = omniUrl.replace(/\/$/, '');
+    this.fortiBase = this.validateBaseUrl(fortiUrl, 'Fortinet');
+    this.omniBase = this.validateBaseUrl(omniUrl, 'OmniVista');
     this.apiKey = key.trim();
     localStorage.setItem('sgrs_forti_url', this.fortiBase);
     localStorage.setItem('sgrs_omni_url', this.omniBase);
-    localStorage.setItem('sgrs_api_key', this.apiKey);
+    localStorage.removeItem('sgrs_api_key');
   }
 
   private static async request<T>(url: string, timeoutMs: number = 18000): Promise<T> {
@@ -42,12 +70,12 @@ export class ApiService {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
+      const headers: Record<string, string> = { 'Accept': 'application/json' };
+      if (this.apiKey) headers['X-API-Key'] = this.apiKey;
+
       const response = await fetch(url, {
         method: 'GET',
-        headers: {
-          'X-API-Key': this.apiKey,
-          'Accept': 'application/json',
-        },
+        headers,
         signal: controller.signal,
       });
 
@@ -157,9 +185,14 @@ export class ApiService {
 
   // --- Liveness Probes ---
 
-  public static async checkHealth(): Promise<{ forti: boolean; omni: boolean }> {
-    const fortiHealthUrl = this.fortiBase.replace('/api/v1', '') + '/health';
-    const omniHealthUrl = this.omniBase.replace('/api/v1', '') + '/health';
+  public static async checkHealth(
+    fortiUrl: string = this.fortiBase,
+    omniUrl: string = this.omniBase,
+  ): Promise<{ forti: boolean; omni: boolean }> {
+    const validFortiUrl = this.validateBaseUrl(fortiUrl, 'Fortinet');
+    const validOmniUrl = this.validateBaseUrl(omniUrl, 'OmniVista');
+    const fortiHealthUrl = validFortiUrl.replace(/\/api\/v1\/?$/, '') + '/health';
+    const omniHealthUrl = validOmniUrl.replace(/\/api\/v1\/?$/, '') + '/health';
 
     const [fortiResult, omniResult] = await Promise.allSettled([
       fetch(fortiHealthUrl, { method: 'GET' }).then(r => r.ok),

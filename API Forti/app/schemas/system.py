@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -12,7 +12,6 @@ class SystemStatusData(BaseModel):
     uptime_human: Optional[str] = Field(None, description="Tiempo de actividad en formato legible")
     ha_mode: Optional[str] = Field(None, description="Modo de Alta Disponibilidad (standalone, active-passive, active-active)")
     vdom_enabled: Optional[bool] = Field(None, description="Si tiene VDOMs múltiples habilitados")
-    raw_details: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Datos adicionales sin procesar de FortiOS")
 
 
 class SystemResourceUsage(BaseModel):
@@ -21,4 +20,3 @@ class SystemResourceUsage(BaseModel):
     disk_percent: Optional[float] = Field(None, description="Porcentaje de uso del disco o almacenamiento")
     session_count: Optional[int] = Field(None, description="Número actual de sesiones concurrentes activas")
     session_limit: Optional[int] = Field(None, description="Límite máximo de sesiones soportadas")
-    raw_details: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Métricas sin procesar")

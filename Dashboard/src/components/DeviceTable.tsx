@@ -99,24 +99,31 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
 
   const exportCSV = () => {
     const headers = ['Nombre', 'Dirección IP', 'Dirección MAC', 'Fabricante', 'Tipo', 'Ubicación', 'Estado', 'Origen'];
+    const escapeCsvCell = (value: unknown) => {
+      let text = String(value ?? '');
+      // Evita que Excel/LibreOffice interpreten datos del inventario como fórmulas.
+      if (/^\s*[=+\-@]/.test(text) || /^[\t\r\n]/.test(text)) text = `'${text}`;
+      return `"${text.replace(/"/g, '""')}"`;
+    };
     const rows = filteredDevices.map(d => [
-      `"${d.name}"`,
-      `"${d.ip}"`,
-      `"${d.mac}"`,
-      `"${d.vendor}"`,
-      `"${d.type}"`,
-      `"${d.location}"`,
-      `"${d.status}"`,
-      `"${d.source}"`,
+      escapeCsvCell(d.name),
+      escapeCsvCell(d.ip),
+      escapeCsvCell(d.mac),
+      escapeCsvCell(d.vendor),
+      escapeCsvCell(d.type),
+      escapeCsvCell(d.location),
+      escapeCsvCell(d.status),
+      escapeCsvCell(d.source),
     ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = `\uFEFF${[headers.map(escapeCsvCell).join(','), ...rows.map(e => e.join(','))].join('\r\n')}`;
+    const objectUrl = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.setAttribute('href', objectUrl);
     link.setAttribute('download', `inventario_sgrs_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(objectUrl);
   };
 
   return (

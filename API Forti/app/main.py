@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
     if settings.ENVIRONMENT == "production":
         if any(k in ("admin", "forti-secret-api-key-change-me", "123456") for k in settings.api_keys):
             logger.warning("⚠️  [ALERTA DE SEGURIDAD] Clave por defecto detectada en producción. Cambie APP_API_KEY a un valor criptográficamente seguro.")
-        if not settings.FORTIOS_VERIFY_SSL:
+        if not settings.FORTIOS_VERIFY_SSL and not settings.FORTIOS_CA_BUNDLE:
             logger.warning("⚠️  [ALERTA DE SEGURIDAD] FORTIOS_VERIFY_SSL está desactivado en producción. Se recomienda habilitar TLS estricto o configurar FORTIOS_CA_BUNDLE.")
 
     yield
@@ -96,6 +96,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     RateLimitingMiddleware,
     rate_limit_per_minute=settings.RATE_LIMIT_PER_MINUTE,
+    auth_rate_limit_per_minute=settings.AUTH_RATE_LIMIT_PER_MINUTE,
 )
 
 # 3. Límite de tamaño de cuerpo de petición (Anti-DoS)
@@ -113,16 +114,13 @@ if settings.ALLOWED_HOSTS and "*" not in settings.ALLOWED_HOSTS:
 
 # 6. CORS Seguro (sin allow_credentials=True si el origen es '*')
 origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else [settings.CORS_ORIGINS]
-allow_creds = True
-if "*" in origins:
-    allow_creds = False
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=allow_creds,
+    allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
     expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
 )
 

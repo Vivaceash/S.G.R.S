@@ -84,7 +84,6 @@ async def get_system_status(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z
         uptime_human=_format_uptime(uptime_sec if isinstance(uptime_sec, int) else None),
         ha_mode=results.get("ha_mode") or raw.get("ha_mode"),
         vdom_enabled=results.get("vdom_enabled") or raw.get("vdom_enabled"),
-        raw_details={**raw, **results},
     )
 
     return BaseResponse(
@@ -114,7 +113,6 @@ async def get_system_resources(vdom: Optional[str] = Query(None, pattern=r"^[a-z
         memory_percent=mem_val,
         disk_percent=disk_val,
         session_count=int(session_val) if session_val is not None else None,
-        raw_details=results,
     )
 
     return BaseResponse(

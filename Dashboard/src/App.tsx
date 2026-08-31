@@ -182,7 +182,9 @@ export function App() {
 
   // Carga inicial y temporizador de actualización automática (30s)
   useEffect(() => {
-    loadDashboardData();
+    const initialLoad = window.setTimeout(() => {
+      void loadDashboardData();
+    }, 0);
 
     let timer: ReturnType<typeof setInterval> | null = null;
     if (autoRefresh) {
@@ -192,6 +194,7 @@ export function App() {
     }
 
     return () => {
+      window.clearTimeout(initialLoad);
       if (timer) clearInterval(timer);
     };
   }, [autoRefresh, loadDashboardData]);

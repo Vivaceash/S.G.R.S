@@ -181,7 +181,6 @@ async def get_dhcp_leases(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-
                     interface=item.get("interface") or item.get("intf"),
                     expires=str(item.get("expire", "")) or item.get("expiry"),
                     status=item.get("status", "bound"),
-                    raw_data=item,
                 )
             )
 

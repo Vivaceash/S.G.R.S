@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, status, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.exceptions import RequestValidationError
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from scalar_fastapi import get_scalar_api_reference
 
 from app.config import settings
@@ -47,20 +48,20 @@ app = FastAPI(
 
 # Configuración de CORS segura
 cors_origins = settings.CORS_ORIGINS if settings.CORS_ORIGINS else ["http://localhost:5173"]
-has_wildcard = "*" in cors_origins
 
 # Pila de Middlewares (Se añaden en orden inverso a su ejecución externa)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=not has_wildcard,
+    allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
     expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
 )
 app.add_middleware(
     RateLimitingMiddleware,
-    rate_limit_per_minute=settings.RATE_LIMIT_PER_MINUTE
+    rate_limit_per_minute=settings.RATE_LIMIT_PER_MINUTE,
+    auth_rate_limit_per_minute=settings.AUTH_RATE_LIMIT_PER_MINUTE,
 )
 app.add_middleware(
     RequestSizeLimitMiddleware,
@@ -68,6 +69,8 @@ app.add_middleware(
 )
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestContextMiddleware)
+if settings.ALLOWED_HOSTS and "*" not in settings.ALLOWED_HOSTS:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 
 
 # -------------------------------------------------------------
@@ -129,7 +132,7 @@ async def omnivista_exception_handler(request: Request, exc: OmniVistaBaseExcept
             "success": False,
             "message": exc.message,
             "error": exc.message,
-            "data": exc.details,
+            "data": exc.details if settings.DEBUG else None,
         },
         headers={"X-Request-ID": req_id}
     )
@@ -161,7 +164,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     req_id = getattr(request.state, "request_id", "N/A")
     security_logger.error(
         f"Internal Error | req_id={req_id} | path={request.url.path} | exc={repr(exc)}",
-        exc_info=True
+        exc_info=settings.DEBUG
     )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

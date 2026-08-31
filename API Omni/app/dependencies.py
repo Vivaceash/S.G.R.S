@@ -18,6 +18,8 @@ from app.security.logging import log_security_event
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False, description="Clave de API enviada en cabecera X-API-KEY")
 api_key_header_lower = APIKeyHeader(name="X-API-Key", auto_error=False, description="Clave de API enviada en cabecera X-API-Key")
 bearer_auth = HTTPBearer(auto_error=False, description="Token Bearer de autenticación")
+JWT_ISSUER = "SGRS-OmniVista-Gateway"
+JWT_AUDIENCE = "sgrs-omnivista-api"
 
 
 # =============================================================================
@@ -108,7 +110,9 @@ def create_jwt_session(subject: str, is_2fa_verified: bool = True, expires_hours
     header = {"alg": "HS256", "typ": "JWT"}
     payload = {
         "sub": subject,
-        "iss": "SGRS-OmniVista-Gateway",
+        "iss": JWT_ISSUER,
+        "aud": JWT_AUDIENCE,
+        "jti": secrets.token_urlsafe(16),
         "iat": now,
         "nbf": now,
         "exp": now + (exp_h * 3600),
@@ -131,6 +135,14 @@ def decode_jwt_session(token: str) -> Optional[Dict[str, Any]]:
         return None
 
     header_b64, payload_b64, sig_b64 = parts
+
+    try:
+        header = json.loads(_b64_url_decode(header_b64).decode("utf-8"))
+    except Exception:
+        return None
+    if not isinstance(header, dict) or header.get("alg") != "HS256" or header.get("typ") != "JWT":
+        return None
+
     signature_base = f"{header_b64}.{payload_b64}".encode("utf-8")
     expected_sig = hmac.new(settings.JWT_SECRET_KEY.encode("utf-8"), signature_base, hashlib.sha256).digest()
     expected_sig_b64 = _b64_url_encode(expected_sig)
@@ -144,10 +156,34 @@ def decode_jwt_session(token: str) -> Optional[Dict[str, Any]]:
     except Exception:
         return None
 
-    now = int(time.time())
-    if payload.get("exp") and now > payload["exp"]:
+    if not isinstance(payload, dict):
         return None
-    if payload.get("nbf") and now < payload["nbf"]:
+
+    required_claims = {"sub", "iss", "aud", "jti", "iat", "nbf", "exp", "2fa_verified"}
+    if not required_claims.issubset(payload):
+        return None
+    if payload.get("iss") != JWT_ISSUER or payload.get("aud") != JWT_AUDIENCE:
+        return None
+    if not isinstance(payload.get("sub"), str) or not payload["sub"].strip():
+        return None
+    if not isinstance(payload.get("jti"), str) or not payload["jti"].strip():
+        return None
+    if payload.get("2fa_verified") is not True:
+        return None
+
+    for claim in ("iat", "nbf", "exp"):
+        if not isinstance(payload.get(claim), int) or isinstance(payload.get(claim), bool):
+            return None
+
+    now = int(time.time())
+    clock_skew = 30
+    if now >= payload["exp"]:
+        return None
+    if payload["nbf"] > now + clock_skew or payload["iat"] > now + clock_skew:
+        return None
+    if payload["exp"] <= payload["iat"]:
+        return None
+    if payload["exp"] - payload["iat"] > (settings.SESSION_EXPIRE_HOURS * 3600) + clock_skew:
         return None
 
     return payload
@@ -201,7 +237,7 @@ def verify_api_key(
     token_clean = token_provided.strip().strip('"').strip("'")
 
     # 1. Intentar validar si es un token de sesión JWT con 2FA verificado
-    jwt_payload = decode_jwt_session(token_clean)
+    jwt_payload = decode_jwt_session(token_clean) if settings.ENABLE_2FA else None
     if jwt_payload and jwt_payload.get("2fa_verified"):
         return True
 

@@ -17,9 +17,13 @@ if not security_logger.handlers:
 
 def log_security_event(event_type: str, details: Dict[str, Any], level: int = logging.WARNING):
     """Registra un evento de seguridad de forma estructurada"""
-    parts = [f"event={event_type}"]
+    def safe_log_value(value: Any) -> str:
+        text = str(value).replace("\r", "\\r").replace("\n", "\\n")
+        return "".join(ch if ch.isprintable() else "?" for ch in text)[:512]
+
+    parts = [f"event={safe_log_value(event_type)}"]
     for k, v in details.items():
-        parts.append(f"{k}={v}")
+        parts.append(f"{safe_log_value(k)}={safe_log_value(v)}")
     security_logger.log(level, " | ".join(parts))
 
 

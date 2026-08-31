@@ -215,7 +215,9 @@ Cada microservicio se configura mediante variables de entorno validadas con **Py
 | `APP_API_KEY` | `str` | `admin` | Clave(s) de acceso API. Admite múltiples separadas por coma. |
 | `ALLOW_UNAUTHENTICATED` | `bool` | `false` | Si es `true`, omite autenticación (solo desarrollo). |
 | `RATE_LIMIT_PER_MINUTE` | `int` | `120` | Máximo de peticiones permitidas por minuto por IP. |
+| `AUTH_RATE_LIMIT_PER_MINUTE` | `int` | `10` | Límite independiente para los endpoints de autenticación. |
 | `MAX_REQUEST_BODY_BYTES` | `int` | `1048576` | Tamaño máximo permitido del cuerpo HTTP (1 MB). |
+| `TRUSTED_PROXY_IPS` | `str` | `""` | Proxies/CIDR autorizados para aportar cabeceras reenviadas. |
 | `CORS_ORIGINS` | `str` | `http://localhost:5173,http://localhost:3000` | Orígenes web autorizados para interactuar vía CORS. |
 | `ENABLE_DOCS` | `bool` | `true` | Habilita o deshabilita la interfaz interactiva Scalar. |
 | `MASK_INTERNAL_IPS` | `bool` | `true` | Enmascara IPs y datos sensibles en endpoints de salud. |
@@ -231,13 +233,15 @@ Cada microservicio se configura mediante variables de entorno validadas con **Py
 ### Variables para API OmniVista (`API Omni/.env`)
 | Variable | Tipo | Valor Predeterminado | Descripción |
 | :--- | :---: | :---: | :--- |
-| `SERVER_HOST` | `str` | `0.0.0.0` | Dirección de enlace del servidor FastAPI. |
+| `SERVER_HOST` | `str` | `127.0.0.1` | Dirección de enlace local del servidor FastAPI. |
 | `SERVER_PORT` | `int` | `8000` | Puerto de escucha HTTP del servidor. |
 | `ENVIRONMENT` | `str` | `development` | Entorno de ejecución (`development` o `production`). |
 | `APP_API_KEY` | `str` | `admin` | Clave(s) de acceso API. Admite múltiples separadas por coma. |
 | `ALLOW_UNAUTHENTICATED` | `bool` | `false` | Omite validación de API Key si es `true`. |
 | `RATE_LIMIT_PER_MINUTE` | `int` | `60` | Máximo de peticiones permitidas por minuto por IP. |
+| `AUTH_RATE_LIMIT_PER_MINUTE` | `int` | `10` | Límite independiente para los endpoints de autenticación. |
 | `MAX_REQUEST_BODY_BYTES` | `int` | `1048576` | Límite máximo de payload recibido (1 MB). |
+| `TRUSTED_PROXY_IPS` | `str` | `""` | Proxies/CIDR autorizados para aportar cabeceras reenviadas. |
 | `CORS_ORIGINS` | `str` | `http://localhost:5173,http://localhost:3000` | Orígenes web habilitados para consumo de la API. |
 | `ENABLE_DOCS` | `bool` | `true` | Control de visibilidad de la documentación Scalar. |
 | `MASK_INTERNAL_IPS` | `bool` | `true` | Enmascara IPs en respuestas de estado de salud. |
@@ -281,7 +285,7 @@ Si prefieres ejecutar cada servicio en consolas dedicadas:
 ```powershell
 cd "API Forti"
 copy .env.example .env     # (Solo la primera vez)
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.lock
 python run.py
 ```
 
@@ -289,7 +293,7 @@ python run.py
 ```powershell
 cd "API Omni"
 copy .env.example .env     # (Solo la primera vez)
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.lock
 python run.py
 ```
 
@@ -301,16 +305,21 @@ npm run dev
 ```
 Abre tu navegador en `http://localhost:5173`.
 
+> **Política de desarrollo:** la clave `admin` puede mantenerse mientras todo se ejecute
+> localmente con `ENVIRONMENT=development`. Los dos backends fallan al arrancar si esa
+> clave, un secreto JWT de ejemplo, TLS sin validar, depuración, hosts comodín o el
+> enrolamiento 2FA abierto se intentan usar en producción.
+
 ---
 
 ## 🧪 Ecosistema de Pruebas Automatizadas
 
-El repositorio cuenta con una suite completa de pruebas unitarias, de seguridad y de integración que validan **43 casos de prueba**:
+El repositorio cuenta con una suite completa de pruebas unitarias, de seguridad y de integración que valida autenticación, middleware y endpoints operativos en ambos servicios.
 
-- **API Forti (29 pruebas):**
+- **API Forti:**
   - 13 pruebas de seguridad defensiva: rechazo de solicitudes no autenticadas, tokens inválidos, cabeceras OWASP, rate limiting, liveness probe, inyecciones en parámetros y sanitización de secretos.
   - 16 pruebas de endpoints operativos: validación de respuestas semánticas en interfaces, DHCP, ARP, tráfico, firewall, VPNs y recursos.
-- **API Omni (14 pruebas):**
+- **API Omni:**
   - Liveness probe público, documentación Scalar, especificación OpenAPI, autenticación con `X-API-KEY` y `Bearer`, cabeceras OWASP, enmascaramiento de IP, rate limiting por ventana deslizante y protección Anti-DoS HTTP 413.
 
 ### Ejecutar la Suite Completa Unificada:

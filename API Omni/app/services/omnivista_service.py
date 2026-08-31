@@ -1,13 +1,17 @@
 import time
+import logging
 import requests
 import urllib3
 from typing import Dict, Any, List, Optional
 from app.config import settings
+from app.security.sanitizer import sanitize_data
 from app.errors import (
     OmniVistaConnectionError,
     OmniVistaAuthError,
     OmniVistaResponseError,
 )
+
+logger = logging.getLogger("omnivista_api.client")
 
 # Deshabilitar advertencias de certificados autofirmados solo si no se valida SSL
 if not settings.OV_VERIFY_SSL and not settings.OV_CA_BUNDLE:
@@ -80,8 +84,8 @@ class OmniVistaService:
                 })
                 return True
             return False
-        except Exception as e:
-            print(f"[OmniVistaService] Excepción durante login: {e}")
+        except Exception:
+            logger.warning("No fue posible completar el login con OmniVista.", exc_info=settings.DEBUG)
             return False
 
     def _ensure_authenticated(self):
@@ -111,8 +115,11 @@ class OmniVistaService:
                 if self.login():
                     response = self.session.request(method, url, **kwargs)
             return response
-        except requests.exceptions.RequestException as e:
-            raise OmniVistaConnectionError(f"Error de conexión con OmniVista 2500 en '{endpoint}': {str(e)}")
+        except requests.exceptions.RequestException as exc:
+            raise OmniVistaConnectionError(
+                "No fue posible conectar con OmniVista 2500.",
+                details=str(exc) if settings.DEBUG else None,
+            )
 
     # =========================================================================
     # 1. Consultas de Cuentas de Empleados (UPAM)
@@ -129,7 +136,11 @@ class OmniVistaService:
         }
         res = self.request("POST", "/api/ham/userAccount/getPageAllAccountList", json=payload, timeout=12)
         if res.status_code != 200:
-            raise RuntimeError(f"Error consultando cuentas de empleados: {res.text}")
+            raise OmniVistaResponseError(
+                "OmniVista rechazó la consulta de cuentas de empleados.",
+                status_code=502,
+                details={"upstream_status": res.status_code},
+            )
 
         data = res.json()
         raw_items = data.get("data", [])
@@ -157,7 +168,7 @@ class OmniVistaService:
         sensitive_keys = {"password", "repeat", "userPassword", "secret", "psk", "devicePSK"}
         for item in paginated_items:
             item_copy = {k: v for k, v in item.items() if k not in sensitive_keys}
-            cleaned_items.append(item_copy)
+            cleaned_items.append(sanitize_data(item_copy))
 
         return {
             "items": cleaned_items,
@@ -190,7 +201,11 @@ class OmniVistaService:
         }
         res = self.request("POST", "/api/ham/enterpriseProperty/getAllPageEnterprisePropertyInfo", json=payload, timeout=12)
         if res.status_code != 200:
-            raise RuntimeError(f"Error consultando dispositivos de Company Property: {res.text}")
+            raise OmniVistaResponseError(
+                "OmniVista rechazó la consulta de dispositivos corporativos.",
+                status_code=502,
+                details={"upstream_status": res.status_code},
+            )
 
         data = res.json()
         raw_items = data.get("data", [])
@@ -214,7 +229,7 @@ class OmniVistaService:
         paginated_items = raw_items[start_idx:end_idx]
 
         return {
-            "items": paginated_items,
+            "items": sanitize_data(paginated_items),
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -280,9 +295,9 @@ class OmniVistaService:
         if res.status_code == 200:
             data = res.json()
             if isinstance(data, list):
-                return data
+                return sanitize_data(data)
             if isinstance(data, dict):
-                return data.get("response", data.get("data", []))
+                return sanitize_data(data.get("response", data.get("data", [])))
         return []
 
     # =========================================================================
@@ -295,8 +310,8 @@ class OmniVistaService:
         if res.status_code == 200:
             data = res.json()
             if isinstance(data, list):
-                return data
-            return data.get("response", [])
+                return sanitize_data(data)
+            return sanitize_data(data.get("response", []))
         return []
 
     def get_device_by_ip(self, ip_address: str) -> Optional[Dict[str, Any]]:
@@ -314,7 +329,7 @@ class OmniVistaService:
         res = self.request("POST", "/api/ham/radius/onlineDevice/getPageEnterprisePropertyOnlineDeviceList", json=payload, timeout=8)
         if res.status_code == 200:
             data = res.json()
-            return data.get("data", [])
+            return sanitize_data(data.get("data", []))
         return []
 
     def get_infrastructure_stats(self) -> Dict[str, Any]:
@@ -341,9 +356,9 @@ class OmniVistaService:
         res = self.request("GET", "/api/topology/devices", timeout=12)
         if res.status_code == 200:
             try:
-                return res.json()
+                return sanitize_data(res.json())
             except Exception:
-                return res.text
+                return []
         return []
 
     def get_notifications(self) -> Any:
@@ -351,9 +366,9 @@ class OmniVistaService:
         res = self.request("GET", "/api/notifications", timeout=10)
         if res.status_code == 200:
             try:
-                return res.json()
+                return sanitize_data(res.json())
             except Exception:
-                return res.text
+                return []
         return []
 
     # =========================================================================
@@ -365,9 +380,9 @@ class OmniVistaService:
         res = self.request("GET", "/api/system/version", timeout=8)
         if res.status_code == 200:
             try:
-                return res.json()
+                return sanitize_data(res.json())
             except Exception:
-                return res.text
+                return None
         return None
 
     def health_check(self) -> Dict[str, Any]:
@@ -392,8 +407,8 @@ class OmniVistaService:
             else:
                 connected = self.login()
                 message = "Conexión exitosa con OmniVista 2500" if connected else "Credenciales o login fallido"
-        except Exception as e:
-            message = f"Error de enlace: {str(e)}"
+        except Exception as exc:
+            message = f"Error de enlace: {str(exc)}" if settings.DEBUG else "Error de enlace con OmniVista"
 
         elapsed_ms = round((time.time() - start) * 1000, 2)
 

@@ -23,7 +23,10 @@ router = APIRouter(
 
 class Setup2FARequest(BaseModel):
     api_key: str = Field(..., description="Clave de API de administrador para autorizar el enrolamiento")
-    account_name: Optional[str] = Field("NOC-Operator", description="Nombre del operador o estación")
+    account_name: Optional[str] = Field(
+        "NOC-Operator", min_length=1, max_length=64,
+        pattern=r"^[a-zA-Z0-9._@\-]+$", description="Nombre del operador o estación",
+    )
 
 
 class Setup2FAResponse(BaseModel):
@@ -39,7 +42,10 @@ class Setup2FAResponse(BaseModel):
 class Verify2FARequest(BaseModel):
     api_key: str = Field(..., description="Clave de API configurada en el servidor")
     totp_code: str = Field(..., min_length=6, max_length=6, description="Código de 6 dígitos de Google Authenticator / Microsoft Authenticator")
-    account_name: Optional[str] = Field("NOC-Operator", description="Nombre del operador")
+    account_name: Optional[str] = Field(
+        "NOC-Operator", min_length=1, max_length=64,
+        pattern=r"^[a-zA-Z0-9._@\-]+$", description="Nombre del operador",
+    )
 
 
 class Verify2FAResponse(BaseModel):
@@ -71,6 +77,12 @@ def setup_2fa(payload: Setup2FARequest, request: Request):
     Genera un secreto TOTP Base32 y una URI estándar para enrolar Google/Microsoft Authenticator.
     Requiere la clave maestra de API para autorizar el enrolamiento.
     """
+    if not settings.ENABLE_2FA or not settings.ALLOW_2FA_ENROLLMENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="El enrolamiento 2FA no está habilitado por el administrador.",
+        )
+
     client_ip = request.client.host if request.client else "unknown"
     valid_keys = settings.api_keys
 
@@ -103,6 +115,9 @@ def verify_2fa(payload: Verify2FARequest, request: Request):
     Valida la clave de API junto con el código TOTP de 6 dígitos.
     Si ambos son correctos, emite un token de sesión JWT con validez temporal para el Dashboard.
     """
+    if not settings.ENABLE_2FA:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="2FA no está habilitado.")
+
     client_ip = request.client.host if request.client else "unknown"
     req_id = getattr(request.state, "request_id", "no_id")
 
@@ -147,6 +162,8 @@ def verify_2fa(payload: Verify2FARequest, request: Request):
 @router.post("/verify-token", summary="Comprobar validez de un token JWT de sesión")
 def verify_session_token(payload: VerifyTokenRequest):
     """Comprueba si un token de sesión JWT sigue activo y vigente."""
+    if not settings.ENABLE_2FA:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Las sesiones 2FA no están habilitadas.")
     token_data = decode_jwt_session(payload.token)
     if not token_data:
         raise HTTPException(

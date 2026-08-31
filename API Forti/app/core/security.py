@@ -18,6 +18,8 @@ from app.security.logging import log_security_event
 
 # Headers admitidos para autenticación de clientes de nuestra API
 API_KEY_HEADER_NAME = "X-API-Key"
+JWT_ISSUER = "SGRS-Fortinet-Gateway"
+JWT_AUDIENCE = "sgrs-fortinet-api"
 api_key_header = APIKeyHeader(name=API_KEY_HEADER_NAME, auto_error=False, description="Clave enviada en header X-API-Key")
 api_key_header_upper = APIKeyHeader(name="X-API-KEY", auto_error=False, description="Clave enviada en header X-API-KEY")
 bearer_auth = HTTPBearer(auto_error=False, description="Token enviado como Bearer")
@@ -117,7 +119,9 @@ def create_jwt_session(subject: str, is_2fa_verified: bool = True, expires_hours
     header = {"alg": "HS256", "typ": "JWT"}
     payload = {
         "sub": subject,
-        "iss": "SGRS-Security-Gateway",
+        "iss": JWT_ISSUER,
+        "aud": JWT_AUDIENCE,
+        "jti": secrets.token_urlsafe(16),
         "iat": now,
         "nbf": now,
         "exp": now + (exp_h * 3600),
@@ -140,6 +144,14 @@ def decode_jwt_session(token: str) -> Optional[Dict[str, Any]]:
         return None
 
     header_b64, payload_b64, sig_b64 = parts
+
+    try:
+        header = json.loads(_b64_url_decode(header_b64).decode("utf-8"))
+    except Exception:
+        return None
+    if not isinstance(header, dict) or header.get("alg") != "HS256" or header.get("typ") != "JWT":
+        return None
+
     signature_base = f"{header_b64}.{payload_b64}".encode("utf-8")
     expected_sig = hmac.new(settings.JWT_SECRET_KEY.encode("utf-8"), signature_base, hashlib.sha256).digest()
     expected_sig_b64 = _b64_url_encode(expected_sig)
@@ -153,11 +165,34 @@ def decode_jwt_session(token: str) -> Optional[Dict[str, Any]]:
     except Exception:
         return None
 
-    # Validar expiración y activación
-    now = int(time.time())
-    if payload.get("exp") and now > payload["exp"]:
+    if not isinstance(payload, dict):
         return None
-    if payload.get("nbf") and now < payload["nbf"]:
+
+    required_claims = {"sub", "iss", "aud", "jti", "iat", "nbf", "exp", "2fa_verified"}
+    if not required_claims.issubset(payload):
+        return None
+    if payload.get("iss") != JWT_ISSUER or payload.get("aud") != JWT_AUDIENCE:
+        return None
+    if not isinstance(payload.get("sub"), str) or not payload["sub"].strip():
+        return None
+    if not isinstance(payload.get("jti"), str) or not payload["jti"].strip():
+        return None
+    if payload.get("2fa_verified") is not True:
+        return None
+
+    for claim in ("iat", "nbf", "exp"):
+        if not isinstance(payload.get(claim), int) or isinstance(payload.get(claim), bool):
+            return None
+
+    now = int(time.time())
+    clock_skew = 30
+    if now >= payload["exp"]:
+        return None
+    if payload["nbf"] > now + clock_skew or payload["iat"] > now + clock_skew:
+        return None
+    if payload["exp"] <= payload["iat"]:
+        return None
+    if payload["exp"] - payload["iat"] > (settings.SESSION_EXPIRE_HOURS * 3600) + clock_skew:
         return None
 
     return payload
@@ -218,7 +253,7 @@ async def verify_api_key(
     clean_token = token_provided.strip().strip('"').strip("'")
 
     # 1. Intentar validar si es un token de sesión JWT (con 2FA verificado)
-    jwt_payload = decode_jwt_session(clean_token)
+    jwt_payload = decode_jwt_session(clean_token) if settings.ENABLE_2FA else None
     if jwt_payload and jwt_payload.get("2fa_verified"):
         return f"jwt_user:{jwt_payload.get('sub', 'operator')}"
 
@@ -242,7 +277,7 @@ async def verify_api_key(
     if not is_valid:
         log_security_event(
             "auth_failed",
-            {"ip": client_ip, "path": request.url.path, "request_id": req_id, "token_prefix": clean_token[:4]},
+            {"ip": client_ip, "path": request.url.path, "request_id": req_id},
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

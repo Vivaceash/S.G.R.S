@@ -62,7 +62,6 @@ def _parse_device(
         is_online=is_online,
         last_seen=last_seen,
         device_type=device_type,
-        raw_attributes=item,
     )
 
 

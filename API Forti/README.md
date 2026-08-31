@@ -8,7 +8,7 @@ API REST desarrollada con **FastAPI** y **Scalar**, optimizada para operar en el
 
 ### 1. Instalar Dependencias
 ```bash
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.lock
 ```
 
 ### 2. Configurar Variables de Entorno
@@ -16,10 +16,11 @@ Edita el archivo `.env` con los datos de tu FortiGate y tu clave de seguridad:
 ```ini
 # Configuración del servidor (Puerto 8001)
 PORT=8001
-HOST=0.0.0.0
+HOST=127.0.0.1
+ENVIRONMENT=development
 
 # Seguridad de nuestra API (Cabecera X-API-Key obligatoria para clientes)
-APP_API_KEY=forti-secret-api-key-change-me
+APP_API_KEY=admin
 
 # Conexión con FortiGate
 FORTIOS_HOST=192.168.1.1
@@ -36,7 +37,7 @@ python run.py
 ```
 O directamente con Uvicorn:
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
 ---
@@ -55,10 +56,14 @@ Para proteger la API contra accesos no autorizados e inyecciones:
 1. **Autenticación `X-API-Key`**:
    Envía la cabecera HTTP en cada petición:
    ```http
-   X-API-Key: forti-secret-api-key-change-me
+   X-API-Key: admin
    ```
 2. **Rate Limiting**: Protección integrada con límite de peticiones por minuto para prevenir saturación o DoS.
 3. **Cabeceras de Seguridad**: Middleware que inyecta `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection` y `Referrer-Policy`.
+
+`admin` se conserva únicamente para el entorno local de desarrollo. Al seleccionar
+`ENVIRONMENT=production`, el servicio rechaza esa clave, configuraciones de depuración,
+TLS sin validar, hosts comodín, secretos JWT débiles y enrolamiento 2FA abierto.
 
 ---
 

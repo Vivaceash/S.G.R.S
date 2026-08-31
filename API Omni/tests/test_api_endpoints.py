@@ -7,6 +7,24 @@ client = TestClient(app)
 VALID_API_KEY = settings.API_SECRET_KEY or "admin"
 
 
+def test_production_rejects_development_admin_key():
+    """La comodidad local `admin` no puede llegar accidentalmente a producción."""
+    from pydantic import ValidationError
+    from app.config import Settings
+
+    with pytest.raises(ValidationError, match="APP_API_KEY"):
+        Settings(
+            _env_file=None,
+            ENVIRONMENT="production",
+            DEBUG=False,
+            APP_API_KEY="admin",
+            JWT_SECRET_KEY="a-production-jwt-secret-with-more-than-32-bytes",
+            OV_VERIFY_SSL=True,
+            ALLOWED_HOSTS=["api.example.test"],
+            CORS_ORIGINS=["https://dashboard.example.test"],
+        )
+
+
 # =============================================================================
 # 1. Pruebas de Documentación, Liveness Probe y Especificación OpenAPI
 # =============================================================================
@@ -213,8 +231,7 @@ def test_rate_limiter_blocks_exceeded_requests():
     import time
     from collections import deque
 
-    ip_burst = "203.0.113.99"
-    headers = {"X-Forwarded-For": ip_burst, "X-API-KEY": VALID_API_KEY}
+    headers = {"X-Forwarded-For": "203.0.113.99", "X-API-KEY": VALID_API_KEY}
 
     curr = app.middleware_stack
     rl_middleware = None
@@ -225,15 +242,19 @@ def test_rate_limiter_blocks_exceeded_requests():
         curr = getattr(curr, "app", None)
 
     if rl_middleware:
+        client.get("/api/v1/catalogs/device-options", headers=headers)
+        bucket_key = next(key for key in rl_middleware.requests if key.endswith(":api"))
         now = time.time()
         with rl_middleware.lock:
-            rl_middleware.requests[ip_burst] = deque([now] * rl_middleware.rate_limit)
+            rl_middleware.requests[bucket_key] = deque([now] * rl_middleware.rate_limit)
 
         res_blocked = client.get("/api/v1/catalogs/device-options", headers=headers)
         assert res_blocked.status_code == 429
         assert "Retry-After" in res_blocked.headers
         assert res_blocked.headers["X-RateLimit-Remaining"] == "0"
         assert res_blocked.json()["success"] is False
+        with rl_middleware.lock:
+            rl_middleware.requests.pop(bucket_key, None)
 
 
 # =============================================================================
@@ -276,9 +297,13 @@ def test_auth_status_endpoint():
     assert "2fa_enabled" in data
 
 
-def test_2fa_setup_and_verify_flow():
+def test_2fa_setup_and_verify_flow(monkeypatch):
     """Verifica el flujo completo de enrolamiento 2FA, generación TOTP y validación de sesión JWT"""
     from app.dependencies import get_totp_token
+
+    monkeypatch.setattr(settings, "ENABLE_2FA", True)
+    monkeypatch.setattr(settings, "ALLOW_2FA_ENROLLMENT", True)
+    monkeypatch.setattr(settings, "JWT_SECRET_KEY", "omni-test-jwt-secret-with-at-least-32-bytes")
 
     # 1. Setup 2FA con clave de API
     res_setup = client.post(
@@ -326,4 +351,31 @@ def test_2fa_setup_and_verify_flow():
         },
     )
     assert res_bad.status_code == 401
+
+
+def test_untrusted_forwarded_for_does_not_create_spoofed_bucket():
+    headers = {"X-Forwarded-For": "198.51.100.123", "X-API-KEY": VALID_API_KEY}
+    response = client.get("/api/v1/catalogs/device-options", headers=headers)
+    assert response.status_code == 200
+
+    curr = app.middleware_stack
+    while curr and not hasattr(curr, "requests"):
+        curr = getattr(curr, "app", None)
+    assert curr is not None
+    assert "198.51.100.123:api" not in curr.requests
+
+
+def test_legacy_or_incomplete_jwt_is_rejected():
+    import base64
+    import hashlib
+    import hmac
+    import json
+    from app.dependencies import decode_jwt_session
+
+    encode = lambda value: base64.urlsafe_b64encode(value).decode().rstrip("=")
+    header = encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+    payload = encode(json.dumps({"2fa_verified": True}).encode())
+    signature = encode(hmac.new(settings.JWT_SECRET_KEY.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest())
+
+    assert decode_jwt_session(f"{header}.{payload}.{signature}") is None
 

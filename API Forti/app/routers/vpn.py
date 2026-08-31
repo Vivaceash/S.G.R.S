@@ -20,7 +20,6 @@ class IPsecTunnelItem(BaseModel):
     remote_gateway: Optional[str] = Field(None, description="IP de la pasarela remota")
     incoming_bytes: Optional[int] = Field(None, description="Bytes entrantes")
     outgoing_bytes: Optional[int] = Field(None, description="Bytes salientes")
-    raw_tunnel: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Datos crudos")
 
 
 class SSLVPNUserSession(BaseModel):
@@ -30,7 +29,6 @@ class SSLVPNUserSession(BaseModel):
     duration: Optional[int] = Field(None, description="Segundos conectado")
     bytes_sent: Optional[int] = Field(None, description="Bytes enviados")
     bytes_received: Optional[int] = Field(None, description="Bytes recibidos")
-    raw_session: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Datos crudos")
 
 
 @router.get(
@@ -54,7 +52,6 @@ async def get_vpn_ipsec(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_
                     remote_gateway=item.get("remote_gateway") or item.get("rgwy"),
                     incoming_bytes=item.get("incoming_bytes"),
                     outgoing_bytes=item.get("outgoing_bytes"),
-                    raw_tunnel=item,
                 )
             )
 
@@ -87,7 +84,6 @@ async def get_vpn_ssl_sessions(vdom: Optional[str] = Query(None, pattern=r"^[a-z
                     duration=item.get("duration"),
                     bytes_sent=item.get("bytes_sent") or item.get("sent"),
                     bytes_received=item.get("bytes_received") or item.get("rcvd"),
-                    raw_session=item,
                 )
             )
 

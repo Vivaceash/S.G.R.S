@@ -12,6 +12,24 @@ def anyio_backend():
     return "asyncio"
 
 
+def test_production_rejects_development_admin_key():
+    """La comodidad local `admin` no puede llegar accidentalmente a producción."""
+    from pydantic import ValidationError
+    from app.core.config import Settings
+
+    with pytest.raises(ValidationError, match="APP_API_KEY"):
+        Settings(
+            _env_file=None,
+            ENVIRONMENT="production",
+            DEBUG=False,
+            APP_API_KEY="admin",
+            JWT_SECRET_KEY="a-production-jwt-secret-with-more-than-32-bytes",
+            FORTIOS_VERIFY_SSL=True,
+            ALLOWED_HOSTS=["api.example.test"],
+            CORS_ORIGINS=["https://dashboard.example.test"],
+        )
+
+
 @pytest.mark.anyio
 async def test_unauthenticated_request_rejected():
     """1. Rechazo de petición sin cabecera de autenticación (401)"""
@@ -189,9 +207,13 @@ async def test_auth_status_endpoint():
 
 
 @pytest.mark.anyio
-async def test_2fa_setup_and_verification_flow():
+async def test_2fa_setup_and_verification_flow(monkeypatch):
     """16. Flujo completo de enrolamiento 2FA (TOTP) y autenticación con sesión JWT"""
     from app.core.security import get_totp_token
+
+    monkeypatch.setattr(settings, "ENABLE_2FA", True)
+    monkeypatch.setattr(settings, "ALLOW_2FA_ENROLLMENT", True)
+    monkeypatch.setattr(settings, "JWT_SECRET_KEY", "forti-test-jwt-secret-with-at-least-32-bytes")
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -241,4 +263,31 @@ async def test_2fa_setup_and_verification_flow():
             },
         )
         assert r_bad_totp.status_code == 401
+
+
+def test_legacy_or_incomplete_jwt_is_rejected():
+    """Un JWT firmado pero sin claims obligatorios nunca debe autenticar."""
+    import base64
+    import hashlib
+    import hmac
+    import json
+    from app.core.security import decode_jwt_session
+
+    encode = lambda value: base64.urlsafe_b64encode(value).decode().rstrip("=")
+    header = encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+    payload = encode(json.dumps({"2fa_verified": True}).encode())
+    signature = encode(hmac.new(settings.JWT_SECRET_KEY.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest())
+
+    assert decode_jwt_session(f"{header}.{payload}.{signature}") is None
+
+
+@pytest.mark.anyio
+async def test_jwt_is_not_accepted_when_2fa_is_disabled():
+    from app.core.security import create_jwt_session
+
+    token = create_jwt_session("TestOperator")
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/health", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 403
 

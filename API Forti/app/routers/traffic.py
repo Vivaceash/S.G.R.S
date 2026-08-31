@@ -67,7 +67,6 @@ def _parse_session(raw: Dict[str, Any]) -> ActiveSessionItem:
         bytes_received=int(bytes_rcvd) if bytes_rcvd is not None and str(bytes_rcvd).isdigit() else None,
         duration=raw.get("duration"),
         expiry=int(raw["expiry"]) if raw.get("expiry") and str(raw["expiry"]).isdigit() else None,
-        raw_session=raw,
     )
 
 
@@ -244,7 +243,6 @@ async def get_traffic_activity_logs(
                 app_category=log_item.get("catdesc") or log_item.get("appcat"),
                 sent_bytes=log_item.get("sentbyte"),
                 rcvd_bytes=log_item.get("rcvdbyte"),
-                raw_log=log_item,
             )
             records.append(rec)
 

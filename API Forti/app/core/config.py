@@ -1,6 +1,6 @@
 import logging
 from typing import List, Optional, Union
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 import os
@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # Configuración general del servidor
     APP_NAME: str = "Fortinet FortiGate REST Integration API"
     APP_VERSION: str = "1.0.0"
-    HOST: str = "0.0.0.0"
+    HOST: str = "127.0.0.1"
     PORT: int = 8001
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
@@ -35,16 +35,22 @@ class Settings(BaseSettings):
     ENABLE_2FA: bool = False
     TOTP_SECRET_KEY: Optional[str] = None
     JWT_SECRET_KEY: str = "sgrs-secure-jwt-secret-key-change-in-production-2026"
-    SESSION_EXPIRE_HOURS: int = 12
+    SESSION_EXPIRE_HOURS: int = 1
+    ALLOW_2FA_ENROLLMENT: bool = False
 
     # Límite de tasa de peticiones (Rate Limiting)
     RATE_LIMIT_PER_MINUTE: int = 120
+    AUTH_RATE_LIMIT_PER_MINUTE: int = 10
 
     # Tamaño máximo de cuerpo de petición (en bytes, 1MB por defecto)
     MAX_REQUEST_BODY_BYTES: int = 1_048_576
 
     # Hosts permitidos para TrustedHostMiddleware
     ALLOWED_HOSTS: Union[List[str], str] = ["*"]
+
+    # Solo se confia en cabeceras X-Forwarded-* cuando la conexion proviene
+    # directamente de una de estas IPs o redes (CIDR).
+    TRUSTED_PROXY_IPS: Union[List[str], str] = []
 
     # Orígenes CORS permitidos
     CORS_ORIGINS: Union[List[str], str] = [
@@ -87,6 +93,52 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [host.strip() for host in v.split(",") if host.strip()]
         return v
+
+    @field_validator("TRUSTED_PROXY_IPS", mode="before")
+    @classmethod
+    def parse_trusted_proxies(cls, v: Union[str, List[str]]) -> List[str]:
+        if isinstance(v, str):
+            return [proxy.strip() for proxy in v.split(",") if proxy.strip()]
+        return v
+
+    @model_validator(mode="after")
+    def validate_security_configuration(self):
+        environment = self.ENVIRONMENT.strip().lower()
+        weak_api_keys = {"admin", "123456", "forti-secret-api-key-change-me"}
+        default_jwt_secret = "sgrs-secure-jwt-secret-key-change-in-production-2026"
+
+        if self.ENABLE_2FA and (
+            not self.JWT_SECRET_KEY
+            or self.JWT_SECRET_KEY == default_jwt_secret
+            or len(self.JWT_SECRET_KEY.encode("utf-8")) < 32
+        ):
+            raise ValueError(
+                "ENABLE_2FA requiere un JWT_SECRET_KEY aleatorio de al menos 32 bytes."
+            )
+
+        if environment not in {"development", "test"}:
+            if self.DEBUG:
+                raise ValueError("DEBUG debe estar desactivado fuera de development/test.")
+            if self.ALLOW_UNAUTHENTICATED:
+                raise ValueError("ALLOW_UNAUTHENTICATED solo puede usarse en development/test.")
+            if not self.api_keys or any(key.lower() in weak_api_keys or len(key) < 16 for key in self.api_keys):
+                raise ValueError("APP_API_KEY debe contener claves robustas fuera de development/test.")
+            if not self.JWT_SECRET_KEY or self.JWT_SECRET_KEY == default_jwt_secret:
+                raise ValueError("JWT_SECRET_KEY debe reemplazarse fuera de development/test.")
+            if self.ALLOW_2FA_ENROLLMENT:
+                raise ValueError("El enrolamiento 2FA debe permanecer cerrado fuera de development/test.")
+            if not self.FORTIOS_VERIFY_SSL and not self.FORTIOS_CA_BUNDLE:
+                raise ValueError("La validación TLS de FortiOS es obligatoria fuera de development/test.")
+            if self.FORTIOS_SCHEME.lower() != "https":
+                raise ValueError("FORTIOS_SCHEME debe ser https fuera de development/test.")
+            if self.FORTIOS_CA_BUNDLE and not Path(self.FORTIOS_CA_BUNDLE).is_file():
+                raise ValueError("FORTIOS_CA_BUNDLE debe apuntar a un archivo CA existente.")
+            if "*" in self.ALLOWED_HOSTS:
+                raise ValueError("ALLOWED_HOSTS no puede contener '*' fuera de development/test.")
+            if "*" in self.CORS_ORIGINS:
+                raise ValueError("CORS_ORIGINS no puede contener '*' fuera de development/test.")
+
+        return self
 
     @property
     def api_keys(self) -> List[str]:

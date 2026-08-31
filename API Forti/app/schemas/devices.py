@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Union
+from typing import List, Optional, Union
 from pydantic import BaseModel, Field
 
 
@@ -14,7 +14,6 @@ class DeviceItem(BaseModel):
     is_online: Optional[bool] = Field(None, description="Si el dispositivo se encuentra activo actualmente")
     last_seen: Optional[Union[str, int, float]] = Field(None, description="Última vez visto o timestamp")
     device_type: Optional[str] = Field(None, description="Categoría de dispositivo (ej. Phone, Computer, IoT, Server)")
-    raw_attributes: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Atributos completos reportados por FortiOS")
 
 
 class DeviceListSummary(BaseModel):

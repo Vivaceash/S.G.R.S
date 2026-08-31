@@ -91,7 +91,7 @@ def main():
     if (dash_dir / "package.json").exists():
         try:
             proc_dash = subprocess.Popen(
-                [npm_exe, "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"],
+                [npm_exe, "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
                 cwd=str(dash_dir),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,

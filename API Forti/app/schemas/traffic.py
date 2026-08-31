@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -16,7 +16,6 @@ class ActiveSessionItem(BaseModel):
     bytes_received: Optional[int] = Field(None, description="Bytes recibidos desde destino a origen")
     duration: Optional[int] = Field(None, description="Duración de la sesión en segundos")
     expiry: Optional[int] = Field(None, description="Tiempo de expiración de sesión")
-    raw_session: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Información en crudo de la sesión")
 
 
 class WebActivityRecord(BaseModel):
@@ -31,7 +30,6 @@ class WebActivityRecord(BaseModel):
     app_category: Optional[str] = Field(None, description="Categoría web o de aplicación (ej. Social Media, Streaming, Business)")
     sent_bytes: Optional[int] = Field(None, description="Bytes enviados")
     rcvd_bytes: Optional[int] = Field(None, description="Bytes recibidos")
-    raw_log: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Datos crudos del log")
 
 
 class VisitedDestinationSummary(BaseModel):
