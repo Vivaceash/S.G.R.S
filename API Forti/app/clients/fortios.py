@@ -1,9 +1,11 @@
 import asyncio
 import logging
+import os
 from typing import Any, Dict, List, Optional, Union
 import httpx
 
 from app.core.config import settings
+from app.security.sanitizer import sanitize_data
 from app.core.errors import (
     FortiOSBaseException,
     FortiOSAuthError,
@@ -24,7 +26,7 @@ class FortiOSClient:
     def __init__(self):
         self.base_url = settings.fortios_base_url
         self.token = settings.FORTIOS_API_TOKEN
-        self.verify_ssl = settings.FORTIOS_VERIFY_SSL
+        self.verify_ssl = settings.FORTIOS_CA_BUNDLE if (settings.FORTIOS_CA_BUNDLE and os.path.exists(settings.FORTIOS_CA_BUNDLE)) else settings.FORTIOS_VERIFY_SSL
         self.timeout = settings.FORTIOS_TIMEOUT
         self.default_vdom = settings.FORTIOS_DEFAULT_VDOM
         self._client: Optional[httpx.AsyncClient] = None
@@ -43,6 +45,12 @@ class FortiOSClient:
                     await self._client.aclose()
                 except Exception:
                     pass
+
+            # Advertencia si la verificación TLS está apagada
+            if self.verify_ssl is False:
+                logger.warning(
+                    "⚠️ [SEGURIDAD] FORTIOS_VERIFY_SSL está deshabilitado. La comunicación con el FortiGate no verifica el certificado TLS. En producción configure certificados de confianza o FORTIOS_CA_BUNDLE."
+                )
 
             headers = {
                 "Authorization": f"Bearer {self.token}",
@@ -108,7 +116,7 @@ class FortiOSClient:
                     details={"status_code": response.status_code, "path": clean_path}
                 )
 
-            data = response.json()
+            data = sanitize_data(response.json())
 
             # FortiOS suele retornar un objeto con http_status o status
             http_status = data.get("http_status")

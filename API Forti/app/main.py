@@ -6,11 +6,19 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from scalar_fastapi import get_scalar_api_reference
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.core.config import settings
 from app.core.errors import FortiOSBaseException
 from app.core.security import limiter
 from app.clients.fortios import fortios_client
+from app.middleware import (
+    SecurityHeadersMiddleware,
+    RateLimitingMiddleware,
+    RequestContextMiddleware,
+    RequestSizeLimitMiddleware,
+)
+from app.security.logging import log_security_event, mask_sensitive_ip
 from app.routers import (
     health_router,
     system_router,
@@ -19,6 +27,7 @@ from app.routers import (
     network_router,
     firewall_router,
     vpn_router,
+    auth_router,
 )
 
 # Configuración de Logging
@@ -32,8 +41,17 @@ logger = logging.getLogger("fortinet_api")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manejo del ciclo de vida de la aplicación."""
-    logger.info(f"🚀 Iniciando {settings.APP_NAME} v{settings.APP_VERSION} en el puerto {settings.PORT}")
-    logger.info(f"🔗 FortiGate Host objetivo: {settings.fortios_base_url} (VDOM: {settings.FORTIOS_DEFAULT_VDOM})")
+    masked_target = mask_sensitive_ip(settings.fortios_base_url) if settings.MASK_INTERNAL_IPS else settings.fortios_base_url
+    logger.info(f"🚀 Iniciando {settings.APP_NAME} v{settings.APP_VERSION} en el puerto {settings.PORT} ({settings.ENVIRONMENT})")
+    logger.info(f"🔗 FortiGate Host objetivo: {masked_target} (VDOM: {settings.FORTIOS_DEFAULT_VDOM})")
+    logger.info(f"🛡️  Claves de API configuradas: {len(settings.api_keys)} activa(s)")
+
+    if settings.ENVIRONMENT == "production":
+        if any(k in ("admin", "forti-secret-api-key-change-me", "123456") for k in settings.api_keys):
+            logger.warning("⚠️  [ALERTA DE SEGURIDAD] Clave por defecto detectada en producción. Cambie APP_API_KEY a un valor criptográficamente seguro.")
+        if not settings.FORTIOS_VERIFY_SSL:
+            logger.warning("⚠️  [ALERTA DE SEGURIDAD] FORTIOS_VERIFY_SSL está desactivado en producción. Se recomienda habilitar TLS estricto o configurar FORTIOS_CA_BUNDLE.")
+
     yield
     logger.info("🛑 Apagando aplicación y cerrando pools de conexión HTTPX...")
     await fortios_client.close()
@@ -54,40 +72,58 @@ app = FastAPI(
     - **VPN**: Estado de túneles IPsec y usuarios conectados vía SSL-VPN.
     
     ### Seguridad
-    Para consumir estos endpoints se requiere enviar la cabecera `X-API-Key` con la clave configurada en el servidor.
+    Para consumir estos endpoints se requiere enviar la cabecera `X-API-Key` o `Authorization: Bearer <token>` con la clave configurada en el servidor.
     """,
-    docs_url=None,       # Usaremos Scalar como visor principal de documentación
+    docs_url=None,
     redoc_url=None,
+    openapi_url="/openapi.json" if settings.ENABLE_DOCS else None,
     lifespan=lifespan,
 )
 
-# Integrar Rate Limiter
+# Integrar Rate Limiter de slowapi (para compatibilidad de dependencias)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # -------------------------------------------------------------
-# Middleware de Seguridad y Cabeceras HTTP
+# Middlewares de Seguridad y Trazabilidad (orden de ejecución LIFO)
 # -------------------------------------------------------------
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    return response
 
+# 1. Cabeceras OWASP y control de caché
+app.add_middleware(SecurityHeadersMiddleware)
 
-# -------------------------------------------------------------
-# CORS
-# -------------------------------------------------------------
+# 2. Limitador de peticiones (Sliding Window en memoria)
+app.add_middleware(
+    RateLimitingMiddleware,
+    rate_limit_per_minute=settings.RATE_LIMIT_PER_MINUTE,
+)
+
+# 3. Límite de tamaño de cuerpo de petición (Anti-DoS)
+app.add_middleware(
+    RequestSizeLimitMiddleware,
+    max_bytes=settings.MAX_REQUEST_BODY_BYTES,
+)
+
+# 4. Inyección de X-Request-ID para trazabilidad y auditoría
+app.add_middleware(RequestContextMiddleware)
+
+# 5. TrustedHostMiddleware (si no es comodín '*')
+if settings.ALLOWED_HOSTS and "*" not in settings.ALLOWED_HOSTS:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
+
+# 6. CORS Seguro (sin allow_credentials=True si el origen es '*')
+origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else [settings.CORS_ORIGINS]
+allow_creds = True
+if "*" in origins:
+    allow_creds = False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Modificar con orígenes específicos en producción
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_origins=origins,
+    allow_credentials=allow_creds,
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
 )
 
 
@@ -96,7 +132,8 @@ app.add_middleware(
 # -------------------------------------------------------------
 @app.exception_handler(FortiOSBaseException)
 async def fortios_exception_handler(request: Request, exc: FortiOSBaseException):
-    logger.warning(f"Excepción FortiOS interceptada [{exc.status_code}]: {exc.message}")
+    req_id = getattr(request.state, "request_id", "unknown")
+    logger.warning(f"[{req_id}] Excepción FortiOS interceptada [{exc.status_code}]: {exc.message}")
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -110,7 +147,8 @@ async def fortios_exception_handler(request: Request, exc: FortiOSBaseException)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Error no controlado en {request.url.path}: {exc}", exc_info=settings.DEBUG)
+    req_id = getattr(request.state, "request_id", "unknown")
+    logger.error(f"[{req_id}] Error no controlado en {request.url.path}: {exc}", exc_info=settings.DEBUG)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
@@ -123,27 +161,39 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # -------------------------------------------------------------
-# Documentación Interactiva Scalar
+# Endpoint Público Ligero de Ping / Liveness
 # -------------------------------------------------------------
-@app.get("/scalar", include_in_schema=False)
-async def scalar_html():
-    return get_scalar_api_reference(
-        openapi_url=app.openapi_url,
-        title=f"{settings.APP_NAME} - Scalar Docs",
-        servers=[{"url": f"http://localhost:{settings.PORT}", "description": "Servidor Local (Puerto 8001)"}],
-    )
+@app.get("/health", tags=["Salud y Conectividad"], include_in_schema=False)
+async def ping():
+    """Liveness probe público para balanceadores y contenedores sin exponer datos de red."""
+    return {
+        "status": "healthy",
+        "app": settings.APP_NAME,
+        "environment": settings.ENVIRONMENT,
+    }
 
 
-@app.get("/docs", include_in_schema=False)
-async def docs_redirect():
-    """Redirigir /docs directamente a Scalar."""
-    return RedirectResponse(url="/scalar")
+# -------------------------------------------------------------
+# Documentación Interactiva Scalar (condicionada a ENABLE_DOCS)
+# -------------------------------------------------------------
+if settings.ENABLE_DOCS:
+    @app.get("/scalar", include_in_schema=False)
+    async def scalar_html():
+        return get_scalar_api_reference(
+            openapi_url=app.openapi_url,
+            title=f"{settings.APP_NAME} - Scalar Docs",
+            servers=[{"url": f"http://localhost:{settings.PORT}", "description": "Servidor Local (Puerto 8001)"}],
+        )
 
+    @app.get("/docs", include_in_schema=False)
+    async def docs_redirect():
+        """Redirigir /docs directamente a Scalar."""
+        return RedirectResponse(url="/scalar")
 
-@app.get("/", include_in_schema=False)
-async def root():
-    """Ruta raíz con redirección a la documentación interactiva."""
-    return RedirectResponse(url="/scalar")
+    @app.get("/", include_in_schema=False)
+    async def root():
+        """Ruta raíz con redirección a la documentación interactiva."""
+        return RedirectResponse(url="/scalar")
 
 
 # -------------------------------------------------------------
@@ -157,3 +207,4 @@ app.include_router(traffic_router, prefix=api_v1_prefix)
 app.include_router(network_router, prefix=api_v1_prefix)
 app.include_router(firewall_router, prefix=api_v1_prefix)
 app.include_router(vpn_router, prefix=api_v1_prefix)
+app.include_router(auth_router, prefix=api_v1_prefix)

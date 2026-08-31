@@ -1,19 +1,28 @@
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, status, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.exceptions import RequestValidationError
 from scalar_fastapi import get_scalar_api_reference
 
 from app.config import settings
+from app.errors import OmniVistaBaseException
+from app.middleware import (
+    SecurityHeadersMiddleware,
+    RateLimitingMiddleware,
+    RequestContextMiddleware,
+    RequestSizeLimitMiddleware,
+)
+from app.security import security_logger
 from app.routers import (
     employees_router,
     company_properties_router,
     catalogs_router,
     monitoring_router,
     system_router,
+    auth_router,
 )
 
-# Inicialización de FastAPI: Únicamente Scalar (Swagger y ReDoc 100% deshabilitados)
+# Inicialización de FastAPI: Scalar condicionado por ENABLE_DOCS
 app = FastAPI(
     title="OmniVista 2500 - Network Query & Monitoring API",
     description="""
@@ -30,24 +39,59 @@ app = FastAPI(
     
     *Documentación interactiva renderizada exclusivamente con **Scalar**.*
     """,
-    version="2.0.0",
+    version="2.1.0",
     docs_url=None,       # Swagger UI deshabilitado
     redoc_url=None,      # ReDoc deshabilitado
-    openapi_url="/openapi.json",
+    openapi_url="/openapi.json" if settings.ENABLE_DOCS else None,
 )
 
-# Configuración de CORS (solo métodos de consulta GET y preflight OPTIONS)
+# Configuración de CORS segura
+cors_origins = settings.CORS_ORIGINS if settings.CORS_ORIGINS else ["http://localhost:5173"]
+has_wildcard = "*" in cors_origins
+
+# Pila de Middlewares (Se añaden en orden inverso a su ejecución externa)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS if settings.CORS_ORIGINS else ["*"],
-    allow_credentials=True,
-    allow_methods=["GET", "OPTIONS"],
+    allow_origins=cors_origins,
+    allow_credentials=not has_wildcard,
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
 )
+app.add_middleware(
+    RateLimitingMiddleware,
+    rate_limit_per_minute=settings.RATE_LIMIT_PER_MINUTE
+)
+app.add_middleware(
+    RequestSizeLimitMiddleware,
+    max_bytes=settings.MAX_REQUEST_BODY_BYTES
+)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestContextMiddleware)
 
-# Integración Exclusiva de Documentación Interactiva Scalar
+
+# -------------------------------------------------------------
+# Endpoint Público Ligero de Ping / Liveness Probe
+# -------------------------------------------------------------
+@app.get("/health", tags=["Salud y Conectividad"], include_in_schema=False)
+async def ping():
+    """Liveness probe público para balanceadores y contenedores sin exponer datos de red."""
+    return {
+        "status": "healthy",
+        "app": "OmniVista 2500 - Network Query & Monitoring API",
+        "version": "2.1.0",
+        "environment": settings.ENVIRONMENT,
+    }
+
+
+# Integración de Documentación Interactiva Scalar (condicionada por configuración)
 @app.get("/docs", include_in_schema=False)
 async def scalar_docs():
+    if not settings.ENABLE_DOCS:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="La documentación interactiva ha sido deshabilitada por configuración de seguridad."
+        )
     return get_scalar_api_reference(
         openapi_url=app.openapi_url,
         title="OmniVista 2500 Query API - Scalar Reference",
@@ -57,23 +101,44 @@ async def scalar_docs():
         hide_models=False,
     )
 
+
 @app.get("/scalar", include_in_schema=False)
 async def scalar_docs_alias():
     return RedirectResponse(url="/docs")
+
 
 @app.get("/swagger", include_in_schema=False)
 async def swagger_redirect_to_scalar():
     """Redirige cualquier intento de acceso a /swagger directamente a Scalar (/docs)"""
     return RedirectResponse(url="/docs")
 
+
 @app.get("/", include_in_schema=False)
 async def root():
     return RedirectResponse(url="/docs")
 
 
+# Manejador de excepciones especializadas de OmniVista
+@app.exception_handler(OmniVistaBaseException)
+async def omnivista_exception_handler(request: Request, exc: OmniVistaBaseException):
+    req_id = getattr(request.state, "request_id", "N/A")
+    security_logger.warning(f"[{req_id}] Excepción OmniVista interceptada [{exc.status_code}]: {exc.message}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "message": exc.message,
+            "error": exc.message,
+            "data": exc.details,
+        },
+        headers={"X-Request-ID": req_id}
+    )
+
+
 # Manejador de errores de validación de Pydantic
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    req_id = getattr(request.state, "request_id", "N/A")
     errors = []
     for err in exc.errors():
         field = " -> ".join(str(loc) for loc in err.get("loc", []))
@@ -86,12 +151,35 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "error": "; ".join(errors),
             "data": None
         },
+        headers={"X-Request-ID": req_id}
     )
 
 
-# Registrar Routers de Consulta
+# Manejador global para excepciones internas no controladas (HTTP 500)
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    req_id = getattr(request.state, "request_id", "N/A")
+    security_logger.error(
+        f"Internal Error | req_id={req_id} | path={request.url.path} | exc={repr(exc)}",
+        exc_info=True
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "success": False,
+            "message": "Error interno del servidor al procesar la solicitud.",
+            "error": f"Ocurrió un error inesperado. Ref: {req_id}",
+            "data": None
+        },
+        headers={"X-Request-ID": req_id}
+    )
+
+
+# Registrar Routers de Consulta y Autenticación
 app.include_router(employees_router)
 app.include_router(company_properties_router)
 app.include_router(catalogs_router)
 app.include_router(monitoring_router)
 app.include_router(system_router)
+app.include_router(auth_router)
+

@@ -1,0 +1,32 @@
+# Entorno y Secretos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# Caché de Python y compilación
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+ENV/
+
+# IDEs y editores
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/

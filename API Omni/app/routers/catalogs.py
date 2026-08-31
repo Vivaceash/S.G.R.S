@@ -21,18 +21,15 @@ router = APIRouter(
 def get_access_role_profiles(
     service: OmniVistaService = Depends(get_ov_service)
 ):
-    try:
-        profiles = service.get_access_role_profiles()
-        return ApiResponse(
-            success=True,
-            message="Perfiles de acceso a red obtenidos correctamente",
-            data=AccessRoleProfileResponse(
-                profiles=profiles,
-                total=len(profiles)
-            )
+    profiles = service.get_access_role_profiles()
+    return ApiResponse(
+        success=True,
+        message="Perfiles de acceso a red obtenidos correctamente",
+        data=AccessRoleProfileResponse(
+            profiles=profiles,
+            total=len(profiles)
         )
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    )
 
 
 @router.get(
@@ -44,35 +41,26 @@ def get_access_role_profiles(
 def get_device_options(
     service: OmniVistaService = Depends(get_ov_service)
 ):
-    try:
-        options = service.get_device_options()
-        return ApiResponse(
-            success=True,
-            message="Opciones de dispositivos obtenidas correctamente",
-            data=DeviceOptionsResponse(**options)
-        )
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    options = service.get_device_options()
+    return ApiResponse(
+        success=True,
+        message="Opciones de dispositivos obtenidas correctamente",
+        data=DeviceOptionsResponse(**options)
+    )
 
 
 @router.get(
     "/vlans",
-    response_model=ApiResponse[VlanCatalogResponse],
-    summary="Listar Catálogo de VLANs",
-    description="Obtiene la lista de VLANs configuradas en los conmutadores y switches administrados por OmniVista.",
+    response_model=ApiResponse[List[VlanCatalogResponse]],
+    summary="Catálogo de VLANs Configuradas",
+    description="Consulta el inventario de VLANs y subredes disponibles en los conmutadores Alcatel gestionados.",
 )
 def get_vlans(
     service: OmniVistaService = Depends(get_ov_service)
 ):
-    try:
-        vlans = service.get_vlans()
-        return ApiResponse(
-            success=True,
-            message="Catálogo de VLANs obtenido correctamente",
-            data=VlanCatalogResponse(
-                vlans=vlans,
-                total=len(vlans)
-            )
-        )
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    vlans = service.get_vlans()
+    return ApiResponse(
+        success=True,
+        message="Catálogo de VLANs obtenido correctamente",
+        data=vlans
+    )

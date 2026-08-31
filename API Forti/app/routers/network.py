@@ -18,7 +18,7 @@ router = APIRouter(
     response_model=BaseResponse[List[DHCPLeaseItem]],
     summary="Listar concesiones DHCP activas",
 )
-async def get_dhcp_leases(vdom: Optional[str] = Query(None, description="VDOM a consultar")):
+async def get_dhcp_leases(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar")):
     """
     Obtiene las asignaciones dinámicas de direcciones IP entregadas por el servidor DHCP del FortiGate.
     """
@@ -54,7 +54,7 @@ async def get_dhcp_leases(vdom: Optional[str] = Query(None, description="VDOM a 
     response_model=BaseResponse[List[ARPEntry]],
     summary="Consultar tabla de vecinos ARP",
 )
-async def get_arp_table(vdom: Optional[str] = Query(None, description="VDOM a consultar")):
+async def get_arp_table(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar")):
     """
     Obtiene la tabla de resolución ARP (direcciones IP y MAC mapeadas a nivel de enlace de datos).
     """
@@ -87,7 +87,7 @@ async def get_arp_table(vdom: Optional[str] = Query(None, description="VDOM a co
     response_model=BaseResponse[List[InterfaceItem]],
     summary="Consultar estado de las interfaces de red",
 )
-async def get_interfaces_status(vdom: Optional[str] = Query(None, description="VDOM a consultar")):
+async def get_interfaces_status(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar")):
     """
     Obtiene el estado de las interfaces de red físicas y virtuales (link UP/DOWN, paquetes, bytes tx/rx).
     """

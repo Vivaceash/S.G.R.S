@@ -3,9 +3,15 @@ import requests
 import urllib3
 from typing import Dict, Any, List, Optional
 from app.config import settings
+from app.errors import (
+    OmniVistaConnectionError,
+    OmniVistaAuthError,
+    OmniVistaResponseError,
+)
 
-# Deshabilitar advertencias de certificados autofirmados
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# Deshabilitar advertencias de certificados autofirmados solo si no se valida SSL
+if not settings.OV_VERIFY_SSL and not settings.OV_CA_BUNDLE:
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class OmniVistaService:
@@ -20,7 +26,13 @@ class OmniVistaService:
         self.username = settings.OV_USERNAME
         self.password = settings.OV_PASSWORD
         self.api_key = settings.OV_API_KEY.strip() if settings.OV_API_KEY else ""
-        self.verify_ssl = settings.OV_VERIFY_SSL
+        
+        # Validación TLS con CA bundle corporativo o flag booleano
+        if settings.OV_CA_BUNDLE:
+            self.verify_ssl = settings.OV_CA_BUNDLE
+        else:
+            self.verify_ssl = settings.OV_VERIFY_SSL
+
         self.session = requests.Session()
         self.session.verify = self.verify_ssl
         self.access_token: Optional[str] = None
@@ -83,7 +95,7 @@ class OmniVistaService:
         # Si no hay API Key, verificar token de login
         if not self.access_token or time.time() > self.token_expiry:
             if not self.login():
-                raise ConnectionError("No fue posible autenticar con el servidor Alcatel OmniVista 2500. Revisa la API Key o credenciales en .env.")
+                raise OmniVistaAuthError("No fue posible autenticar con el servidor Alcatel OmniVista 2500. Revisa la API Key o credenciales en .env.")
 
     def request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         """Envía una petición HTTP a OmniVista con reintentos y reautenticación automática"""
@@ -100,7 +112,7 @@ class OmniVistaService:
                     response = self.session.request(method, url, **kwargs)
             return response
         except requests.exceptions.RequestException as e:
-            raise ConnectionError(f"Error de conexión con OmniVista 2500 en '{endpoint}': {str(e)}")
+            raise OmniVistaConnectionError(f"Error de conexión con OmniVista 2500 en '{endpoint}': {str(e)}")
 
     # =========================================================================
     # 1. Consultas de Cuentas de Empleados (UPAM)
@@ -140,12 +152,11 @@ class OmniVistaService:
         end_idx = start_idx + page_size
         paginated_items = raw_items[start_idx:end_idx]
 
-        # Sanitizar contraseñas antes de devolver al cliente
+        # Sanitizar contraseñas y secretos antes de devolver al cliente
         cleaned_items = []
+        sensitive_keys = {"password", "repeat", "userPassword", "secret", "psk", "devicePSK"}
         for item in paginated_items:
-            item_copy = dict(item)
-            item_copy.pop("password", None)
-            item_copy.pop("repeat", None)
+            item_copy = {k: v for k, v in item.items() if k not in sensitive_keys}
             cleaned_items.append(item_copy)
 
         return {

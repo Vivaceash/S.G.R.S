@@ -38,7 +38,7 @@ class SSLVPNUserSession(BaseModel):
     response_model=BaseResponse[List[IPsecTunnelItem]],
     summary="Consultar túneles VPN IPsec y su estado",
 )
-async def get_vpn_ipsec(vdom: Optional[str] = Query(None, description="VDOM a consultar")):
+async def get_vpn_ipsec(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar")):
     raw = await fortios_client.get_vpn_ipsec(vdom=vdom)
     results = raw.get("results", [])
     tunnels_raw = results if isinstance(results, list) else (results.get("tunnels", []) if isinstance(results, dict) else [])
@@ -71,7 +71,7 @@ async def get_vpn_ipsec(vdom: Optional[str] = Query(None, description="VDOM a co
     response_model=BaseResponse[List[SSLVPNUserSession]],
     summary="Listar usuarios y sesiones activas en SSL-VPN",
 )
-async def get_vpn_ssl_sessions(vdom: Optional[str] = Query(None, description="VDOM a consultar")):
+async def get_vpn_ssl_sessions(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar")):
     raw = await fortios_client.get_vpn_ssl_sessions(vdom=vdom)
     results = raw.get("results", [])
     sessions_raw = results if isinstance(results, list) else (results.get("sessions", []) if isinstance(results, dict) else [])

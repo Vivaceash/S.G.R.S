@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, status
 from app.dependencies import verify_api_key, get_ov_service
 from app.services.omnivista_service import OmniVistaService
 from app.schemas.common import ApiResponse, PaginatedResponse
@@ -21,18 +21,15 @@ router = APIRouter(
 def list_company_properties(
     page: int = Query(1, ge=1, description="Número de página"),
     page_size: int = Query(50, ge=1, le=500, description="Cantidad de registros por página"),
-    search: Optional[str] = Query(None, description="Buscar por MAC, nombre de equipo, cuenta de usuario o SSID"),
+    search: Optional[str] = Query(None, max_length=100, description="Buscar por MAC, nombre de equipo, cuenta de usuario o SSID (máx 100 caracteres)"),
     service: OmniVistaService = Depends(get_ov_service)
 ):
-    try:
-        result = service.get_company_properties(page=page, page_size=page_size, search=search)
-        return ApiResponse(
-            success=True,
-            message="Dispositivos obtenidos correctamente",
-            data=PaginatedResponse[CompanyPropertyResponse](**result)
-        )
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    result = service.get_company_properties(page=page, page_size=page_size, search=search)
+    return ApiResponse(
+        success=True,
+        message="Dispositivos obtenidos correctamente",
+        data=PaginatedResponse[CompanyPropertyResponse](**result)
+    )
 
 
 @router.get(
@@ -42,25 +39,22 @@ def list_company_properties(
     description="Obtiene el detalle, cuenta asociada, perfil de red y último punto de acceso de una dirección MAC específica.",
 )
 def get_company_property(
-    device_mac: str,
+    device_mac: str = Path(..., min_length=12, max_length=24, description="Dirección MAC en cualquier formato válido"),
     service: OmniVistaService = Depends(get_ov_service)
 ):
     try:
         clean_mac = clean_mac_address(device_mac)
-        prop = service.get_company_property_by_mac(clean_mac)
-        if not prop:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No se encontró el dispositivo con MAC '{device_mac}' en Company Property."
-            )
-        return ApiResponse(
-            success=True,
-            message="Detalle de dispositivo obtenido",
-            data=CompanyPropertyResponse(**prop)
-        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+    prop = service.get_company_property_by_mac(clean_mac)
+    if not prop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No se encontró el dispositivo con MAC '{device_mac}' en Company Property."
+        )
+    return ApiResponse(
+        success=True,
+        message="Detalle de dispositivo obtenido",
+        data=CompanyPropertyResponse(**prop)
+    )

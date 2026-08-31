@@ -86,11 +86,11 @@ def _get_raw_sessions_list(raw_res: Dict[str, Any]) -> List[Dict[str, Any]]:
     summary="Consultar sesiones de tráfico en tiempo real",
 )
 async def get_active_traffic_sessions(
-    src_ip: Optional[str] = Query(None, description="Filtrar por IP origen del cliente (ej. 192.168.1.100)"),
-    dst_ip: Optional[str] = Query(None, description="Filtrar por IP destino / sitio web"),
-    dst_port: Optional[int] = Query(None, description="Filtrar por puerto destino (ej. 80, 443, 53)"),
+    src_ip: Optional[str] = Query(None, pattern=r"^[0-9a-fA-F:\.]{1,45}$", max_length=45, description="Filtrar por IP origen del cliente (ej. 192.168.1.100)"),
+    dst_ip: Optional[str] = Query(None, pattern=r"^[0-9a-fA-F:\.]{1,45}$", max_length=45, description="Filtrar por IP destino / sitio web"),
+    dst_port: Optional[int] = Query(None, ge=1, le=65535, description="Filtrar por puerto destino (ej. 80, 443, 53)"),
     limit: int = Query(100, ge=1, le=1000, description="Cantidad máxima de sesiones a retornar"),
-    vdom: Optional[str] = Query(None, description="VDOM a consultar"),
+    vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar"),
 ):
     """
     Obtiene las sesiones de red activas en el firewall con detalle de IP origen, IP destino,
@@ -130,7 +130,7 @@ async def get_active_traffic_sessions(
 async def get_top_visited_destinations(
     min_sessions: int = Query(1, ge=1, description="Filtrar destinos con al menos este número de sesiones"),
     limit: int = Query(25, ge=1, le=100, description="Top N destinos a retornar"),
-    vdom: Optional[str] = Query(None, description="VDOM a consultar"),
+    vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar"),
 ):
     """
     Agrupa y resume las conexiones activas para identificar qué servidores, IPs o destinos
@@ -200,10 +200,10 @@ async def get_top_visited_destinations(
     summary="Consultar logs de navegación, tráfico y sitios web visitados",
 )
 async def get_traffic_activity_logs(
-    src_ip: Optional[str] = Query(None, description="Filtrar por IP cliente origen"),
-    hostname: Optional[str] = Query(None, description="Filtrar por dominio o sitio web visitado"),
+    src_ip: Optional[str] = Query(None, pattern=r"^[0-9a-fA-F:\.]{1,45}$", max_length=45, description="Filtrar por IP cliente origen"),
+    hostname: Optional[str] = Query(None, max_length=253, description="Filtrar por dominio o sitio web visitado"),
     limit: int = Query(50, ge=1, le=200, description="Cantidad máxima de registros de log"),
-    vdom: Optional[str] = Query(None, description="VDOM a consultar"),
+    vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar"),
 ):
     """
     Consulta los registros de tráfico y filtro web guardados en el FortiGate.

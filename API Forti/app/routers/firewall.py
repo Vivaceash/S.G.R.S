@@ -38,9 +38,9 @@ def _extract_name_list(field_val: Any) -> List[str]:
     summary="Listar políticas de firewall configuradas",
 )
 async def list_firewall_policies(
-    action: Optional[str] = Query(None, description="Filtrar por acción: accept o deny"),
-    status: Optional[str] = Query(None, description="Filtrar por estado: enable o disable"),
-    vdom: Optional[str] = Query(None, description="VDOM a consultar"),
+    action: Optional[str] = Query(None, pattern=r"^(?i)(accept|deny)$", description="Filtrar por acción: accept o deny"),
+    status: Optional[str] = Query(None, pattern=r"^(?i)(enable|disable)$", description="Filtrar por estado: enable o disable"),
+    vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar"),
 ):
     """
     Obtiene la lista de reglas y políticas de tráfico del firewall.
@@ -90,7 +90,7 @@ async def list_firewall_policies(
     response_model=BaseResponse[List[FirewallAddressItem]],
     summary="Listar objetos de dirección IP (Address Objects)",
 )
-async def list_firewall_addresses(vdom: Optional[str] = Query(None, description="VDOM a consultar")):
+async def list_firewall_addresses(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar")):
     """
     Obtiene la lista de objetos de dirección IP definidos en el FortiGate.
     """
@@ -125,7 +125,7 @@ async def list_firewall_addresses(vdom: Optional[str] = Query(None, description=
     response_model=BaseResponse[List[FirewallAddressGroupItem]],
     summary="Listar grupos de direcciones (Address Groups)",
 )
-async def list_firewall_address_groups(vdom: Optional[str] = Query(None, description="VDOM a consultar")):
+async def list_firewall_address_groups(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar")):
     """
     Obtiene los grupos de direcciones agrupados en el FortiGate.
     """

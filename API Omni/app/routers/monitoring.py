@@ -1,3 +1,4 @@
+import ipaddress
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.dependencies import verify_api_key, get_ov_service
@@ -21,15 +22,12 @@ router = APIRouter(
 def get_infrastructure_stats(
     service: OmniVistaService = Depends(get_ov_service)
 ):
-    try:
-        stats = service.get_infrastructure_stats()
-        return ApiResponse(
-            success=True,
-            message="Estadísticas de infraestructura obtenidas",
-            data=InfrastructureStatsResponse(**stats)
-        )
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    stats = service.get_infrastructure_stats()
+    return ApiResponse(
+        success=True,
+        message="Estadísticas de infraestructura obtenidas",
+        data=InfrastructureStatsResponse(**stats)
+    )
 
 
 @router.get(
@@ -41,15 +39,12 @@ def get_infrastructure_stats(
 def get_devices(
     service: OmniVistaService = Depends(get_ov_service)
 ):
-    try:
-        devices = service.get_devices()
-        return ApiResponse(
-            success=True,
-            message="Inventario de dispositivos obtenido",
-            data=devices
-        )
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    devices = service.get_devices()
+    return ApiResponse(
+        success=True,
+        message="Inventario de dispositivos obtenido",
+        data=devices
+    )
 
 
 @router.get(
@@ -62,22 +57,26 @@ def get_device_by_ip(
     ip_address: str,
     service: OmniVistaService = Depends(get_ov_service)
 ):
+    clean_ip = ip_address.strip()
     try:
-        device = service.get_device_by_ip(ip_address)
-        if not device:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No se encontró ningún equipo de red con la IP '{ip_address}'."
-            )
-        return ApiResponse(
-            success=True,
-            message=f"Equipo con IP {ip_address} encontrado",
-            data=device
+        ipaddress.ip_address(clean_ip)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Dirección IP no válida: '{clean_ip}'. Debe tener formato IPv4 o IPv6 válido."
         )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+    device = service.get_device_by_ip(clean_ip)
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No se encontró ningún equipo de red con la IP '{clean_ip}'."
+        )
+    return ApiResponse(
+        success=True,
+        message=f"Equipo con IP {clean_ip} encontrado",
+        data=device
+    )
 
 
 @router.get(
@@ -89,15 +88,12 @@ def get_device_by_ip(
 def get_online_devices(
     service: OmniVistaService = Depends(get_ov_service)
 ):
-    try:
-        online = service.get_online_devices()
-        return ApiResponse(
-            success=True,
-            message="Dispositivos online obtenidos",
-            data=online
-        )
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    online = service.get_online_devices()
+    return ApiResponse(
+        success=True,
+        message="Dispositivos online obtenidos",
+        data=online
+    )
 
 
 @router.get(
@@ -109,15 +105,12 @@ def get_online_devices(
 def get_topology(
     service: OmniVistaService = Depends(get_ov_service)
 ):
-    try:
-        topology = service.get_topology()
-        return ApiResponse(
-            success=True,
-            message="Topología de red obtenida",
-            data=topology
-        )
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    topology = service.get_topology()
+    return ApiResponse(
+        success=True,
+        message="Topología de red obtenida",
+        data=topology
+    )
 
 
 @router.get(
@@ -129,12 +122,9 @@ def get_topology(
 def get_notifications(
     service: OmniVistaService = Depends(get_ov_service)
 ):
-    try:
-        notifications = service.get_notifications()
-        return ApiResponse(
-            success=True,
-            message="Notificaciones y alarmas obtenidas",
-            data=notifications
-        )
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    notifications = service.get_notifications()
+    return ApiResponse(
+        success=True,
+        message="Notificaciones y alarmas obtenidas",
+        data=notifications
+    )
