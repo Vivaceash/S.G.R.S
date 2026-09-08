@@ -17,13 +17,14 @@ router = APIRouter(
 def _parse_device(
     item: Dict[str, Any],
     current_time: Optional[float] = None,
-    active_window_seconds: int = 360,
+    active_window_seconds: int = 600,
 ) -> DeviceItem:
     """
     Mapea un elemento crudo de FortiOS Device Query a nuestro modelo estructurado DeviceItem.
-    Calcula el estado online evaluando la marca de tiempo de última actividad (last_seen)
-    frente a la ventana activa (device-idle-timeout de FortiOS) para reflejar con precisión
-    los dispositivos realmente conectados en tiempo real frente al inventario histórico en caché.
+    Evalúa el estado online priorizando la telemetría nativa de FortiOS e integrando
+    la marca de tiempo de última actividad (last_seen) con base en el reloj del firewall
+    para eliminar desincronizaciones horarias (clock drift) y reflejar con precisión los
+    terminales realmente activos frente al inventario histórico en caché.
     """
     mac = item.get("mac", "")
     ip = item.get("ip") or item.get("ipv4_address")
@@ -39,14 +40,24 @@ def _parse_device(
     last_seen = item.get("last_seen")
     now = current_time or time.time()
 
-    # FortiOS conserva registros en caché durante 30 días con online_interfaces e is_online en True.
-    # Un dispositivo está online si registró actividad dentro de la ventana de actividad reciente
-    # evaluado de forma individual e independiente frente a la hora actual.
-    if last_seen and isinstance(last_seen, (int, float)) and last_seen > 0:
-        delta = now - last_seen
-        is_online = (delta <= active_window_seconds) and (last_seen <= now + 300)
-    else:
+    # Evaluación precisa del estado Online / Offline:
+    # 1. Si no hay last_seen válido, se considera offline / registro huérfano.
+    if not last_seen or not isinstance(last_seen, (int, float)) or last_seen <= 0:
         is_online = False
+    else:
+        delta = now - last_seen
+        # 2. Si FortiOS lo clasifica explícitamente como offline:
+        if item.get("is_online") is False:
+            is_online = False
+        # 3. Si FortiOS lo clasifica como is_online=True:
+        # Validamos que no sea un registro huérfano de caché histórica (ej. días o semanas)
+        # admitiendo la ventana de inactividad normal de terminales (600s / 10 min por defecto).
+        elif item.get("is_online") is True:
+            window = max(active_window_seconds, 600)
+            is_online = (delta <= window) and (last_seen <= now + 300)
+        # 4. Fallback si FortiOS no envía el flag is_online:
+        else:
+            is_online = (delta <= active_window_seconds) and (last_seen <= now + 300)
 
     device_type = item.get("device_type") or item.get("hardware_type") or item.get("type")
 
@@ -82,10 +93,10 @@ async def list_connected_devices(
         description="Filtrar únicamente dispositivos actualmente activos/online (retrocompatibilidad)",
     ),
     active_window: int = Query(
-        360,
+        600,
         ge=60,
         le=86400,
-        description="Ventana de tiempo en segundos para validación de última actividad (por defecto 360s = 6 min)",
+        description="Ventana de tiempo en segundos para validación de última actividad (por defecto 600s = 10 min)",
     ),
     vendor: Optional[str] = Query(None, max_length=100, description="Filtrar por fabricante (ej. Apple, Samsung, Intel, Cisco)"),
     search: Optional[str] = Query(None, max_length=100, description="Búsqueda por texto en IP, MAC o Hostname"),
@@ -103,13 +114,19 @@ async def list_connected_devices(
     # results puede ser una lista de dispositivos o un diccionario
     raw_list = results if isinstance(results, list) else (results.get("devices", []) if isinstance(results, dict) else [])
 
-    now = time.time()
+    # Obtener el reloj de referencia más reciente del propio FortiGate para evitar problemas de desfase horario (clock drift)
+    raw_last_seens = [
+        d.get("last_seen")
+        for d in raw_list
+        if isinstance(d, dict) and isinstance(d.get("last_seen"), (int, float)) and d.get("last_seen") > 0
+    ]
+    ref_time = max(raw_last_seens) if raw_last_seens else time.time()
 
     # Parsear todos los dispositivos reportados por FortiOS
     all_devices: List[DeviceItem] = []
     for dev_raw in raw_list:
         if isinstance(dev_raw, dict):
-            all_devices.append(_parse_device(dev_raw, current_time=now, active_window_seconds=active_window))
+            all_devices.append(_parse_device(dev_raw, current_time=ref_time, active_window_seconds=active_window))
 
     total_inventory = len(all_devices)
     global_online_count = sum(1 for d in all_devices if d.is_online)
@@ -203,10 +220,16 @@ async def get_device_by_mac_or_ip(
     raw_list = results if isinstance(results, list) else (results.get("devices", []) if isinstance(results, dict) else [])
 
     search_term = mac_or_ip.strip().lower()
-    now = time.time()
+    raw_last_seens = [
+        d.get("last_seen")
+        for d in raw_list
+        if isinstance(d, dict) and isinstance(d.get("last_seen"), (int, float)) and d.get("last_seen") > 0
+    ]
+    ref_time = max(raw_last_seens) if raw_last_seens else time.time()
+
     for dev_raw in raw_list:
         if isinstance(dev_raw, dict):
-            dev = _parse_device(dev_raw, current_time=now)
+            dev = _parse_device(dev_raw, current_time=ref_time)
             dev_mac = (dev.mac or "").lower().replace("-", ":")
             clean_search = search_term.replace("-", ":")
             dev_ip = (dev.ip or "").lower()

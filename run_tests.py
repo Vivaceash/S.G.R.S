@@ -8,11 +8,24 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 
+def get_python_exe() -> str:
+    root_dir = Path(__file__).resolve().parent
+    venv_candidates = [
+        root_dir / ".venv" / ("Scripts" if sys.platform == "win32" else "bin") / ("python.exe" if sys.platform == "win32" else "python"),
+        root_dir / "venv" / ("Scripts" if sys.platform == "win32" else "bin") / ("python.exe" if sys.platform == "win32" else "python"),
+    ]
+    for cand in venv_candidates:
+        if cand.exists():
+            return str(cand)
+    return sys.executable
+
+
 def run_suite(name: str, cwd: str) -> int:
     print("=" * 60)
     print(f"[*] Ejecutando pruebas para: {name} (en ./{cwd})")
     print("=" * 60)
-    cmd = [sys.executable, "-m", "pytest", "tests", "-v"]
+    py_exe = get_python_exe()
+    cmd = [py_exe, "-m", "pytest", "tests", "-v"]
     result = subprocess.run(cmd, cwd=cwd)
     if result.returncode == 0:
         print(f"[OK] {name}: Todas las pruebas pasaron exitosamente.\n")

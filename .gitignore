@@ -81,6 +81,8 @@ desktop.ini
 logs/
 tmp/
 temp/
+.sgrs_pids.json
+*.save
 
 # ==========================================
 # Frontend, Node.js y Compilados

@@ -72,6 +72,9 @@ class OmniVistaService:
             "Accept": "application/json"
         }
 
+        # Limpiar cabecera Authorization previa para evitar que un token caducado interfiera con /api/login
+        self.session.headers.pop("Authorization", None)
+
         try:
             r = self.session.post(url, json=payload, headers=headers, timeout=12)
             if r.status_code == 200:
