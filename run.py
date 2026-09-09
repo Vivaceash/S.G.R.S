@@ -61,8 +61,30 @@ def free_port(port: int):
                 pass
 
 
-def free_ports_if_busy(ports=(8000, 8001, 5173), silent: bool = False):
+def get_dashboard_port() -> int:
+    """Retorna el puerto del Dashboard (3000 o 3001 si 3000 está ocupado por un servicio del sistema)."""
+    env_port = os.environ.get("DASHBOARD_PORT") or os.environ.get("PORT")
+    if env_port and env_port.isdigit():
+        return int(env_port)
+    pids = load_pids()
+    # Si el proceso dashboard registrado está corriendo en 3001
+    if pids.get("dashboard") and is_port_in_use(3001):
+        return 3001
+    # Probar si el puerto 3000 está disponible para bind
+    s = socket.socket()
+    try:
+        s.bind(("0.0.0.0", 3000))
+        s.close()
+        return 3000
+    except Exception:
+        return 3001
+
+
+def free_ports_if_busy(ports=None, silent: bool = False):
     """Comprueba los puertos de los servicios y libera los que estén bloqueados."""
+    if ports is None:
+        dash_port = get_dashboard_port()
+        ports = [8000, 8001, dash_port]
     for port in ports:
         if is_port_in_use(port):
             if not silent:
@@ -132,7 +154,8 @@ def status_services():
     """Muestra el estado actual de los 3 servicios de S.G.R.S."""
     omni_ok = is_port_in_use(8000)
     forti_ok = is_port_in_use(8001)
-    dash_ok = is_port_in_use(5173)
+    dash_port = get_dashboard_port()
+    dash_ok = is_port_in_use(dash_port)
 
     pids = load_pids()
     pid_omni = f"(PID: {pids.get('api_omni')})" if pids.get("api_omni") else ""
@@ -148,8 +171,8 @@ def status_services():
     print(f"  [2] API FortiGate (8001):       {'[ACTIVO]' if forti_ok else '[DETENIDO]'} {pid_forti}")
     print(f"      -> URL: http://localhost:8001 (Docs: /scalar)")
     print()
-    print(f"  [3] Dashboard Web UI (5173):    {'[ACTIVO]' if dash_ok else '[DETENIDO]'} {pid_dash}")
-    print(f"      -> URL: http://localhost:5173")
+    print(f"  [3] Dashboard Web UI ({dash_port}):    {'[ACTIVO]' if dash_ok else '[DETENIDO]'} {pid_dash}")
+    print(f"      -> URL: http://localhost:{dash_port}")
     print("=" * 72)
 
     if omni_ok or forti_ok or dash_ok:
@@ -196,7 +219,8 @@ def stop_services():
             pass
 
     # Garantizar que todos los puertos queden liberados
-    free_ports_if_busy([8000, 8001, 5173], silent=True)
+    dash_port = get_dashboard_port()
+    free_ports_if_busy([8000, 8001, dash_port], silent=True)
     print("[SGRS] [OK] Todos los servicios detenidos y puertos liberados correctamente.\n")
 
 
@@ -266,18 +290,21 @@ def start_services(detached: bool = True):
     npm_exe = get_npm_exe()
     env = get_env(py_exe)
 
+    dash_port = get_dashboard_port()
+    env["PORT"] = str(dash_port)
+
     # Si todos los servicios ya están activos, mostrar estado y no duplicar
-    if is_port_in_use(8000) and is_port_in_use(8001) and is_port_in_use(5173):
+    if is_port_in_use(8000) and is_port_in_use(8001) and is_port_in_use(dash_port):
         print("\n[SGRS] Los servicios ya están en ejecución:")
         status_services()
         return
 
     # Limpiar puertos huérfanos o colgados previamente
-    free_ports_if_busy([8000, 8001, 5173])
+    free_ports_if_busy([8000, 8001, dash_port])
 
     forti_dir = ROOT_DIR / "API Forti"
     omni_dir = ROOT_DIR / "API Omni"
-    dash_dir = ROOT_DIR / "Dashboard"
+    server_py = ROOT_DIR / "server.py"
 
     if detached:
         # ==============================================================
@@ -298,24 +325,23 @@ def start_services(detached: bool = True):
         else:
             popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
 
+        env_forti = {**env, "PORT": "8001"}
+        env_omni = {**env, "PORT": "8000"}
+        env_dash = {**env, "PORT": str(dash_port), "DASHBOARD_PORT": str(dash_port)}
+
         # Iniciar API Forti (Puerto 8001)
-        proc_forti = subprocess.Popen([py_exe, "run.py"], cwd=str(forti_dir), **popen_kwargs)
+        proc_forti = subprocess.Popen([py_exe, "run.py"], cwd=str(forti_dir), **{**popen_kwargs, "env": env_forti})
 
         # Iniciar API Omni (Puerto 8000)
-        proc_omni = subprocess.Popen([py_exe, "run.py"], cwd=str(omni_dir), **popen_kwargs)
+        proc_omni = subprocess.Popen([py_exe, "run.py"], cwd=str(omni_dir), **{**popen_kwargs, "env": env_omni})
 
-        # Iniciar Dashboard (Puerto 5173)
+        # Iniciar Dashboard Server (Puerto dinámico)
         proc_dash = None
-        if (dash_dir / "package.json").exists():
+        if server_py.exists():
             try:
-                proc_dash = subprocess.Popen(
-                    [npm_exe, "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
-                    cwd=str(dash_dir),
-                    shell=(sys.platform == "win32"),
-                    **popen_kwargs,
-                )
+                proc_dash = subprocess.Popen([py_exe, "server.py"], cwd=str(ROOT_DIR), **{**popen_kwargs, "env": env_dash})
             except Exception as e:
-                print(f"[SGRS] Aviso: No se pudo arrancar el Dashboard en Vite: {e}")
+                print(f"[SGRS] Aviso: No se pudo arrancar el Dashboard en server.py: {e}")
 
         # Guardar PIDs registrados
         save_pids({
@@ -341,8 +367,8 @@ def start_services(detached: bool = True):
         print("      - Documentación:   http://localhost:8001/scalar")
         print("      - Liveness Probe:  http://localhost:8001/health")
         print()
-        print("  [3] Dashboard Web UI (React + TypeScript + Vite):")
-        print("      - Interfaz Gráfica: http://localhost:5173")
+        print(f"  [3] Dashboard Web UI (HTML5 / Vanilla JS / Puerto {dash_port}):")
+        print(f"      - Interfaz Gráfica: http://localhost:{dash_port}")
         print("=" * 72)
         print("  [OK] Los procesos se ejecutan desacoplados de la terminal.")
         print("       ¡Ya puedes cerrar esta consola sin que los servicios se detengan!")
@@ -365,7 +391,7 @@ def start_services(detached: bool = True):
     print("=" * 72)
     print("  [1] API Alcatel OmniVista 2500:  http://localhost:8000")
     print("  [2] API Fortinet FortiGate:      http://localhost:8001")
-    print("  [3] Dashboard Web UI:            http://localhost:5173")
+    print(f"  [3] Dashboard Web UI:            http://localhost:{dash_port}")
     print("=" * 72)
     print("  Presione [Ctrl + C] para detener todos los servicios.")
     print("=" * 72 + "\n")
@@ -380,19 +406,18 @@ def start_services(detached: bool = True):
     if sys.platform != "win32":
         popen_fg["start_new_session"] = True
 
-    proc_forti = subprocess.Popen([py_exe, "run.py"], cwd=str(forti_dir), **popen_fg)
-    proc_omni = subprocess.Popen([py_exe, "run.py"], cwd=str(omni_dir), **popen_fg)
+    env_forti = {**env, "PORT": "8001"}
+    env_omni = {**env, "PORT": "8000"}
+    env_dash = {**env, "PORT": str(dash_port), "DASHBOARD_PORT": str(dash_port)}
+
+    proc_forti = subprocess.Popen([py_exe, "run.py"], cwd=str(forti_dir), **{**popen_fg, "env": env_forti})
+    proc_omni = subprocess.Popen([py_exe, "run.py"], cwd=str(omni_dir), **{**popen_fg, "env": env_omni})
     proc_dash = None
-    if (dash_dir / "package.json").exists():
+    if server_py.exists():
         try:
-            proc_dash = subprocess.Popen(
-                [npm_exe, "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
-                cwd=str(dash_dir),
-                shell=(sys.platform == "win32"),
-                **popen_fg,
-            )
+            proc_dash = subprocess.Popen([py_exe, "server.py"], cwd=str(ROOT_DIR), **{**popen_fg, "env": env_dash})
         except Exception as e:
-            print(f"[SGRS] Aviso: No se pudo arrancar el Dashboard en Vite: {e}")
+            print(f"[SGRS] Aviso: No se pudo arrancar el Dashboard en server.py: {e}")
 
     save_pids({
         "api_forti": proc_forti.pid,

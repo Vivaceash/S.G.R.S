@@ -1,0 +1,46 @@
+<section class="panel qr-section" aria-labelledby="qrMainHeading">
+  <div class="panel-header qr-no-print" style="flex-wrap:wrap;gap:14px;border-bottom:1px solid #ebdcc5;padding-bottom:16px;margin-bottom:20px">
+    <div>
+      <span class="eyebrow">ETIQUETADO FÍSICO Y BITÁCORA EN SITIO</span>
+      <h2 id="qrMainHeading" style="font-family:var(--font-serif);font-size:24px;color:var(--pantone-7421);margin:2px 0 6px">
+        Códigos QR de Racks y Gabinetes
+      </h2>
+      <p style="font-size:13px;color:#6b5d57;margin:0">
+        Escanea el código QR de cada gabinete desde un teléfono móvil para registrar la temperatura del Mini Split y levantar reportes de incidencias directamente en sitio.
+      </p>
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="primary-button" id="printQrViewBtn" type="button" style="height:38px;padding:0 18px;font-size:13px;background:var(--pantone-7420);border-color:var(--pantone-7420)">
+        <span aria-hidden="true">⎙</span> Imprimir planilla de 13 QRs
+      </button>
+    </div>
+  </div>
+
+  <!-- Barra de configuración de IP para escaneo móvil -->
+  <div class="qr-station-toolbar qr-no-print" style="margin-bottom:24px">
+    <div class="qr-host-config">
+      <label for="qrViewHostInput"><strong>Dirección / IP del servidor para escaneo:</strong></label>
+      <div class="qr-host-input-wrap">
+        <input type="text" id="qrViewHostInput" placeholder="ej. 192.168.1.150:3000" autocomplete="off" />
+        <button class="secondary-button" id="resetQrViewHostBtn" type="button" title="Detectar origen actual">Detectar</button>
+      </div>
+      <small class="field-hint">
+        Al escanear desde un celular en la red Wi-Fi, asegúrate de colocar la IP local de esta máquina (ej. <code>192.168.X.X:3000</code>) para que el enlace abra la bitácora móvil de inmediato.
+      </small>
+    </div>
+
+    <div style="min-width:280px">
+      <label for="qrFilterInput"><strong>Filtrar gabinete:</strong></label>
+      <div class="search-wrap" style="width:100%;margin-top:6px">
+        <span aria-hidden="true">⌕</span>
+        <input type="search" id="qrFilterInput" placeholder="Buscar IDF 1..12 o PACS..." />
+      </div>
+    </div>
+  </div>
+
+  <!-- Rejilla de tarjetas de los 13 IDFs y PACS -->
+  <div class="qr-cards-grid" id="qrViewCardsGrid">
+    <!-- Renderizado dinámicamente con qrcode.js -->
+  </div>
+</section>

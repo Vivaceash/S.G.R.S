@@ -168,12 +168,17 @@ class FortiOSClient:
     # -------------------------------------------------------------
     # Métodos de Dispositivos Conectados e Inventario
     # -------------------------------------------------------------
-    async def get_connected_devices(self, vdom: Optional[str] = None) -> Dict[str, Any]:
+    async def get_connected_devices(
+        self,
+        params: Optional[Dict[str, Any]] = None,
+        vdom: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Consulta la base de datos de dispositivos detectados por FortiOS:
         MAC, IP, Hostname, Fabricante (Hardware Vendor), Sistema Operativo (OS), Interfaz.
+        Soporta parámetros adicionales como query_type='unified_latest' o count.
         """
-        return await self.request("GET", "api/v2/monitor/user/device/query", vdom=vdom)
+        return await self.request("GET", "api/v2/monitor/user/device/query", params=params, vdom=vdom)
 
     async def get_dhcp_leases(self, vdom: Optional[str] = None) -> Dict[str, Any]:
         """Obtiene la lista de concesiones de IP activas asignadas por el servidor DHCP de FortiGate."""
@@ -222,21 +227,38 @@ class FortiOSClient:
         Consulta registros de tráfico y actividad de navegación.
         """
         params: Dict[str, Any] = {
-            "rows_per_page": rows_per_page,
+            "rows": rows_per_page,
             "start": start,
         }
         if filter_str:
             params["filter"] = filter_str
 
+        # Normalizar subtipo de log de FortiOS (FortiOS requiere categoría/subtipo)
+        type_mapping = {
+            "traffic": "traffic/forward",
+            "forward": "traffic/forward",
+            "webfilter": "utm/webfilter",
+            "app-ctrl": "utm/app-ctrl",
+            "event": "event/system",
+        }
+        normalized_type = type_mapping.get(log_type, log_type)
+        if "/" not in normalized_type:
+            normalized_type = f"traffic/{normalized_type}"
+
+        fallback_res = {"results": [], "count": 0}
         sources = ["disk", "memory", "fortianalyzer"]
         for source in sources:
             try:
-                endpoint = f"api/v2/log/{source}/{log_type}"
-                return await self.request("GET", endpoint, params=params, vdom=vdom)
+                endpoint = f"api/v2/log/{source}/{normalized_type}"
+                res = await self.request("GET", endpoint, params=params, vdom=vdom)
+                if res and isinstance(res.get("results"), list):
+                    if len(res["results"]) > 0:
+                        return res
+                    fallback_res = res
             except Exception:
                 continue
 
-        return {"results": [], "count": 0}
+        return fallback_res
 
     # -------------------------------------------------------------
     # Métodos de Políticas de Firewall & Objetos (CMDB)

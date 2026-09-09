@@ -1,0 +1,168 @@
+<section class="panel ipam-panel" aria-label="Control de Direccionamiento IPAM">
+  <!-- Tarjetas KPI de Estado (Cuadrícula simétrica 4x1 perfectamente equilibrada) -->
+  <div class="ipam-kpis-grid">
+    <div class="ipam-kpi-card kpi-total">
+      <div class="ipam-kpi-top">
+        <span class="ipam-kpi-label">TOTAL DIRECCIONES</span>
+        <span class="ipam-kpi-badge total" id="kpiTotalBadge">100% Red</span>
+      </div>
+      <strong class="ipam-kpi-val" id="kpiTotalIps">468</strong>
+      <div class="ipam-progress total-bar"><i id="kpiTotalBar" style="width:100%"></i></div>
+      <small class="ipam-kpi-sub" id="kpiSubnetDesc">Segmentos 38 y 40</small>
+    </div>
+
+    <div class="ipam-kpi-card kpi-occupied">
+      <div class="ipam-kpi-top">
+        <span class="ipam-kpi-label">IPS OCUPADAS</span>
+        <span class="ipam-kpi-badge occupied" id="kpiOccupiedPct">79%</span>
+      </div>
+      <strong class="ipam-kpi-val" id="kpiOccupiedIps">370</strong>
+      <div class="ipam-progress"><i id="kpiOccupiedBar" style="width:79%"></i></div>
+      <small class="ipam-kpi-sub">Asignadas en producción</small>
+    </div>
+
+    <div class="ipam-kpi-card kpi-available">
+      <div class="ipam-kpi-top">
+        <span class="ipam-kpi-label">IPS LIBRES DISPONIBLES</span>
+        <span class="ipam-kpi-badge available" id="kpiAvailablePct">20%</span>
+      </div>
+      <strong class="ipam-kpi-val" id="kpiAvailableIps">94</strong>
+      <div class="ipam-progress available-bar"><i id="kpiAvailableBar" style="width:20%"></i></div>
+      <small class="ipam-kpi-sub">Listas para asignación</small>
+    </div>
+
+    <div class="ipam-kpi-card kpi-reserved">
+      <div class="ipam-kpi-top">
+        <span class="ipam-kpi-label">RESERVADAS / GATEWAYS</span>
+        <span class="ipam-kpi-badge reserved" id="kpiReservedPct">1%</span>
+      </div>
+      <strong class="ipam-kpi-val" id="kpiReservedIps">4</strong>
+      <div class="ipam-progress reserved-bar"><i id="kpiReservedBar" style="width:1%"></i></div>
+      <small class="ipam-kpi-sub">Gateways y VIPs de enlace</small>
+    </div>
+  </div>
+
+  <!-- Barra de Control Unificada: Segmentos + Acciones + Filtros -->
+  <div class="ipam-unified-controls">
+    <!-- Fila 1: Segmentos de Red, Filtros y Acciones -->
+    <div class="ipam-controls-row">
+      <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+        <div class="ipam-subnets-group" id="ipamSubnetTabs" role="tablist" aria-label="Filtrar por Segmento de Red">
+          <button type="button" class="ipam-subnet-pill active" data-vlan="all" role="tab" aria-selected="true">
+            Todas
+          </button>
+          <button type="button" class="ipam-subnet-pill" data-vlan="Segmento 38" role="tab" aria-selected="false">
+            Segmento 38 · 192.168.38.0/24
+          </button>
+          <button type="button" class="ipam-subnet-pill" data-vlan="Segmento 40" role="tab" aria-selected="false">
+            Segmento 40 · 192.168.40.0/24
+          </button>
+        </div>
+
+        <div class="ipam-status-filters" role="group" aria-label="Filtrar por estado">
+          <button type="button" class="ipam-filter-btn active" data-status="all">
+            Todas <span class="filter-count" id="countStatusAll">468</span>
+          </button>
+          <button type="button" class="ipam-filter-btn filter-available" data-status="available">
+            <span class="dot-status available" aria-hidden="true"></span> Libres <span class="filter-count" id="countStatusAvailable">94</span>
+          </button>
+          <button type="button" class="ipam-filter-btn filter-occupied" data-status="occupied">
+            <span class="dot-status occupied" aria-hidden="true"></span> Ocupadas <span class="filter-count" id="countStatusOccupied">370</span>
+          </button>
+          <button type="button" class="ipam-filter-btn filter-reserved" data-status="reserved">
+            <span class="dot-status reserved" aria-hidden="true"></span> Reservadas <span class="filter-count" id="countStatusReserved">4</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="ipam-header-actions">
+        <button class="secondary-button" type="button" id="exportIpamCsvBtn" title="Exportar asignaciones actuales a archivo CSV">
+          <span aria-hidden="true">⤓</span> Exportar CSV
+        </button>
+        <button class="primary-button" type="button" id="openQuickAssignBtn" style="background:var(--pantone-7420);border-color:var(--pantone-7420)">
+          <span aria-hidden="true">＋</span> Asignar IP
+        </button>
+      </div>
+    </div>
+
+    <!-- Fila 2: Buscador + Vista -->
+    <div class="ipam-controls-row ipam-filters-row">
+      <div class="ipam-search-wrap">
+        <span class="ipam-search-icon" aria-hidden="true">⌕</span>
+        <input 
+          type="search" 
+          id="ipSearchInput" 
+          placeholder="Buscar IP, host, MAC, ubicación..." 
+          aria-label="Buscar en inventario IP"
+          autocomplete="off"
+        />
+        <button type="button" class="ipam-clear-btn" id="ipClearSearchBtn" title="Limpiar búsqueda" aria-label="Limpiar">×</button>
+      </div>
+
+      <div class="ipam-view-switch" role="group" aria-label="Modo de visualización">
+        <button type="button" class="ipam-switch-btn active" id="viewModeTableBtn" title="Vista en lista y tabla detallada">
+          <span aria-hidden="true">▤</span> Lista
+        </button>
+        <button type="button" class="ipam-switch-btn" id="viewModeGridBtn" title="Vista en mapa de calor y matriz visual">
+          <span aria-hidden="true">▦</span> Matriz
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- VISTA 1: TABLA DETALLADA DE DIRECCIONES IP -->
+  <div class="ipam-view-section active" id="ipamTableViewSection">
+    <div class="table-container ipam-table-scroll">
+      <table class="data-table ipam-table" aria-label="Inventario y disponibilidad de direcciones IP">
+        <colgroup>
+          <col style="width:125px" />
+          <col style="width:110px" />
+          <col style="width:20%" />
+          <col style="width:15%" />
+          <col style="width:145px" />
+          <col />
+          <col style="width:85px" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col">IPv4</th>
+            <th scope="col">Estado</th>
+            <th scope="col">Hostname</th>
+            <th scope="col">Tipo</th>
+            <th scope="col">MAC</th>
+            <th scope="col">Ubicación</th>
+            <th scope="col" style="text-align:right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="ipamTableRows">
+          <!-- Renderizado dinámico desde app.js -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Estado vacío de búsqueda -->
+    <div class="empty-state" id="ipamTableEmptyState" style="display:none;padding:50px 20px">
+      <span style="font-size:28px">⌕</span>
+      <strong>No se encontraron direcciones IP</strong>
+      <p id="ipamEmptyMessage">No coincide ninguna dirección IP con los filtros aplicados.</p>
+    </div>
+  </div>
+
+  <!-- VISTA 2: MATRIZ VISUAL DE DISPONIBILIDAD (IPAM HEATMAP GRID) -->
+  <div class="ipam-view-section" id="ipamGridViewSection" style="display:none">
+    <div class="ipam-grid-banner">
+      <div class="ipam-grid-legend">
+        <span><strong>Simbología:</strong></span>
+        <span class="legend-item"><i class="legend-dot available"></i> Verde = Libre (Disponible)</span>
+        <span class="legend-item"><i class="legend-dot occupied"></i> Guinda = Ocupada (Asignada)</span>
+        <span class="legend-item"><i class="legend-dot reserved"></i> Ámbar = Reservada (Gateway / VIP)</span>
+      </div>
+      <small class="ipam-grid-hint">Haz clic sobre cualquier celda para modificar, liberar o asignar la dirección IP.</small>
+    </div>
+
+    <div class="ipam-matrix-cells" id="ipamMatrixCellsContainer">
+      <!-- Celdas renderizadas dinámicamente -->
+    </div>
+  </div>
+</section>

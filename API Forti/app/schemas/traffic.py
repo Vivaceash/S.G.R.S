@@ -16,10 +16,12 @@ class ActiveSessionItem(BaseModel):
     bytes_received: Optional[int] = Field(None, description="Bytes recibidos desde destino a origen")
     duration: Optional[int] = Field(None, description="Duración de la sesión en segundos")
     expiry: Optional[int] = Field(None, description="Tiempo de expiración de sesión")
+    direction: Optional[str] = Field("outbound", description="Dirección: 'outbound' (salida) o 'inbound' (entrada)")
 
 
 class WebActivityRecord(BaseModel):
     timestamp: Optional[str] = Field(None, description="Fecha y hora del registro")
+    direction: Optional[str] = Field("outbound", description="Dirección: 'outbound' (salida) o 'inbound' (entrada)")
     src_ip: Optional[str] = Field(None, description="IP origen")
     src_name: Optional[str] = Field(None, description="Nombre del dispositivo / usuario origen")
     dst_ip: Optional[str] = Field(None, description="IP destino")
@@ -38,3 +40,18 @@ class VisitedDestinationSummary(BaseModel):
     total_bytes: int = Field(default=0, description="Volumen total de datos transferidos")
     ports_used: List[int] = Field(default_factory=list, description="Puertos observados")
     client_ips: List[str] = Field(default_factory=list, description="Clientes internos que han conectado")
+
+
+class DeviceTrafficSummary(BaseModel):
+    ip: str = Field(..., description="Dirección IP del equipo analizado")
+    active_sessions_count: int = Field(0, description="Cantidad de sesiones activas en este momento")
+    outbound_sessions_count: int = Field(0, description="Sesiones iniciadas por este equipo (salida)")
+    inbound_sessions_count: int = Field(0, description="Sesiones recibidas hacia este equipo (entrada)")
+    outbound_logs_count: int = Field(0, description="Cantidad de registros de log de salida")
+    inbound_logs_count: int = Field(0, description="Cantidad de registros de log de entrada")
+    total_sent_bytes: int = Field(0, description="Total de bytes enviados registrados")
+    total_rcvd_bytes: int = Field(0, description="Total de bytes recibidos registrados")
+    sessions: List[ActiveSessionItem] = Field(default_factory=list, description="Sesiones de tráfico activas de este equipo")
+    recent_logs: List[WebActivityRecord] = Field(default_factory=list, description="Logs recientes de tráfico y navegación (entrada y salida)")
+    top_destinations: List[VisitedDestinationSummary] = Field(default_factory=list, description="Principales destinos visitados por esta IP")
+

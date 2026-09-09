@@ -1,0 +1,89 @@
+<section class="network-status" aria-labelledby="networkTitle">
+  <div class="status-copy">
+    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px;">
+      <div class="health-badge"><span></span>OPERACIÓN ESTABLE</div>
+      <span id="badgeFortiStatus" class="status-pill online" style="font-size:11.5px; padding:3px 8px;"><i></i>FortiGate: 8001</span>
+      <span id="badgeOmniStatus" class="status-pill online" style="font-size:11.5px; padding:3px 8px;"><i></i>OmniVista: 8000</span>
+    </div>
+    <h2 id="networkTitle">La red está <em>saludable</em></h2>
+    <p>Todos los servicios críticos responden con normalidad. Sincronización en vivo con APIs backend de seguridad.</p>
+  </div>
+  <div class="signal-route" aria-label="Ruta de señal: Internet, Firewall, Núcleo y Acceso operando correctamente">
+    <div class="route-line"><span></span></div>
+    <div class="route-node"><i>IN</i><strong>Internet</strong><small>842 Mbps</small></div>
+    <div class="route-node"><i>FW</i><strong>Firewall</strong><small id="routeFwStatus">En línea</small></div>
+    <div class="route-node"><i>CO</i><strong>Núcleo</strong><small>99.99%</small></div>
+    <div class="route-node"><i>AC</i><strong>Acceso</strong><small>24 switches</small></div>
+  </div>
+</section>
+
+<section class="metric-grid" aria-label="Indicadores principales">
+  <article class="metric-card highlight-wine" data-navigate="dispositivos" style="cursor:pointer" title="Abrir inventario de dispositivos"><div class="metric-label">Dispositivos conectados</div><div class="metric-value" id="resumenDevConnectedVal">248 <small>/ 276</small></div><div class="progress"><i id="resumenDevConnectedBar" style="width: 89.8%"></i></div><p id="resumenDevTrend"><span class="trend positive">En vivo</span> Sincronizado con FortiOS</p></article>
+  <article class="metric-card" data-navigate="disponibilidad" style="cursor:pointer" title="Abrir módulo de Disponibilidad IP"><div class="metric-label">Direcciones disponibles</div><div class="metric-value">96 <small>IP libres</small></div><div class="progress violet-bar"><i style="width: 20%"></i></div><p>96 libres de 479 totales (Segmento 38 y 40)</p></article>
+  <article class="metric-card"><div class="metric-label">Consumo de ancho de banda</div><div class="metric-value">68<small>%</small></div><div class="progress amber-bar"><i style="width: 68%"></i></div><p><span class="trend neutral">842 Mbps</span> de 1.2 Gbps</p></article>
+  <article class="metric-card alert-card"><div class="metric-label">Alertas activas</div><div class="metric-value">3 <small>eventos</small></div><div class="alert-breakdown"><span><i class="severity high"></i>1 crítica</span><span><i class="severity medium"></i>2 medias</span></div><a href="#idf" class="view-link" data-view="idf">Revisar eventos en IDFs <span aria-hidden="true">→</span></a></article>
+</section>
+
+<div class="modules-overview-grid">
+  <article class="module-quick-card" data-navigate="idf">
+    <div class="quick-card-head"><h4>Cuartos de Telecomunicaciones (IDFs)</h4></div>
+    <p>13 gabinetes monitoreados: <strong>IDF 1 al 12 y Servidores PACS</strong>. 2 alertas preventivas registradas.</p>
+    <span class="quick-action">Abrir módulo de IDFs →</span>
+  </article>
+
+  <article class="module-quick-card" data-navigate="dispositivos">
+    <div class="quick-card-head"><h4>Inventario de Dispositivos</h4></div>
+    <p>248 equipos activos en switches de acceso, enlaces troncales y puntos de acceso inalámbrico.</p>
+    <span class="quick-action">Gestionar inventario →</span>
+  </article>
+
+  <article class="module-quick-card" data-navigate="disponibilidad">
+    <div class="quick-card-head"><h4>Disponibilidad y Asignación IP</h4></div>
+    <p>Gestión de direcciones libres y ocupadas en Segmento 38, Segmento 40 y Servidores.</p>
+    <span class="quick-action">Gestionar asignación IP →</span>
+  </article>
+</div>
+
+<div class="guidance-grid" style="display:grid; grid-template-columns: 1.45fr 1fr; gap:16px; margin-top:18px;">
+  <article class="panel" style="padding:22px;">
+    <div class="panel-section-head" style="margin-bottom:14px;">
+      <span class="eyebrow" style="font-size:10.5px;">OPERACIÓN VISIBLE</span>
+      <h3 style="margin-top:2px; font-size:19px;">Uso recomendado del centro de monitoreo</h3>
+    </div>
+    <div class="steps-list" style="display:flex; flex-direction:column; gap:10px;">
+      <div class="step-card" style="display:flex; align-items:center; gap:14px; padding:12px 16px; border:1px solid var(--line); border-radius:12px; background:#ffffff;">
+        <span class="step-num" style="width:32px; height:32px; border-radius:50%; background:var(--guinda); color:#ffffff; display:grid; place-items:center; font-weight:700; font-size:13px; flex-shrink:0;">01</span>
+        <span style="font-size:13px; color:var(--text);">Documentar incidencias y cambios de switches o enlaces sin requerir oficio formal.</span>
+      </div>
+      <div class="step-card" style="display:flex; align-items:center; gap:14px; padding:12px 16px; border:1px solid var(--line); border-radius:12px; background:#ffffff;">
+        <span class="step-num" style="width:32px; height:32px; border-radius:50%; background:var(--guinda); color:#ffffff; display:grid; place-items:center; font-weight:700; font-size:13px; flex-shrink:0;">02</span>
+        <span style="font-size:13px; color:var(--text);">Relacionar cada componente con el responsable técnico y el cuarto de telecomunicaciones (IDF).</span>
+      </div>
+      <div class="step-card" style="display:flex; align-items:center; gap:14px; padding:12px 16px; border:1px solid var(--line); border-radius:12px; background:#ffffff;">
+        <span class="step-num" style="width:32px; height:32px; border-radius:50%; background:var(--guinda); color:#ffffff; display:grid; place-items:center; font-weight:700; font-size:13px; flex-shrink:0;">03</span>
+        <span style="font-size:13px; color:var(--text);">Mantener observaciones breves y auditables para consulta posterior y control institucional.</span>
+      </div>
+    </div>
+  </article>
+
+  <article class="panel" style="padding:22px;">
+    <div class="panel-section-head" style="margin-bottom:14px;">
+      <span class="eyebrow" style="font-size:10.5px;">REFERENCIA RÁPIDA</span>
+      <h3 style="margin-top:2px; font-size:19px;">Elementos obligatorios</h3>
+    </div>
+    <div class="checklist" style="display:flex; flex-direction:column; gap:10px;">
+      <div class="check-card" style="display:flex; align-items:center; gap:12px; padding:12px 16px; border:1px solid var(--line); border-radius:12px; background:#ffffff;">
+        <span style="color:var(--green); font-size:16px; font-weight:bold; flex-shrink:0;">✓</span>
+        <span style="font-size:13px; color:var(--text);">Fecha de elaboración y responsable del registro técnico.</span>
+      </div>
+      <div class="check-card" style="display:flex; align-items:center; gap:12px; padding:12px 16px; border:1px solid var(--line); border-radius:12px; background:#ffffff;">
+        <span style="color:var(--green); font-size:16px; font-weight:bold; flex-shrink:0;">✓</span>
+        <span style="font-size:13px; color:var(--text);">Departamento asociado al hecho documentado e IDF de destino.</span>
+      </div>
+      <div class="check-card" style="display:flex; align-items:center; gap:12px; padding:12px 16px; border:1px solid var(--line); border-radius:12px; background:#ffffff;">
+        <span style="color:var(--green); font-size:16px; font-weight:bold; flex-shrink:0;">✓</span>
+        <span style="font-size:13px; color:var(--text);">Asunto claro y observaciones con contexto suficiente para auditoría.</span>
+      </div>
+    </div>
+  </article>
+</div>

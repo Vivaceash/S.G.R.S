@@ -1,0 +1,4691 @@
+[
+  {
+    "ip": "192.168.38.1",
+    "vlan": "Segmento 38",
+    "status": "reserved",
+    "hostname": "GW-ASISTENCIAL-01 (VIP Gateway)",
+    "type": "Firewall / Gateway Perimetral",
+    "mac": "78:24:59:FE:38:01",
+    "location": "Site principal",
+    "notes": "Gateway Segmento 38"
+  },
+  {
+    "ip": "192.168.38.254",
+    "vlan": "Segmento 38",
+    "status": "reserved",
+    "hostname": "CORE-SW-01 (L3 SVI 38)",
+    "type": "Switch Distribución / Core L3",
+    "mac": "78:24:59:FE:38:FE",
+    "location": "Site principal",
+    "notes": "SVI redundante Segmento 38"
+  },
+  {
+    "ip": "192.168.38.9",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-D0W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: D0W5D14"
+  },
+  {
+    "ip": "192.168.38.10",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-6RR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: 6RR5D14"
+  },
+  {
+    "ip": "192.168.38.11",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-4K2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: 4K2S624"
+  },
+  {
+    "ip": "192.168.38.12",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-2L2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: 2L2S624"
+  },
+  {
+    "ip": "192.168.38.13",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-6K2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: 6K2S624"
+  },
+  {
+    "ip": "192.168.38.14",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.15",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Dirección liberada disponible en el pool",
+    "device": "—"
+  },
+  {
+    "ip": "192.168.38.16",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-1L2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: 1L2S624"
+  },
+  {
+    "ip": "192.168.38.17",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-GQR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: GQR5D14"
+  },
+  {
+    "ip": "192.168.38.18",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-HRR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: HRR5D14"
+  },
+  {
+    "ip": "192.168.38.19",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-4VR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: 4VR5D14"
+  },
+  {
+    "ip": "192.168.38.20",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-66MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: 66MQ624"
+  },
+  {
+    "ip": "192.168.38.21",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-84MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: 84MQ624"
+  },
+  {
+    "ip": "192.168.38.22",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-8ZV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: 8ZV5D14"
+  },
+  {
+    "ip": "192.168.38.23",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-10W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: 10W5D14"
+  },
+  {
+    "ip": "192.168.38.24",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-15MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: 15MQ624"
+  },
+  {
+    "ip": "192.168.38.25",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-96MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: 96MQ624"
+  },
+  {
+    "ip": "192.168.38.26",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-C4MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: C4MQ624"
+  },
+  {
+    "ip": "192.168.38.27",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-JK2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: JK2S624"
+  },
+  {
+    "ip": "192.168.38.28",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-7XR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: 7XR5D14"
+  },
+  {
+    "ip": "192.168.38.29",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-9XR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: 9XR5D14"
+  },
+  {
+    "ip": "192.168.38.30",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-JHTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: JHTQ624"
+  },
+  {
+    "ip": "192.168.38.31",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-CXR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: CXR5D14"
+  },
+  {
+    "ip": "192.168.38.32",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-90W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 90W5D14"
+  },
+  {
+    "ip": "192.168.38.33",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-6FQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 6FQQ624"
+  },
+  {
+    "ip": "192.168.38.34",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-3WR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 3WR5D14"
+  },
+  {
+    "ip": "192.168.38.35",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-4J2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 4J2S624"
+  },
+  {
+    "ip": "192.168.38.36",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-2DQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 2DQQ624"
+  },
+  {
+    "ip": "192.168.38.37",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-73MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 73MQ624"
+  },
+  {
+    "ip": "192.168.38.38",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-4RR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 4RR5D14"
+  },
+  {
+    "ip": "192.168.38.39",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-80W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 80W5D14"
+  },
+  {
+    "ip": "192.168.38.40",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-FFQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: FFQQ624"
+  },
+  {
+    "ip": "192.168.38.41",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-5SR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 5SR5D14"
+  },
+  {
+    "ip": "192.168.38.42",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-19QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 19QQ624"
+  },
+  {
+    "ip": "192.168.38.43",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-DK2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: DK2S624"
+  },
+  {
+    "ip": "192.168.38.44",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-2ZV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 2ZV5D14"
+  },
+  {
+    "ip": "192.168.38.45",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-H4MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: H4MQ624"
+  },
+  {
+    "ip": "192.168.38.46",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-JSR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: JSR5D14"
+  },
+  {
+    "ip": "192.168.38.47",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-64MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 64MQ624"
+  },
+  {
+    "ip": "192.168.38.48",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-B3MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: B3MQ624"
+  },
+  {
+    "ip": "192.168.38.49",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-6GQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 6GQQ624"
+  },
+  {
+    "ip": "192.168.38.50",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-JRR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: JRR5D14"
+  },
+  {
+    "ip": "192.168.38.51",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-FCQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: FCQQ624"
+  },
+  {
+    "ip": "192.168.38.52",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-3J2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 3J2S624"
+  },
+  {
+    "ip": "192.168.38.53",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-GHTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: GHTQ624"
+  },
+  {
+    "ip": "192.168.38.54",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-BJTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: BJTQ624"
+  },
+  {
+    "ip": "192.168.38.55",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-HBQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: HBQQ624"
+  },
+  {
+    "ip": "192.168.38.56",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-9DQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 9DQQ624"
+  },
+  {
+    "ip": "192.168.38.57",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-BHTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: BHTQ624"
+  },
+  {
+    "ip": "192.168.38.58",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-5BQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 5BQQ624"
+  },
+  {
+    "ip": "192.168.38.59",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-5HTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 5HTQ624"
+  },
+  {
+    "ip": "192.168.38.60",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-FDQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: FDQQ624"
+  },
+  {
+    "ip": "192.168.38.61",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-8JTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 8JTQ624"
+  },
+  {
+    "ip": "192.168.38.62",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-CBQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: CBQQ624"
+  },
+  {
+    "ip": "192.168.38.63",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-41W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 41W5D14"
+  },
+  {
+    "ip": "192.168.38.64",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-F3MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: F3MQ624"
+  },
+  {
+    "ip": "192.168.38.65",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-GZV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: GZV5D14"
+  },
+  {
+    "ip": "192.168.38.67",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-75MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 75MQ624"
+  },
+  {
+    "ip": "192.168.38.68",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-GFQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: GFQQ624"
+  },
+  {
+    "ip": "192.168.38.69",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-9WR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 9WR5D14"
+  },
+  {
+    "ip": "192.168.38.70",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-51W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 2",
+    "notes": "Serie: 51W5D14"
+  },
+  {
+    "ip": "192.168.38.71",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-3JTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 3",
+    "notes": "Serie: 3JTQ624"
+  },
+  {
+    "ip": "192.168.38.72",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-HTR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 3",
+    "notes": "Serie: HTR5D14"
+  },
+  {
+    "ip": "192.168.38.73",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-D8QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 3",
+    "notes": "Serie: D8QQ624"
+  },
+  {
+    "ip": "192.168.38.74",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-56MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 3",
+    "notes": "Serie: 56MQ624"
+  },
+  {
+    "ip": "192.168.38.75",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-5J2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 3",
+    "notes": "Serie: 5J2S624"
+  },
+  {
+    "ip": "192.168.38.76",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-8DQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 3",
+    "notes": "Serie: 8DQQ624"
+  },
+  {
+    "ip": "192.168.38.77",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-4ZV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 3",
+    "notes": "Serie: 4ZV5D14"
+  },
+  {
+    "ip": "192.168.38.78",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-B5MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 3",
+    "notes": "Serie: B5MQ624"
+  },
+  {
+    "ip": "192.168.38.79",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-FHTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 3",
+    "notes": "Serie: FHTQ624"
+  },
+  {
+    "ip": "192.168.38.80",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-6XR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 3",
+    "notes": "Serie: 6XR5D14"
+  },
+  {
+    "ip": "192.168.38.81",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-85MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 3",
+    "notes": "Serie: 85MQ624"
+  },
+  {
+    "ip": "192.168.38.82",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-9CQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 3",
+    "notes": "Serie: 9CQQ624"
+  },
+  {
+    "ip": "192.168.38.83",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-H0W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 3",
+    "notes": "Serie: H0W5D14"
+  },
+  {
+    "ip": "192.168.38.86",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-HHTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: HHTQ624"
+  },
+  {
+    "ip": "192.168.38.87",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-83MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: 83MQ624"
+  },
+  {
+    "ip": "192.168.38.88",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-4CQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: 4CQQ624"
+  },
+  {
+    "ip": "192.168.38.89",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-9SR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: 9SR5D14"
+  },
+  {
+    "ip": "192.168.38.90",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-42TYZ4",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: 42TYZ44"
+  },
+  {
+    "ip": "192.168.38.91",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-F6MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: F6MQ624"
+  },
+  {
+    "ip": "192.168.38.92",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-4BQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: 4BQQ624"
+  },
+  {
+    "ip": "192.168.38.93",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-D4MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: D4MQ624"
+  },
+  {
+    "ip": "192.168.38.94",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-58QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: 58QQ624"
+  },
+  {
+    "ip": "192.168.38.95",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-F0W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: F0W5D14"
+  },
+  {
+    "ip": "192.168.38.96",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-4XR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: 4XR5D14"
+  },
+  {
+    "ip": "192.168.38.97",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-9CSYZ4",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: 9CSYZ44"
+  },
+  {
+    "ip": "192.168.38.98",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-FJ2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: FJ2S624"
+  },
+  {
+    "ip": "192.168.38.99",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-C3MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: C3MQ624"
+  },
+  {
+    "ip": "192.168.38.100",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-2VR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: 2VR5D14"
+  },
+  {
+    "ip": "192.168.38.101",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-FBQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: FBQQ624"
+  },
+  {
+    "ip": "192.168.38.102",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-8BQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: 8BQQ624"
+  },
+  {
+    "ip": "192.168.38.103",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-G0W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: G0W5D14"
+  },
+  {
+    "ip": "192.168.38.104",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-1RR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: 1RR5D14"
+  },
+  {
+    "ip": "192.168.38.105",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-C6MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: C6MQ624"
+  },
+  {
+    "ip": "192.168.38.106",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-6TR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: 6TR5D14"
+  },
+  {
+    "ip": "192.168.38.107",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.108",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-1FQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: 1FQQ624"
+  },
+  {
+    "ip": "192.168.38.109",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-CZV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: CZV5D14"
+  },
+  {
+    "ip": "192.168.38.110",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-G6MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: G6MQ624"
+  },
+  {
+    "ip": "192.168.38.111",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-FK2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: FK2S624"
+  },
+  {
+    "ip": "192.168.38.112",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-5RR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: 5RR5D14"
+  },
+  {
+    "ip": "192.168.38.113",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-74MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: 74MQ624"
+  },
+  {
+    "ip": "192.168.38.114",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-30W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: 30W5D14"
+  },
+  {
+    "ip": "192.168.38.115",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-JFQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: JFQQ624"
+  },
+  {
+    "ip": "192.168.38.116",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-HJ2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: HJ2S624"
+  },
+  {
+    "ip": "192.168.38.117",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-CRR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: CRR5D14"
+  },
+  {
+    "ip": "192.168.38.118",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-FJTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: FJTQ624"
+  },
+  {
+    "ip": "192.168.38.119",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-2BQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: 2BQQ624"
+  },
+  {
+    "ip": "192.168.38.120",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-GYV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: GYV5D14"
+  },
+  {
+    "ip": "192.168.38.121",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-27MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: 27MQ624"
+  },
+  {
+    "ip": "192.168.38.122",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-29QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: 29QQ624"
+  },
+  {
+    "ip": "192.168.38.123",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-1VR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: 1VR5D14"
+  },
+  {
+    "ip": "192.168.38.124",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "SINEAS",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Asignado"
+  },
+  {
+    "ip": "192.168.38.125",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-8HTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: 8HTQ624"
+  },
+  {
+    "ip": "192.168.38.127",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-DTR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: DTR5D14"
+  },
+  {
+    "ip": "192.168.38.128",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-59QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: 59QQ624"
+  },
+  {
+    "ip": "192.168.38.129",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-8FQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: 8FQQ624"
+  },
+  {
+    "ip": "192.168.38.130",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-8VR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: 8VR5D14"
+  },
+  {
+    "ip": "192.168.38.131",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-FXR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: FXR5D14"
+  },
+  {
+    "ip": "192.168.38.132",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-40W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: 40W5D14"
+  },
+  {
+    "ip": "192.168.38.134",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-2K2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: 2K2S624"
+  },
+  {
+    "ip": "192.168.38.135",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-3GQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: 3GQQ624"
+  },
+  {
+    "ip": "192.168.38.136",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-JJ2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: JJ2S624"
+  },
+  {
+    "ip": "192.168.38.137",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-5FQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: 5FQQ624"
+  },
+  {
+    "ip": "192.168.38.138",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-7HTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: 7HTQ624"
+  },
+  {
+    "ip": "192.168.38.139",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-68QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: 68QQ624"
+  },
+  {
+    "ip": "192.168.38.140",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-J3MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: J3MQ624"
+  },
+  {
+    "ip": "192.168.38.141",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-DJ2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: DJ2S624"
+  },
+  {
+    "ip": "192.168.38.142",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-F9QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: F9QQ624"
+  },
+  {
+    "ip": "192.168.38.143",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-DZV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: DZV5D14"
+  },
+  {
+    "ip": "192.168.38.144",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-J0W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: J0W5D14"
+  },
+  {
+    "ip": "192.168.38.145",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-FZV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: FZV5D14"
+  },
+  {
+    "ip": "192.168.38.146",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-H3MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: H3MQ624"
+  },
+  {
+    "ip": "192.168.38.147",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-76MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: 76MQ624"
+  },
+  {
+    "ip": "192.168.38.148",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-H9QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: H9QQ624"
+  },
+  {
+    "ip": "192.168.38.149",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-BVR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: BVR5D14"
+  },
+  {
+    "ip": "192.168.38.150",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-9FQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: 9FQQ624"
+  },
+  {
+    "ip": "192.168.38.151",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-7CQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: 7CQQ624"
+  },
+  {
+    "ip": "192.168.38.152",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-4DQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: 4DQQ624"
+  },
+  {
+    "ip": "192.168.38.153",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-4SR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: 4SR5D14"
+  },
+  {
+    "ip": "192.168.38.154",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-55MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: 55MQ624"
+  },
+  {
+    "ip": "192.168.38.155",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-GRR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: GRR5D14"
+  },
+  {
+    "ip": "192.168.38.156",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-6DQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: 6DQQ624"
+  },
+  {
+    "ip": "192.168.38.157",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-HFQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: HFQQ624"
+  },
+  {
+    "ip": "192.168.38.158",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-7RR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: 7RR5D14"
+  },
+  {
+    "ip": "192.168.38.159",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-H8QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: H8QQ624"
+  },
+  {
+    "ip": "192.168.38.160",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-CK2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: CK2S624"
+  },
+  {
+    "ip": "192.168.38.161",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-45MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: 45MQ624"
+  },
+  {
+    "ip": "192.168.38.162",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-C0W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: C0W5D14"
+  },
+  {
+    "ip": "192.168.38.163",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-F4MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: F4MQ624"
+  },
+  {
+    "ip": "192.168.38.164",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-5WR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · CENTRAL DE MEZCLAS · recepción desempaque",
+    "notes": "Serie: 5WR5D14"
+  },
+  {
+    "ip": "192.168.38.165",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-1ZV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · CENTRAL DE MEZCLAS · preparación antibióticos",
+    "notes": "Serie: 1ZV5D14"
+  },
+  {
+    "ip": "192.168.38.166",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-21W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · CENTRAL DE MEZCLAS · nutrición parental",
+    "notes": "Serie: 21W5D14"
+  },
+  {
+    "ip": "192.168.38.167",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-69QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 69QQ624"
+  },
+  {
+    "ip": "192.168.38.168",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-3SR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · ROPA SUCIA · Jefe de ropa sucia",
+    "notes": "Serie: 3SR5D14"
+  },
+  {
+    "ip": "192.168.38.169",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-1CQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · BODEGA INTENDENCIA · Entrega y recepción",
+    "notes": "Serie: 1CQQ624"
+  },
+  {
+    "ip": "192.168.38.170",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-JYV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · ANATOMIA PATOLOGICA · Control",
+    "notes": "Serie: JYV5D14"
+  },
+  {
+    "ip": "192.168.38.171",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-3CQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · ANATOMIA PATOLOGICA · Secretaria",
+    "notes": "Serie: 3CQQ624"
+  },
+  {
+    "ip": "192.168.38.172",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-5L2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · ANATOMIA PATOLOGICA · Jefe de Servicio anatomía patológica",
+    "notes": "Serie: 5L2S624"
+  },
+  {
+    "ip": "192.168.38.173",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-3ZV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · ANATOMIA PATOLOGICA · Patólogos microscopios",
+    "notes": "Serie: 3ZV5D14"
+  },
+  {
+    "ip": "192.168.38.174",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-F8QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · ANATOMIA PATOLOGICA · Patólogos microscopios",
+    "notes": "Serie: F8QQ624"
+  },
+  {
+    "ip": "192.168.38.175",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-B4MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · ANATOMIA PATOLOGICA · Cito patología",
+    "notes": "Serie: B4MQ624"
+  },
+  {
+    "ip": "192.168.38.176",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-CJ2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · CLINICA SALUD EN EL TRABAJO · secretaria",
+    "notes": "Serie: CJ2S624"
+  },
+  {
+    "ip": "192.168.38.177",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-C9QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · CLINICA SALUD EN EL TRABAJO · consultorio",
+    "notes": "Serie: C9QQ624"
+  },
+  {
+    "ip": "192.168.38.178",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-F5MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · SEGURIDAD E HIGIENE EN EL TRABAJO · especialistas",
+    "notes": "Serie: F5MQ624"
+  },
+  {
+    "ip": "192.168.38.179",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-9VR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · SEGURIDAD E HIGIENE EN EL TRABAJO · especialistas",
+    "notes": "Serie: 9VR5D14"
+  },
+  {
+    "ip": "192.168.38.180",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-JXR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · SEGURIDAD E HIGIENE EN EL TRABAJO · Coordinador zonal",
+    "notes": "Serie: JXR5D14"
+  },
+  {
+    "ip": "192.168.38.181",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-78QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · Informatica · STAU",
+    "notes": "Serie: 78QQ624"
+  },
+  {
+    "ip": "192.168.38.182",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-48QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · SEGURIDAD Y VIGLANCIA Y ADMON RED · operadora admón. red",
+    "notes": "Serie: 48QQ624"
+  },
+  {
+    "ip": "192.168.38.183",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-221HBS",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · LAPTOP · Sistemas",
+    "notes": "Serie: CND3221HBS"
+  },
+  {
+    "ip": "192.168.38.184",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-221HZM",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "LAPTOP",
+    "notes": "Serie: CND3221HZM"
+  },
+  {
+    "ip": "192.168.38.185",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-QCS125",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · Seguridad y Vigilancia · Asistente TI",
+    "notes": "Serie: QCS1250"
+  },
+  {
+    "ip": "192.168.38.186",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-G4MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 9",
+    "notes": "Serie: G4MQ624"
+  },
+  {
+    "ip": "192.168.38.187",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "equipo computo vertical",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.188",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-DCQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 1",
+    "notes": "Serie: DCQQ624"
+  },
+  {
+    "ip": "192.168.38.189",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.190",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.191",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "Biometrico Edificio C",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Asignado"
+  },
+  {
+    "ip": "192.168.38.192",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-39QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 4",
+    "notes": "Serie: 39QQ624"
+  },
+  {
+    "ip": "192.168.38.193",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.194",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.195",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.196",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.197",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.198",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.199",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.200",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.201",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.202",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.203",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.204",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.205",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.206",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.207",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.208",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.209",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.210",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.211",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.212",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.213",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.214",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.215",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.216",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.217",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.218",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.219",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.220",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.221",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.222",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.223",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.224",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.225",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.226",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.227",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Sala de trabajo medicos PISO 3",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.228",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.229",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.230",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.231",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.232",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.233",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.234",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.235",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.236",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.237",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.238",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.239",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.240",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "Servido de pruebas",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Asignado"
+  },
+  {
+    "ip": "192.168.38.241",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "Reservadas para armando",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Asignado"
+  },
+  {
+    "ip": "192.168.38.242",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "Reservadas para armando",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Asignado"
+  },
+  {
+    "ip": "192.168.38.243",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.244",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.245",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.246",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.247",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.248",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "SIEN",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Asignado"
+  },
+  {
+    "ip": "192.168.38.249",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.250",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "04820300-89QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · Informatica · Redes y Seguridad",
+    "notes": "Serie: 89QQ624"
+  },
+  {
+    "ip": "192.168.38.251",
+    "vlan": "Segmento 38",
+    "status": "occupied",
+    "hostname": "oftalmo-provicional",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Asignado"
+  },
+  {
+    "ip": "192.168.38.252",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.38.253",
+    "vlan": "Segmento 38",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.1",
+    "vlan": "Segmento 40",
+    "status": "reserved",
+    "hostname": "GW-GOBIERNO-01 (VIP Gateway)",
+    "type": "Firewall / Gateway Perimetral",
+    "mac": "78:24:59:FE:40:01",
+    "location": "Site principal",
+    "notes": "Gateway Segmento 40"
+  },
+  {
+    "ip": "192.168.40.254",
+    "vlan": "Segmento 40",
+    "status": "reserved",
+    "hostname": "CORE-SW-01 (L3 SVI 40)",
+    "type": "Switch Distribución / Core L3",
+    "mac": "78:24:59:FE:40:FE",
+    "location": "Site principal",
+    "notes": "SVI redundante Segmento 40"
+  },
+  {
+    "ip": "192.168.40.9",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-88QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 88QQ624"
+  },
+  {
+    "ip": "192.168.40.10",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-HWR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: HWR5D14"
+  },
+  {
+    "ip": "192.168.40.11",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-70W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 70W5D14"
+  },
+  {
+    "ip": "192.168.40.12",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-CJTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 11",
+    "notes": "Serie: CJTQ624"
+  },
+  {
+    "ip": "192.168.40.13",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-7WR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 7WR5D14"
+  },
+  {
+    "ip": "192.168.40.14",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-17MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF MDF · SEGURIDAD Y VIGLANCIA Y ADMON RED",
+    "notes": "Serie: 17MQ624"
+  },
+  {
+    "ip": "192.169.40.15",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-94MQ624",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 94MQ624"
+  },
+  {
+    "ip": "192.168.40.16",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-GWR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: GWR5D14"
+  },
+  {
+    "ip": "192.168.40.17",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-CWR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: CWR5D14"
+  },
+  {
+    "ip": "192.168.40.18",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-1JTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 1JTQ624"
+  },
+  {
+    "ip": "192.168.40.19",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-GCQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: GCQQ624"
+  },
+  {
+    "ip": "192.168.40.20",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-31W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 31W5D14"
+  },
+  {
+    "ip": "192.168.40.21",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-HVR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: HVR5D14"
+  },
+  {
+    "ip": "192.168.40.22",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-3XR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 3XR5D14"
+  },
+  {
+    "ip": "192.168.40.23",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-BK2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: BK2S624"
+  },
+  {
+    "ip": "192.168.40.24",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-8K2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 8K2S624"
+  },
+  {
+    "ip": "192.168.40.25",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-DVR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: DVR5D14"
+  },
+  {
+    "ip": "192.168.40.26",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-4WR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 4WR5D14"
+  },
+  {
+    "ip": "192.168.40.27",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-FSR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: FSR5D14"
+  },
+  {
+    "ip": "192.168.40.28",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-24MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 24MQ624"
+  },
+  {
+    "ip": "192.168.40.29",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-FWR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: FWR5D14"
+  },
+  {
+    "ip": "192.168.40.30",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-1BQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 1BQQ624"
+  },
+  {
+    "ip": "192.168.40.31",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-8WR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 8WR5D14"
+  },
+  {
+    "ip": "192.168.40.32",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-4TR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 4TR5D14"
+  },
+  {
+    "ip": "192.168.40.33",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-JVR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: JVR5D14"
+  },
+  {
+    "ip": "192.168.40.34",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-G8QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: G8QQ624"
+  },
+  {
+    "ip": "192.168.40.35",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-9JTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 9JTQ624"
+  },
+  {
+    "ip": "192.168.40.36",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-G5MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: G5MQ624"
+  },
+  {
+    "ip": "192.168.40.37",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-D5MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: D5MQ624"
+  },
+  {
+    "ip": "192.168.40.38",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-1WR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 1WR5D14"
+  },
+  {
+    "ip": "192.168.40.39",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-38QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 38QQ624"
+  },
+  {
+    "ip": "192.168.40.40",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-35MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 35MQ624"
+  },
+  {
+    "ip": "192.168.40.42",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-G9QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: G9QQ624"
+  },
+  {
+    "ip": "192.168.40.43",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-DBQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: DBQQ624"
+  },
+  {
+    "ip": "192.168.40.45",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-GJTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: GJTQ624"
+  },
+  {
+    "ip": "192.168.40.46",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-CCQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: CCQQ624"
+  },
+  {
+    "ip": "192.168.40.47",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-BTR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: BTR5D14"
+  },
+  {
+    "ip": "192.168.40.48",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-DDQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: DDQQ624"
+  },
+  {
+    "ip": "192.168.40.49",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-GTR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: GTR5D14"
+  },
+  {
+    "ip": "192.168.40.50",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-GSR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: GSR5D14"
+  },
+  {
+    "ip": "192.168.40.51",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-CFQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: CFQQ624"
+  },
+  {
+    "ip": "192.168.40.52",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-JCQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: JCQQ624"
+  },
+  {
+    "ip": "192.168.40.53",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-DFQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: DFQQ624"
+  },
+  {
+    "ip": "192.168.40.54",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-7ZV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 7ZV5D14"
+  },
+  {
+    "ip": "192.168.40.55",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-1XR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 1XR5D14"
+  },
+  {
+    "ip": "192.168.40.56",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-D9QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: D9QQ624"
+  },
+  {
+    "ip": "192.168.40.57",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-CDQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: CDQQ624"
+  },
+  {
+    "ip": "192.168.40.58",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-99QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 99QQ624"
+  },
+  {
+    "ip": "192.168.40.59",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-HZV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: HZV5D14"
+  },
+  {
+    "ip": "192.168.40.61",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-HXR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: HXR5D14"
+  },
+  {
+    "ip": "192.168.40.62",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-95MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 95MQ624"
+  },
+  {
+    "ip": "192.168.40.63",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-7JTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 7JTQ624"
+  },
+  {
+    "ip": "192.168.40.64",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-1GQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 1GQQ624"
+  },
+  {
+    "ip": "192.168.40.65",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-50W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 50W5D14"
+  },
+  {
+    "ip": "192.168.40.66",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-GJ2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: GJ2S624"
+  },
+  {
+    "ip": "192.168.40.67",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-1K2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 1K2S624"
+  },
+  {
+    "ip": "192.168.40.68",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-1SR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 1SR5D14"
+  },
+  {
+    "ip": "192.168.40.69",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-9K2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 9K2S624"
+  },
+  {
+    "ip": "192.168.40.70",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-5TR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 5TR5D14"
+  },
+  {
+    "ip": "192.168.40.71",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-2SR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 2SR5D14"
+  },
+  {
+    "ip": "192.168.40.72",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-7DQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 7DQQ624"
+  },
+  {
+    "ip": "192.168.40.73",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-4GQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 4GQQ624"
+  },
+  {
+    "ip": "192.168.40.74",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-HYV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: HYV5D14"
+  },
+  {
+    "ip": "192.168.40.75",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-7K2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 7K2S624"
+  },
+  {
+    "ip": "192.168.40.76",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-JDQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: JDQQ624"
+  },
+  {
+    "ip": "192.168.40.77",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-1YR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 1YR5D14"
+  },
+  {
+    "ip": "192.168.40.78",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-DWR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: DWR5D14"
+  },
+  {
+    "ip": "192.168.40.79",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-BWR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: BWR5D14"
+  },
+  {
+    "ip": "192.168.40.80",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-BXR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: BXR5D14"
+  },
+  {
+    "ip": "192.168.40.81",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-7J2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 7J2S624"
+  },
+  {
+    "ip": "192.168.40.82",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-BSR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: BSR5D14"
+  },
+  {
+    "ip": "192.168.40.83",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-36MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 36MQ624"
+  },
+  {
+    "ip": "192.168.40.84",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-2JTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 2JTQ624"
+  },
+  {
+    "ip": "192.168.40.85",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-DJTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: DJTQ624"
+  },
+  {
+    "ip": "192.168.40.86",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-6JTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 6JTQ624"
+  },
+  {
+    "ip": "192.168.40.87",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-8SR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 8SR5D14"
+  },
+  {
+    "ip": "192.168.40.88",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-7BQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 7BQQ624"
+  },
+  {
+    "ip": "192.168.40.89",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-5XR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 5XR5D14"
+  },
+  {
+    "ip": "192.168.40.90",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-25MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 25MQ624"
+  },
+  {
+    "ip": "192.168.40.91",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-93MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 93MQ624"
+  },
+  {
+    "ip": "192.168.40.92",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-FVR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: FVR5D14"
+  },
+  {
+    "ip": "192.168.40.94",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-DRR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: DRR5D14"
+  },
+  {
+    "ip": "192.168.40.95",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-GBQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: GBQQ624"
+  },
+  {
+    "ip": "192.168.40.96",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-98QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 98QQ624"
+  },
+  {
+    "ip": "192.168.40.97",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-86MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 86MQ624"
+  },
+  {
+    "ip": "192.168.40.98",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-4HTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 4HTQ624"
+  },
+  {
+    "ip": "192.168.40.99",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-G3MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: G3MQ624"
+  },
+  {
+    "ip": "192.168.40.100",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-8XR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 8",
+    "notes": "Serie: 8XR5D14"
+  },
+  {
+    "ip": "192.168.40.101",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-J4MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: J4MQ624"
+  },
+  {
+    "ip": "192.168.40.102",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-CTR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: CTR5D14"
+  },
+  {
+    "ip": "192.168.40.103",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-J5MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: J5MQ624"
+  },
+  {
+    "ip": "192.168.40.104",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-46MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: 46MQ624"
+  },
+  {
+    "ip": "192.168.40.105",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-37MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: 37MQ624"
+  },
+  {
+    "ip": "192.168.40.106",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-B9QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: B9QQ624"
+  },
+  {
+    "ip": "192.168.40.107",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-CSR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: CSR5D14"
+  },
+  {
+    "ip": "192.168.40.108",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-5VR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: 5VR5D14"
+  },
+  {
+    "ip": "192.168.40.109",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-57MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: 57MQ624"
+  },
+  {
+    "ip": "192.168.40.110",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-J8QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: J8QQ624"
+  },
+  {
+    "ip": "192.168.40.111",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-9J2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: 9J2S624"
+  },
+  {
+    "ip": "192.168.40.112",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-GVR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: GVR5D14"
+  },
+  {
+    "ip": "192.168.40.113",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-1DQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: 1DQQ624"
+  },
+  {
+    "ip": "192.168.40.114",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-5GQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: 5GQQ624"
+  },
+  {
+    "ip": "192.168.40.115",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-9RR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: 9RR5D14"
+  },
+  {
+    "ip": "192.168.40.116",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-8TR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: 8TR5D14"
+  },
+  {
+    "ip": "192.168.40.117",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-3TR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: 3TR5D14"
+  },
+  {
+    "ip": "192.168.40.118",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-J6MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: J6MQ624"
+  },
+  {
+    "ip": "192.168.40.119",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-H6MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: H6MQ624"
+  },
+  {
+    "ip": "192.168.40.120",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-C8QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: C8QQ624"
+  },
+  {
+    "ip": "192.168.40.121",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-BDQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: BDQQ624"
+  },
+  {
+    "ip": "192.168.40.123",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-2RR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: 2RR5D14"
+  },
+  {
+    "ip": "192.168.40.124",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-8CQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: 8CQQ624"
+  },
+  {
+    "ip": "192.168.40.125",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-5CQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: 5CQQ624"
+  },
+  {
+    "ip": "192.168.40.126",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-44MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: 44MQ624"
+  },
+  {
+    "ip": "192.168.40.127",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-J9QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: J9QQ624"
+  },
+  {
+    "ip": "192.168.40.128",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-6J2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 6",
+    "notes": "Serie: 6J2S624"
+  },
+  {
+    "ip": "192.168.40.129",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-JTR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 5",
+    "notes": "Serie: JTR5D14"
+  },
+  {
+    "ip": "192.168.40.130",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-9HTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 5",
+    "notes": "Serie: 9HTQ624"
+  },
+  {
+    "ip": "192.168.40.131",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-49QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 5",
+    "notes": "Serie: 49QQ624"
+  },
+  {
+    "ip": "192.168.40.132",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-CHTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 5",
+    "notes": "Serie: CHTQ624"
+  },
+  {
+    "ip": "192.168.40.133",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-6WR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 5",
+    "notes": "Serie: 6WR5D14"
+  },
+  {
+    "ip": "192.168.40.134",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-14MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 5",
+    "notes": "Serie: 14MQ624"
+  },
+  {
+    "ip": "192.168.40.135",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-HSR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 5",
+    "notes": "Serie: HSR5D14"
+  },
+  {
+    "ip": "192.168.40.136",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-B6MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 5",
+    "notes": "Serie: B6MQ624"
+  },
+  {
+    "ip": "192.168.40.137",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-7SR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 5",
+    "notes": "Serie: 7SR5D14"
+  },
+  {
+    "ip": "192.168.40.138",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-JWR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 5",
+    "notes": "Serie: JWR5D14"
+  },
+  {
+    "ip": "192.168.40.140",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-HQR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 5",
+    "notes": "Serie: HQR5D14"
+  },
+  {
+    "ip": "192.168.40.141",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-34MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 34MQ624"
+  },
+  {
+    "ip": "192.168.40.142",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-79QQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 79QQ624"
+  },
+  {
+    "ip": "192.168.40.143",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-2J2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 2J2S624"
+  },
+  {
+    "ip": "192.168.40.144",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-3L2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 3L2S624"
+  },
+  {
+    "ip": "192.168.40.145",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-B0W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: B0W5D14"
+  },
+  {
+    "ip": "192.168.40.146",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-HK2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: HK2S624"
+  },
+  {
+    "ip": "192.168.40.147",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-FTR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: FTR5D14"
+  },
+  {
+    "ip": "192.168.40.148",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-9BQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 9BQQ624"
+  },
+  {
+    "ip": "192.168.40.149",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-CVR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: CVR5D14"
+  },
+  {
+    "ip": "192.168.40.150",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-7L2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 7L2S624"
+  },
+  {
+    "ip": "192.168.40.151",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-60W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 60W5D14"
+  },
+  {
+    "ip": "192.168.40.152",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-4FQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 4FQQ624"
+  },
+  {
+    "ip": "192.168.40.153",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-5ZV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 5ZV5D14"
+  },
+  {
+    "ip": "192.168.40.154",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-2XR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 2XR5D14"
+  },
+  {
+    "ip": "192.168.40.155",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-3RR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 3RR5D14"
+  },
+  {
+    "ip": "192.168.40.156",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-6ZV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 6ZV5D14"
+  },
+  {
+    "ip": "192.168.40.157",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-GK2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: GK2S624"
+  },
+  {
+    "ip": "192.168.40.158",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-BFQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: BFQQ624"
+  },
+  {
+    "ip": "192.168.40.159",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-20W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 20W5D14"
+  },
+  {
+    "ip": "192.168.40.160",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-BZV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: BZV5D14"
+  },
+  {
+    "ip": "192.168.40.161",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-4JTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 4JTQ624"
+  },
+  {
+    "ip": "192.168.40.162",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-6HTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 6HTQ624"
+  },
+  {
+    "ip": "192.168.40.163",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-6VR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 6VR5D14"
+  },
+  {
+    "ip": "192.168.40.164",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-5K2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 5K2S624"
+  },
+  {
+    "ip": "192.168.40.165",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-8RR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 8RR5D14"
+  },
+  {
+    "ip": "192.168.40.166",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-4L2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 4L2S624"
+  },
+  {
+    "ip": "192.168.40.167",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-11W5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 11W5D14"
+  },
+  {
+    "ip": "192.168.40.168",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-D6MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: D6MQ624"
+  },
+  {
+    "ip": "192.168.40.169",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-2GQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 2GQQ624"
+  },
+  {
+    "ip": "192.168.40.170",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-54MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 54MQ624"
+  },
+  {
+    "ip": "192.168.40.171",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-HDQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: HDQQ624"
+  },
+  {
+    "ip": "192.168.40.172",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-5JTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 5JTQ624"
+  },
+  {
+    "ip": "192.168.40.173",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-JZV5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: JZV5D14"
+  },
+  {
+    "ip": "192.168.40.174",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-3K2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 3K2S624"
+  },
+  {
+    "ip": "192.168.40.175",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-9TR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 9TR5D14"
+  },
+  {
+    "ip": "192.168.40.176",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-1TR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 1TR5D14"
+  },
+  {
+    "ip": "192.168.40.177",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-7FQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 10",
+    "notes": "Serie: 7FQQ624"
+  },
+  {
+    "ip": "192.168.40.178",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-3HTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: 3HTQ624"
+  },
+  {
+    "ip": "192.168.40.179",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-8J2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: 8J2S624"
+  },
+  {
+    "ip": "192.168.40.180",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-DXR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: DXR5D14"
+  },
+  {
+    "ip": "192.168.40.182",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-BCQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: BCQQ624"
+  },
+  {
+    "ip": "192.168.40.183",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-GDQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: GDQQ624"
+  },
+  {
+    "ip": "192.168.40.184",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-DSR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: DSR5D14"
+  },
+  {
+    "ip": "192.168.40.185",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-D3MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: D3MQ624"
+  },
+  {
+    "ip": "192.168.40.186",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-16MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: 16MQ624"
+  },
+  {
+    "ip": "192.168.40.187",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-BRR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: BRR5D14"
+  },
+  {
+    "ip": "192.168.40.188",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-3FQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: 3FQQ624"
+  },
+  {
+    "ip": "192.168.40.189",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-JBQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: JBQQ624"
+  },
+  {
+    "ip": "192.168.40.190",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-FRR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: FRR5D14"
+  },
+  {
+    "ip": "192.168.40.191",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-2CQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: 2CQQ624"
+  },
+  {
+    "ip": "192.168.40.192",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-26MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: 26MQ624"
+  },
+  {
+    "ip": "192.168.40.193",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-65MQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: 65MQ624"
+  },
+  {
+    "ip": "192.168.40.194",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-7TR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: 7TR5D14"
+  },
+  {
+    "ip": "192.168.40.195",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-DHTQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: DHTQ624"
+  },
+  {
+    "ip": "192.168.40.196",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-HCQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: HCQQ624"
+  },
+  {
+    "ip": "192.168.40.197",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-2FQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: 2FQQ624"
+  },
+  {
+    "ip": "192.168.40.198",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-BJ2S62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: BJ2S624"
+  },
+  {
+    "ip": "192.168.40.199",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-BBQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: BBQQ624"
+  },
+  {
+    "ip": "192.168.40.200",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.201",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-3DQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: 3DQQ624"
+  },
+  {
+    "ip": "192.168.40.202",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-2WR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: 2WR5D14"
+  },
+  {
+    "ip": "192.168.40.203",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-2TR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: 2TR5D14"
+  },
+  {
+    "ip": "192.168.40.204",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-5DQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 12",
+    "notes": "Serie: 5DQQ624"
+  },
+  {
+    "ip": "192.168.40.219",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-JQR5D1",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: JQR5D14"
+  },
+  {
+    "ip": "192.168.40.220",
+    "vlan": "Segmento 40",
+    "status": "occupied",
+    "hostname": "04820300-6BQQ62",
+    "type": "Estación de Trabajo / Host",
+    "mac": "—",
+    "location": "IDF 7",
+    "notes": "Serie: 6BQQ624"
+  },
+  {
+    "ip": "192.168.40.221",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.222",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.223",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.224",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.225",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.226",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.227",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.228",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.229",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.230",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.231",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.232",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.233",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.234",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.235",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.236",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.237",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.238",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.239",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.240",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.241",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.242",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.243",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.244",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.245",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.246",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.247",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.248",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.249",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.250",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.251",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.252",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "192.168.40.253",
+    "vlan": "Segmento 40",
+    "status": "available",
+    "hostname": "—",
+    "type": "—",
+    "mac": "—",
+    "location": "Hospital Central",
+    "notes": "Disponible"
+  },
+  {
+    "ip": "10.38.1.254",
+    "status": "available",
+    "action": "release",
+    "hostname": "—",
+    "device": "—",
+    "notes": "Dirección liberada disponible en el pool"
+  }
+]

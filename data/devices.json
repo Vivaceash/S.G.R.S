@@ -1,0 +1,65 @@
+[
+  {
+    "name": "CORE-SW-01",
+    "ip": "10.20.0.1",
+    "type": "Switch L3 Core",
+    "icon": "⌘",
+    "location": "Site principal · MDF",
+    "status": "online",
+    "activity": "Ahora"
+  },
+  {
+    "name": "AP-SALA-JUNTAS",
+    "ip": "10.20.2.48",
+    "type": "Access Point",
+    "icon": "⌁",
+    "location": "Corporativo · Piso 2",
+    "status": "online",
+    "activity": "Hace 1 min"
+  },
+  {
+    "name": "SRV-ARCHIVOS-02",
+    "ip": "10.20.1.22",
+    "type": "Servidor Datos",
+    "icon": "▤",
+    "location": "Centro de datos · Rack B",
+    "status": "online",
+    "activity": "Hace 2 min"
+  },
+  {
+    "name": "CAM-EST-07",
+    "ip": "10.20.8.107",
+    "type": "Cámara IP",
+    "icon": "◉",
+    "location": "Estacionamiento norte",
+    "status": "offline",
+    "activity": "Hace 38 min"
+  },
+  {
+    "name": "IMP-VENTAS-04",
+    "ip": "10.20.4.86",
+    "type": "Impresora Red",
+    "icon": "▣",
+    "location": "Corporativo · Piso 1",
+    "status": "online",
+    "activity": "Hace 4 min"
+  },
+  {
+    "name": "FW-BORDE-01",
+    "ip": "10.20.0.254",
+    "type": "Firewall Cluster",
+    "icon": "◇",
+    "location": "Site principal · MDF",
+    "status": "online",
+    "activity": "Ahora"
+  },
+  {
+    "name": "SW-PISO-03",
+    "ip": "10.20.3.2",
+    "type": "Switch L2 PoE",
+    "icon": "⌘",
+    "location": "Corporativo · Piso 3",
+    "status": "offline",
+    "activity": "Hace 12 min"
+  }
+]

@@ -1,0 +1,103 @@
+{
+  "idf-3": {
+    "incidents": [
+      {
+        "id": "FOL-IDF3-G6DNC",
+        "date": "08/09/2026 19:55",
+        "severity": "medium",
+        "device": "Mini Split (22°C)",
+        "temp": 22,
+        "title": "Incidencia reportada en IDF 3",
+        "description": "RevisiRevision preventiva del sistema Mini Split. Operacion optima.",
+        "status": "open",
+        "tech": "Israel R."
+      },
+      {
+        "id": "FOL-IDF3-450",
+        "date": "08/09/2026 16:25",
+        "severity": "medium",
+        "device": "Mini Split (22°C)",
+        "temp": 22,
+        "title": "Incidencia reportada en IDF 3",
+        "description": "No funciona el aire",
+        "status": "open",
+        "tech": "Casillas"
+      }
+    ],
+    "telemetry": {
+      "temp": 22,
+      "date": "08/09/2026 19:55",
+      "status": "normal"
+    }
+  },
+  "idf-1": {
+    "incidents": [
+      {
+        "id": "FOL-IDF1-FMP0P",
+        "date": "08/09/2026 19:40",
+        "severity": "medium",
+        "device": "Mini Split (21°C)",
+        "temp": 21,
+        "title": "Incidencia reportada en IDF 1",
+        "description": "Prueba de verificacion",
+        "status": "open",
+        "tech": "Israel R."
+      },
+      {
+        "id": "FOL-IDF1-758",
+        "date": "08/09/2026 16:43",
+        "severity": "medium",
+        "device": "Mini Split (21°C)",
+        "temp": 21,
+        "title": "Incidencia reportada en IDF 1",
+        "description": "Prueba",
+        "status": "open",
+        "tech": "Casillas."
+      },
+      {
+        "id": "FOL-IDF1-610",
+        "date": "08/09/2026 16:36",
+        "severity": "medium",
+        "device": "Mini Split (20°C)",
+        "temp": 20,
+        "title": "Incidencia reportada en IDF 1",
+        "description": "No hay luz en un switch",
+        "status": "open",
+        "tech": "Jose"
+      }
+    ],
+    "telemetry": {
+      "temp": 21.0,
+      "date": "08/09/2026 19:50",
+      "status": "normal"
+    }
+  },
+  "idf-pacs": {
+    "incidents": [
+      {
+        "id": "FOL-PACS-GJYCZ",
+        "date": "08/09/2026 20:06",
+        "severity": "medium",
+        "device": "Mini Split (21.5°C)",
+        "temp": 21.5,
+        "title": "Incidencia reportada en PACS",
+        "description": "Chequeo rutinario PACS",
+        "status": "open",
+        "tech": "Israel R."
+      }
+    ],
+    "telemetry": {
+      "temp": 21.5,
+      "date": "08/09/2026 20:06",
+      "status": "normal"
+    }
+  },
+  "idf-4": {
+    "incidents": [],
+    "telemetry": {
+      "temp": 20,
+      "date": "08/09/2026 20:10",
+      "status": "normal"
+    }
+  }
+}

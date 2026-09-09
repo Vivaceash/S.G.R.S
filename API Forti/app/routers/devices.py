@@ -1,5 +1,6 @@
+import asyncio
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
 from app.core.security import verify_api_key
@@ -17,14 +18,18 @@ router = APIRouter(
 def _parse_device(
     item: Dict[str, Any],
     current_time: Optional[float] = None,
-    active_window_seconds: int = 600,
+    active_window_seconds: int = 3600,
+    live_macs: Optional[Set[str]] = None,
 ) -> DeviceItem:
     """
     Mapea un elemento crudo de FortiOS Device Query a nuestro modelo estructurado DeviceItem.
-    Evalúa el estado online priorizando la telemetría nativa de FortiOS e integrando
-    la marca de tiempo de última actividad (last_seen) con base en el reloj del firewall
-    para eliminar desincronizaciones horarias (clock drift) y reflejar con precisión los
-    terminales realmente activos frente al inventario histórico en caché.
+    Evalúa el estado online con fidelidad 1:1 respecto al motor nativo de FortiOS:
+    1. Si se proporciona el conjunto live_macs (obtenido de 'query_type=unified_latest' del FortiGate),
+       el estado se determina directamente por pertenencia al conjunto, coincidiendo con el widget 'Assets'
+       oficial del GUI de FortiOS al 100%.
+    2. Si live_macs es None (modo de respaldo ante fallos de conexión a unified_latest), se evalúa
+       mediante la ventana temporal de actividad (active_window_seconds, por defecto 3600s = 1 hora).
+    3. Si supera la ventana o no tiene actividad registrada, se clasifica como histórico en caché (OFFLINE).
     """
     mac = item.get("mac", "")
     ip = item.get("ip") or item.get("ipv4_address")
@@ -40,24 +45,23 @@ def _parse_device(
     last_seen = item.get("last_seen")
     now = current_time or time.time()
 
-    # Evaluación precisa del estado Online / Offline:
-    # 1. Si no hay last_seen válido, se considera offline / registro huérfano.
-    if not last_seen or not isinstance(last_seen, (int, float)) or last_seen <= 0:
+    clean_mac = (mac or "").lower().replace("-", ":")
+
+    # Validación estricta de recencia temporal:
+    # Un dispositivo NUNCA puede ser considerado ONLINE si no tuvo actividad dentro de la ventana activa.
+    # Esto previene que anomalías internas o volcados completos de caché de FortiOS marquen todo el inventario histórico como activo.
+    has_valid_ts = bool(last_seen and isinstance(last_seen, (int, float)) and last_seen > 0)
+    delta = (now - last_seen) if has_valid_ts else float("inf")
+    is_recent = bool(has_valid_ts and delta <= active_window_seconds and last_seen <= now + 300)
+
+    if not is_recent:
         is_online = False
+    elif live_macs is not None:
+        is_online = bool(clean_mac and clean_mac in live_macs)
+    elif item.get("is_online") is not None:
+        is_online = bool(item.get("is_online"))
     else:
-        delta = now - last_seen
-        # 2. Si FortiOS lo clasifica explícitamente como offline:
-        if item.get("is_online") is False:
-            is_online = False
-        # 3. Si FortiOS lo clasifica como is_online=True:
-        # Validamos que no sea un registro huérfano de caché histórica (ej. días o semanas)
-        # admitiendo la ventana de inactividad normal de terminales (600s / 10 min por defecto).
-        elif item.get("is_online") is True:
-            window = max(active_window_seconds, 600)
-            is_online = (delta <= window) and (last_seen <= now + 300)
-        # 4. Fallback si FortiOS no envía el flag is_online:
-        else:
-            is_online = (delta <= active_window_seconds) and (last_seen <= now + 300)
+        is_online = True
 
     device_type = item.get("device_type") or item.get("hardware_type") or item.get("type")
 
@@ -93,10 +97,10 @@ async def list_connected_devices(
         description="Filtrar únicamente dispositivos actualmente activos/online (retrocompatibilidad)",
     ),
     active_window: int = Query(
-        600,
+        3600,
         ge=60,
         le=86400,
-        description="Ventana de tiempo en segundos para validación de última actividad (por defecto 600s = 10 min)",
+        description="Ventana de tiempo en segundos para validación de última actividad (por defecto 3600s = 1 hora)",
     ),
     vendor: Optional[str] = Query(None, max_length=100, description="Filtrar por fabricante (ej. Apple, Samsung, Intel, Cisco)"),
     search: Optional[str] = Query(None, max_length=100, description="Búsqueda por texto en IP, MAC o Hostname"),
@@ -105,16 +109,44 @@ async def list_connected_devices(
 ):
     """
     Obtiene la lista de dispositivos inventariados por el motor Device Detection de FortiOS.
-    Permite consultar tanto el inventario histórico completo como segmentar entre dispositivos
-    actualmente conectados (online) y dispositivos fuera de línea / en caché (offline).
+    Combina en tiempo real el inventario global con los dispositivos activos de FortiOS (unified_latest)
+    para garantizar fidelidad 1:1 exacta con el widget 'Assets' oficial del FortiGate y evitar que
+    los terminales en línea se degraden por inactividad.
     """
-    raw = await fortios_client.get_connected_devices(vdom=vdom)
-    results = raw.get("results", [])
+    # Consultas concurrentes para máxima velocidad y fidelidad
+    now_ts = int(time.time())
+    t_all = fortios_client.get_connected_devices(vdom=vdom)
+    t_latest = fortios_client.get_connected_devices(
+        params={
+            "query_type": "unified_latest",
+            "count": 5000,
+            "timestamp_from": now_ts - active_window,
+            "timestamp_to": now_ts + 60,
+        },
+        vdom=vdom,
+    )
 
-    # results puede ser una lista de dispositivos o un diccionario
+    responses = await asyncio.gather(t_all, t_latest, return_exceptions=True)
+    raw_all = responses[0] if not isinstance(responses[0], Exception) else {}
+    raw_latest = responses[1] if not isinstance(responses[1], Exception) else {}
+
+    # Extraer MACs activas del motor nativo de FortiOS (el mismo del widget 'Assets' de FortiGate)
+    latest_results = raw_latest.get("results", [])
+    latest_list = latest_results if isinstance(latest_results, list) else (latest_results.get("devices", []) if isinstance(latest_results, dict) else [])
+    
+    live_macs: Optional[Set[str]] = None
+    if latest_list:
+        live_macs = {
+            dev["mac"].lower().replace("-", ":")
+            for dev in latest_list
+            if isinstance(dev, dict) and dev.get("mac")
+        }
+
+    # Procesar inventario completo
+    results = raw_all.get("results", [])
     raw_list = results if isinstance(results, list) else (results.get("devices", []) if isinstance(results, dict) else [])
 
-    # Obtener el reloj de referencia más reciente del propio FortiGate para evitar problemas de desfase horario (clock drift)
+    # Obtener el reloj de referencia más reciente del propio FortiGate para evitar problemas de desfase horario
     raw_last_seens = [
         d.get("last_seen")
         for d in raw_list
@@ -123,10 +155,34 @@ async def list_connected_devices(
     ref_time = max(raw_last_seens) if raw_last_seens else time.time()
 
     # Parsear todos los dispositivos reportados por FortiOS
+    seen_macs: Set[str] = set()
     all_devices: List[DeviceItem] = []
     for dev_raw in raw_list:
         if isinstance(dev_raw, dict):
-            all_devices.append(_parse_device(dev_raw, current_time=ref_time, active_window_seconds=active_window))
+            dev = _parse_device(
+                dev_raw,
+                current_time=ref_time,
+                active_window_seconds=active_window,
+                live_macs=live_macs,
+            )
+            clean_m = (dev.mac or "").lower().replace("-", ":")
+            if clean_m:
+                seen_macs.add(clean_m)
+            all_devices.append(dev)
+
+    # Si algún dispositivo activo reportado por unified_latest no figuraba aún en raw_list, integrarlo
+    for dev_raw in latest_list:
+        if isinstance(dev_raw, dict):
+            clean_m = (dev_raw.get("mac") or "").lower().replace("-", ":")
+            if clean_m and clean_m not in seen_macs:
+                dev = _parse_device(
+                    dev_raw,
+                    current_time=ref_time,
+                    active_window_seconds=active_window,
+                    live_macs=live_macs,
+                )
+                seen_macs.add(clean_m)
+                all_devices.append(dev)
 
     total_inventory = len(all_devices)
     global_online_count = sum(1 for d in all_devices if d.is_online)
@@ -199,7 +255,7 @@ async def list_connected_devices(
         success=True,
         message=message,
         data=summary,
-        vdom=raw.get("vdom") or vdom,
+        vdom=raw_all.get("vdom") or vdom,
     )
 
 
@@ -215,11 +271,38 @@ async def get_device_by_mac_or_ip(
     """
     Busca un dispositivo en particular utilizando su dirección MAC o dirección IP.
     """
-    raw = await fortios_client.get_connected_devices(vdom=vdom)
-    results = raw.get("results", [])
+    now_ts = int(time.time())
+    t_all = fortios_client.get_connected_devices(vdom=vdom)
+    t_latest = fortios_client.get_connected_devices(
+        params={
+            "query_type": "unified_latest",
+            "count": 5000,
+            "timestamp_from": now_ts - 3600,
+            "timestamp_to": now_ts + 60,
+        },
+        vdom=vdom,
+    )
+
+    responses = await asyncio.gather(t_all, t_latest, return_exceptions=True)
+    raw_all = responses[0] if not isinstance(responses[0], Exception) else {}
+    raw_latest = responses[1] if not isinstance(responses[1], Exception) else {}
+
+    latest_results = raw_latest.get("results", [])
+    latest_list = latest_results if isinstance(latest_results, list) else (latest_results.get("devices", []) if isinstance(latest_results, dict) else [])
+    live_macs: Optional[Set[str]] = None
+    if latest_list:
+        live_macs = {
+            dev["mac"].lower().replace("-", ":")
+            for dev in latest_list
+            if isinstance(dev, dict) and dev.get("mac")
+        }
+
+    results = raw_all.get("results", [])
     raw_list = results if isinstance(results, list) else (results.get("devices", []) if isinstance(results, dict) else [])
 
     search_term = mac_or_ip.strip().lower()
+    clean_search = search_term.replace("-", ":")
+
     raw_last_seens = [
         d.get("last_seen")
         for d in raw_list
@@ -229,9 +312,8 @@ async def get_device_by_mac_or_ip(
 
     for dev_raw in raw_list:
         if isinstance(dev_raw, dict):
-            dev = _parse_device(dev_raw, current_time=ref_time)
+            dev = _parse_device(dev_raw, current_time=ref_time, live_macs=live_macs)
             dev_mac = (dev.mac or "").lower().replace("-", ":")
-            clean_search = search_term.replace("-", ":")
             dev_ip = (dev.ip or "").lower()
 
             if clean_search in dev_mac or clean_search == dev_ip:
@@ -239,7 +321,22 @@ async def get_device_by_mac_or_ip(
                     success=True,
                     message="Dispositivo encontrado.",
                     data=dev,
-                    vdom=raw.get("vdom") or vdom,
+                    vdom=raw_all.get("vdom") or vdom,
+                )
+
+    # Si no se encontró en raw_list, buscar en latest_list
+    for dev_raw in latest_list:
+        if isinstance(dev_raw, dict):
+            dev = _parse_device(dev_raw, current_time=ref_time, live_macs=live_macs)
+            dev_mac = (dev.mac or "").lower().replace("-", ":")
+            dev_ip = (dev.ip or "").lower()
+
+            if clean_search in dev_mac or clean_search == dev_ip:
+                return BaseResponse(
+                    success=True,
+                    message="Dispositivo encontrado.",
+                    data=dev,
+                    vdom=raw_latest.get("vdom") or vdom,
                 )
 
     raise HTTPException(

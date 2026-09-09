@@ -1,0 +1,35 @@
+<section class="panel idf-section" aria-labelledby="idfMainHeading">
+  <div class="idf-header-block">
+    <div class="idf-title-badge">
+      <span class="eyebrow">DISTRIBUCIÓN Y GABINETES</span>
+      <h2 id="idfMainHeading" class="idf-logo-text">IDF</h2>
+    </div>
+    
+    <!-- Sub-navegación: Inventario | Reporte incidentes | Código QR -->
+    <div class="idf-subnav" role="tablist" aria-label="Subnavegación de IDF">
+      <button type="button" class="idf-tab-link active" id="tabInventory" role="tab" aria-selected="true" aria-controls="idfDynamicContainer" data-idf-tab="inventory">
+        Inventario
+      </button>
+      <span class="idf-tab-sep" aria-hidden="true">|</span>
+      <button type="button" class="idf-tab-link" id="tabIncidents" role="tab" aria-selected="false" aria-controls="idfDynamicContainer" data-idf-tab="incidents">
+        Reporte incidentes
+      </button>
+      <span class="idf-tab-sep" aria-hidden="true">|</span>
+      <button type="button" class="idf-tab-link" id="tabQr" role="tab" aria-selected="false" aria-controls="idfDynamicContainer" data-idf-tab="qr">
+        Código QR
+      </button>
+    </div>
+  </div>
+
+  <!-- Barra selectora horizontal de IDFs (IDF 1 al 12 y PACS) -->
+  <div class="idf-chips-bar" role="tablist" aria-label="Seleccionar IDF">
+    <div class="idf-chips-scroll" id="idfChipsScroll">
+      <!-- Renderizado dinámico desde app.js -->
+    </div>
+  </div>
+
+  <!-- Contenedor dinámico del IDF seleccionado -->
+  <div class="idf-content-area" id="idfDynamicContainer" role="tabpanel">
+    <!-- Cargado automáticamente por app.js -->
+  </div>
+</section>

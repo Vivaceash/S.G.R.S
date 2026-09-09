@@ -1,0 +1,41 @@
+<section class="panel device-panel" aria-labelledby="deviceTitle">
+  <div class="panel-header">
+    <div>
+      <p class="eyebrow">CONTROL DE INVENTARIO</p>
+      <h2 id="deviceTitle">Dispositivos en la red</h2>
+    </div>
+    <div class="panel-header-actions">
+      <button class="primary-button" type="button" id="regMovementFromDevBtn"><span aria-hidden="true">＋</span> Nuevo dispositivo</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <div class="search-wrap">
+      <span aria-hidden="true">⌕</span>
+      <label class="sr-only" for="deviceSearch">Buscar dispositivos</label>
+      <input id="deviceSearch" type="search" placeholder="Buscar nombre, IP, tipo o área…" autocomplete="off" />
+      <button id="clearSearch" class="clear-search" type="button" aria-label="Limpiar búsqueda">×</button>
+    </div>
+    <div class="segmented" aria-label="Filtrar por estado">
+      <button class="selected" type="button" data-filter="all" aria-pressed="true">Todos</button>
+      <button type="button" data-filter="online" aria-pressed="false">En línea</button>
+      <button type="button" data-filter="offline" aria-pressed="false">Fuera de línea</button>
+    </div>
+  </div>
+  <div class="table-wrap" tabindex="0" aria-label="Tabla de dispositivos, desplazable horizontalmente">
+    <table>
+      <thead>
+        <tr>
+          <th aria-sort="ascending"><button type="button" data-sort="name">Dispositivo <span>↕</span></button></th>
+          <th>Dirección IP</th>
+          <th>Tipo</th>
+          <th>Ubicación</th>
+          <th><button type="button" data-sort="status">Estado <span>↕</span></button></th>
+          <th>Última actividad</th>
+        </tr>
+      </thead>
+      <tbody id="deviceRows"></tbody>
+    </table>
+    <div class="empty-state" id="emptyState" hidden><span>⌕</span><strong>Sin coincidencias</strong><p>Ajusta la búsqueda o cambia el filtro de estado.</p></div>
+  </div>
+  <div class="table-footer"><span id="resultCount">Mostrando 7 de 248 dispositivos</span><span>Actualización automática cada 30 s</span></div>
+</section>

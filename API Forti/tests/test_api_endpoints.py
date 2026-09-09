@@ -17,6 +17,7 @@ ENDPOINTS = [
     "/api/v1/traffic/sessions",
     "/api/v1/traffic/destinations",
     "/api/v1/traffic/logs",
+    "/api/v1/traffic/ip/192.168.38.110",
     "/api/v1/firewall/policies",
     "/api/v1/firewall/addresses",
     "/api/v1/firewall/address-groups",

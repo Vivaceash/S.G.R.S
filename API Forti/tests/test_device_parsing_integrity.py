@@ -6,7 +6,7 @@ from app.schemas.devices import DeviceItem
 def test_parse_device_historical_cache_is_marked_offline():
     """
     Asegura que registros históricos de FortiOS con 'is_online: True' y 'online_interfaces: [...]'
-    vistos hace horas o días NUNCA se clasifiquen como online.
+    vistos hace horas o días NUNCA se clasifiquen como online si no tienen presencia en ARP/live_macs.
     """
     now = time.time()
     old_raw_device = {
@@ -19,12 +19,12 @@ def test_parse_device_historical_cache_is_marked_offline():
     }
 
     parsed = _parse_device(old_raw_device, current_time=now, active_window_seconds=390)
-    assert parsed.is_online is False, "Un dispositivo visto hace 7 días debe ser OFFLINE"
+    assert parsed.is_online is False, "Un dispositivo visto hace 7 días sin presencia en ARP debe ser OFFLINE"
 
 
 def test_parse_device_active_device_is_marked_online():
     """
-    Asegura que un dispositivo con actividad reciente (dentro de los 390 segundos)
+    Asegura que un dispositivo con actividad reciente (dentro de la ventana de actividad)
     sea marcado como online.
     """
     now = time.time()
@@ -41,9 +41,29 @@ def test_parse_device_active_device_is_marked_online():
     assert parsed.is_online is True, "Un dispositivo visto hace 2 minutos debe ser ONLINE"
 
 
+def test_parse_device_in_live_macs_marked_online_even_if_idle():
+    """
+    Asegura que un dispositivo en reposo con presencia en live_macs
+    se clasifique como ONLINE si está dentro de la ventana de actividad configurada.
+    """
+    now = time.time()
+    idle_live_device = {
+        "mac": "b2:0e:1e:7b:d5:ca",
+        "ip": "15.40.5.64",
+        "hostname": "S23-EN-REPOSO",
+        "is_online": True,
+        "online_interfaces": ["SSID-Meztli"],
+        "last_seen": now - 1800,  # Visto hace 30 minutos (inactivo)
+    }
+    live_macs = {"b2:0e:1e:7b:d5:ca"}
+
+    parsed = _parse_device(idle_live_device, current_time=now, active_window_seconds=3600, live_macs=live_macs)
+    assert parsed.is_online is True, "Dispositivo presente en live_macs dentro de la ventana debe ser ONLINE"
+
+
 def test_parse_device_missing_or_null_last_seen_is_offline():
     """
-    Asegura que dispositivos sin last_seen o con timestamp 0 sean offline.
+    Asegura que dispositivos sin last_seen o con timestamp 0 sean offline si no están en live_macs.
     """
     now = time.time()
     device_no_timestamp = {
@@ -76,3 +96,46 @@ def test_online_offline_sum_equals_total_inventory():
     assert online_count == 10
     assert offline_count == 40
     assert online_count + offline_count == len(raw_devices)
+
+
+def test_parse_device_not_in_live_macs_is_strictly_offline():
+    """
+    Asegura que si live_macs está provisto (desde unified_latest), un dispositivo que NO esté
+    en live_macs sea estrictamente OFFLINE, garantizando coincidencia 1:1 con el widget 'Assets'
+    oficial de FortiGate.
+    """
+    now = time.time()
+    device = {
+        "mac": "cc:22:33:44:55:66",
+        "ip": "10.0.0.99",
+        "hostname": "TEST-DEV",
+        "is_online": True,
+        "last_seen": now - 30,  # Visto hace solo 30s
+    }
+    live_macs = {"aa:bb:cc:dd:ee:ff"}  # MAC diferente
+
+    parsed = _parse_device(device, current_time=now, live_macs=live_macs)
+    assert parsed.is_online is False, "Si live_macs está provisto y la MAC no está presente, debe ser OFFLINE"
+
+
+def test_live_macs_exact_count_in_inventory():
+    """
+    Garantiza que en un inventario de 100 equipos, si live_macs contiene exactamente 35 MACs,
+    el conteo de online_devices sea exactamente 35 y offline_devices sea exactamente 65.
+    """
+    now = time.time()
+    raw_devices = [
+        {"mac": f"00:11:22:33:44:{i:02x}", "last_seen": now - 50, "is_online": True}
+        for i in range(100)
+    ]
+    # Solo 35 en live_macs
+    live_macs = {f"00:11:22:33:44:{i:02x}" for i in range(35)}
+
+    parsed_list = [_parse_device(d, current_time=now, live_macs=live_macs) for d in raw_devices]
+    online = sum(1 for d in parsed_list if d.is_online)
+    offline = sum(1 for d in parsed_list if not d.is_online)
+
+    assert online == 35
+    assert offline == 65
+    assert online + offline == 100
+

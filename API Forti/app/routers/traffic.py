@@ -1,11 +1,17 @@
+import asyncio
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 
 from app.core.security import verify_api_key
 from app.clients.fortios import fortios_client
 from app.schemas.common import BaseResponse
-from app.schemas.traffic import ActiveSessionItem, VisitedDestinationSummary, WebActivityRecord
+from app.schemas.traffic import (
+    ActiveSessionItem,
+    DeviceTrafficSummary,
+    VisitedDestinationSummary,
+    WebActivityRecord,
+)
 
 router = APIRouter(
     prefix="/traffic",
@@ -234,21 +240,230 @@ async def get_traffic_activity_logs(
             rec = WebActivityRecord(
                 timestamp=f"{log_item.get('date', '')} {log_item.get('time', '')}".strip() or str(log_item.get("itime", "")),
                 src_ip=log_item.get("srcip"),
-                src_name=log_item.get("srcname") or log_item.get("user"),
+                src_name=log_item.get("srcname") or log_item.get("user") or log_item.get("unauthuser"),
                 dst_ip=log_item.get("dstip"),
                 hostname=host,
                 url=log_item.get("url"),
-                service=log_item.get("service") or log_item.get("proto"),
+                service=log_item.get("service") or (str(log_item.get("proto")) if log_item.get("proto") is not None else None),
                 action=log_item.get("action") or log_item.get("status"),
                 app_category=log_item.get("catdesc") or log_item.get("appcat"),
                 sent_bytes=log_item.get("sentbyte"),
                 rcvd_bytes=log_item.get("rcvdbyte"),
             )
             records.append(rec)
+            if len(records) >= limit:
+                break
 
     return BaseResponse(
         success=True,
         message=f"Se obtuvieron {len(records)} registros de actividad.",
         data=records,
         vdom=raw.get("vdom") or vdom,
+    )
+
+
+@router.get(
+    "/ip/{ip}",
+    response_model=BaseResponse[DeviceTrafficSummary],
+    summary="Consultar perfil completo de tráfico, sesiones activas y actividad de una IP específica",
+)
+async def get_device_traffic_by_ip(
+    ip: str = Path(..., pattern=r"^[0-9a-fA-F:\.]{1,45}$", description="Dirección IP a consultar (ej. 192.168.38.110 o 15.40.4.128)"),
+    direction: str = Query("all", pattern=r"^(all|outbound|inbound)$", description="Dirección del tráfico: 'all' (ambas), 'outbound' (salida), 'inbound' (entrada)"),
+    limit: int = Query(50, ge=5, le=200, description="Cantidad máxima de sesiones y logs a retornar"),
+    vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar"),
+):
+    """
+    Obtiene en una sola llamada el perfil completo de tráfico de una dirección IP:
+    - Sesiones activas en tiempo real (salida y entrada, puertos, protocolos).
+    - Métricas acumuladas (bytes enviados y recibidos).
+    - Principales destinos u orígenes remotos conectados.
+    - Registros históricos recientes de tráfico (salida e ingresos a esa IP).
+    """
+    clean_ip = ip.strip()
+
+    t_sessions = fortios_client.get_active_sessions(count=1000, vdom=vdom)
+
+    # Consultar logs de tráfico según la dirección solicitada
+    if direction == "outbound":
+        t_logs_tasks = [fortios_client.get_traffic_logs(log_type="traffic/forward", rows_per_page=limit, filter_str=f"srcip=={clean_ip}", vdom=vdom)]
+    elif direction == "inbound":
+        t_logs_tasks = [fortios_client.get_traffic_logs(log_type="traffic/forward", rows_per_page=limit, filter_str=f"dstip=={clean_ip}", vdom=vdom)]
+    else:
+        # "all": Consultar concurrentemente tanto tráfico de salida (srcip) como tráfico de entrada (dstip)
+        t_logs_tasks = [
+            fortios_client.get_traffic_logs(log_type="traffic/forward", rows_per_page=limit, filter_str=f"srcip=={clean_ip}", vdom=vdom),
+            fortios_client.get_traffic_logs(log_type="traffic/forward", rows_per_page=limit, filter_str=f"dstip=={clean_ip}", vdom=vdom),
+        ]
+
+    gathered = await asyncio.gather(t_sessions, *t_logs_tasks, return_exceptions=True)
+    raw_sessions = gathered[0] if not isinstance(gathered[0], Exception) else {}
+    logs_responses = [g for g in gathered[1:] if not isinstance(g, Exception)]
+
+    # 1. Procesar sesiones activas de esta IP
+    sessions_list = _get_raw_sessions_list(raw_sessions)
+    ip_sessions: List[ActiveSessionItem] = []
+    dest_stats: Dict[str, Dict[str, Any]] = defaultdict(
+        lambda: {"count": 0, "bytes": 0, "ports": set(), "clients": set()}
+    )
+    total_sent = 0
+    total_rcvd = 0
+    outbound_count = 0
+    inbound_count = 0
+
+    for s_raw in sessions_list:
+        if isinstance(s_raw, dict):
+            s = _parse_session(s_raw)
+            is_out = (s.src_ip == clean_ip)
+            is_in = (s.dst_ip == clean_ip)
+
+            if is_out or is_in:
+                s.direction = "outbound" if is_out else "inbound"
+                if is_out:
+                    outbound_count += 1
+                if is_in:
+                    inbound_count += 1
+
+                # Filtrar si se solicitó exclusivamente una sola dirección
+                if direction == "outbound" and not is_out:
+                    continue
+                if direction == "inbound" and not is_in:
+                    continue
+
+                ip_sessions.append(s)
+                if s.bytes_sent:
+                    total_sent += s.bytes_sent
+                if s.bytes_received:
+                    total_rcvd += s.bytes_received
+
+                remote_ip = s.dst_ip if is_out else s.src_ip
+                if remote_ip:
+                    dest_stats[remote_ip]["count"] += 1
+                    total_b = (s.bytes_sent or 0) + (s.bytes_received or 0)
+                    dest_stats[remote_ip]["bytes"] += total_b
+                    port = s.dst_port if is_out else s.src_port
+                    if port:
+                        dest_stats[remote_ip]["ports"].add(port)
+                    dest_stats[remote_ip]["clients"].add(clean_ip)
+
+    # Top destinos / equipos remotos
+    sorted_dest = sorted(dest_stats.items(), key=lambda x: (x[1]["bytes"], x[1]["count"]), reverse=True)
+    top_destinations = [
+        VisitedDestinationSummary(
+            destination=dest,
+            session_count=stats["count"],
+            total_bytes=stats["bytes"],
+            ports_used=sorted(list(stats["ports"])),
+            client_ips=sorted(list(stats["clients"])),
+        )
+        for dest, stats in sorted_dest[:15]
+    ]
+
+    # 2. Procesar logs de tráfico (salida y entrada)
+    records: List[WebActivityRecord] = []
+    seen_log_keys = set()
+
+    for resp in logs_responses:
+        results = resp.get("results", [])
+        logs_raw = results if isinstance(results, list) else results.get("data", [])
+
+        for log_item in logs_raw:
+            if isinstance(log_item, dict):
+                src = log_item.get("srcip")
+                dst = log_item.get("dstip")
+                is_out = (src == clean_ip)
+                dir_val = "outbound" if is_out else "inbound"
+
+                # Deduplicación por timestamp + src + dst + servicio
+                key = (
+                    log_item.get("date"),
+                    log_item.get("time"),
+                    src,
+                    dst,
+                    log_item.get("service") or log_item.get("proto"),
+                    log_item.get("sentbyte"),
+                )
+                if key in seen_log_keys:
+                    continue
+                seen_log_keys.add(key)
+
+                host = log_item.get("hostname") or log_item.get("dstname") or log_item.get("domain") or log_item.get("url")
+                rec = WebActivityRecord(
+                    timestamp=f"{log_item.get('date', '')} {log_item.get('time', '')}".strip() or str(log_item.get("itime", "")),
+                    direction=dir_val,
+                    src_ip=src,
+                    src_name=log_item.get("srcname") or log_item.get("user") or log_item.get("unauthuser"),
+                    dst_ip=dst,
+                    hostname=host,
+                    url=log_item.get("url"),
+                    service=log_item.get("service") or (str(log_item.get("proto")) if log_item.get("proto") is not None else None),
+                    action=log_item.get("action") or log_item.get("status"),
+                    app_category=log_item.get("catdesc") or log_item.get("appcat"),
+                    sent_bytes=log_item.get("sentbyte"),
+                    rcvd_bytes=log_item.get("rcvdbyte"),
+                )
+                records.append(rec)
+
+    # Ordenar cronológicamente descendente (más recientes primero)
+    records.sort(key=lambda r: r.timestamp or "", reverse=True)
+    records = records[:limit]
+
+    outbound_logs_c = sum(1 for r in records if r.direction == "outbound")
+    inbound_logs_c = sum(1 for r in records if r.direction == "inbound")
+
+    # Si no hay sesiones activas en este instante (tabla conntrack vacía para este host),
+    # estimar bytes transferidos y destinos principales a partir de los logs recientes
+    if total_sent == 0 and total_rcvd == 0 and records:
+        for r in records:
+            if r.direction == "outbound":
+                if r.sent_bytes:
+                    total_sent += r.sent_bytes
+                if r.rcvd_bytes:
+                    total_rcvd += r.rcvd_bytes
+            else:
+                if r.rcvd_bytes:
+                    total_rcvd += r.rcvd_bytes
+                if r.sent_bytes:
+                    total_sent += r.sent_bytes
+
+    if not top_destinations and records:
+        log_dest_stats = defaultdict(lambda: {"count": 0, "bytes": 0, "ports": set(), "clients": set()})
+        for r in records:
+            remote = r.dst_ip if r.direction == "outbound" else r.src_ip
+            if remote:
+                log_dest_stats[remote]["count"] += 1
+                b = (r.sent_bytes or 0) + (r.rcvd_bytes or 0)
+                log_dest_stats[remote]["bytes"] += b
+                log_dest_stats[remote]["clients"].add(clean_ip)
+        sorted_ld = sorted(log_dest_stats.items(), key=lambda x: (x[1]["bytes"], x[1]["count"]), reverse=True)
+        top_destinations = [
+            VisitedDestinationSummary(
+                destination=dest,
+                session_count=stats["count"],
+                total_bytes=stats["bytes"],
+                ports_used=[],
+                client_ips=sorted(list(stats["clients"])),
+            )
+            for dest, stats in sorted_ld[:15]
+        ]
+
+    summary = DeviceTrafficSummary(
+        ip=clean_ip,
+        active_sessions_count=len(ip_sessions),
+        outbound_sessions_count=outbound_count,
+        inbound_sessions_count=inbound_count,
+        outbound_logs_count=outbound_logs_c,
+        inbound_logs_count=inbound_logs_c,
+        total_sent_bytes=total_sent,
+        total_rcvd_bytes=total_rcvd,
+        sessions=ip_sessions[:limit],
+        recent_logs=records,
+        top_destinations=top_destinations,
+    )
+
+    return BaseResponse(
+        success=True,
+        message=f"Perfil de tráfico para IP {clean_ip}: {len(ip_sessions)} sesiones activas ({outbound_count} salida, {inbound_count} entrada), {len(records)} logs recientes.",
+        data=summary,
+        vdom=raw_sessions.get("vdom") or vdom,
     )

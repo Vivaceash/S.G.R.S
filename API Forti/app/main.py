@@ -1,5 +1,7 @@
+import asyncio
 from contextlib import asynccontextmanager
 import logging
+import time
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -38,6 +40,34 @@ logging.basicConfig(
 logger = logging.getLogger("fortinet_api")
 
 
+async def _fortios_telemetry_keepalive():
+    """
+    Tarea en segundo plano que mantiene sincronizado y activo el motor de detección de dispositivos
+    (CID) de FortiOS consultando periódicamente el endpoint unificado y la tabla ARP.
+    Evita que el firewall degrade la telemetría tras periodos prolongados de inactividad.
+    """
+    logger.info("🔄 Iniciando sincronizador continuo de telemetría FortiOS en segundo plano...")
+    while True:
+        try:
+            await asyncio.sleep(60)
+            now_ts = int(time.time())
+            await asyncio.gather(
+                fortios_client.get_connected_devices(params={
+                    "query_type": "unified_latest",
+                    "count": 5000,
+                    "timestamp_from": now_ts - 3600,
+                    "timestamp_to": now_ts + 60,
+                }),
+                fortios_client.get_arp_table(),
+                return_exceptions=True,
+            )
+            logger.debug("✅ Telemetría FortiOS (unified_latest + ARP) sincronizada en segundo plano.")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.debug(f"Aviso en sincronización en segundo plano de FortiOS: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manejo del ciclo de vida de la aplicación."""
@@ -52,7 +82,13 @@ async def lifespan(app: FastAPI):
         if not settings.FORTIOS_VERIFY_SSL and not settings.FORTIOS_CA_BUNDLE:
             logger.warning("⚠️  [ALERTA DE SEGURIDAD] FORTIOS_VERIFY_SSL está desactivado en producción. Se recomienda habilitar TLS estricto o configurar FORTIOS_CA_BUNDLE.")
 
+    keepalive_task = asyncio.create_task(_fortios_telemetry_keepalive())
     yield
+    keepalive_task.cancel()
+    try:
+        await keepalive_task
+    except asyncio.CancelledError:
+        pass
     logger.info("🛑 Apagando aplicación y cerrando pools de conexión HTTPX...")
     await fortios_client.close()
 
