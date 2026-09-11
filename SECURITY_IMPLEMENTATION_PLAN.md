@@ -2,6 +2,8 @@
 
 Estado actualizado: 2026-08-31
 
+> Documento histórico. Para la implementación local actual, consultar [USUARIOS_Y_CONEXIONES.md](USUARIOS_Y_CONEXIONES.md), y para el roadmap institucional [PLAN_USUARIOS_PRIVILEGIOS.md](PLAN_USUARIOS_PRIVILEGIOS.md). El gateway ahora valida sesiones/roles y escucha en loopback por defecto. Las garantías históricas descritas abajo no equivalen a una auditoría del gateway nuevo.
+
 ## Decisión vigente para desarrollo
 
 - La clave `admin` se conserva de forma intencional únicamente para desarrollo local.

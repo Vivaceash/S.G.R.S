@@ -7,17 +7,28 @@ import threading
 import time
 import urllib.request
 import urllib.error
+import http.client
+import ipaddress
+import re
+import ssl
+import unicodedata
+from urllib.parse import urlsplit
+from dashboard_access import connection, connection_headers, AccessError
+from dashboard_routes import AccessRoutes
+from dashboard_reports import ReportRoutes
+from integration_health import upstream_healthy
+from dashboard_history import start_collector
 
 # Lock global para proteger lecturas/escrituras concurrentes a archivos JSON
 _file_lock = threading.Lock()
 
 PORT = int(os.environ.get("DASHBOARD_PORT") or os.environ.get("PORT", 3000))
-DIRECTORY = "Dashboard"
-DATA_DIR = "data"
+# React's build is the only public directory; source and legacy screens are not served.
+DIRECTORY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Dashboard", "dist")
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
 FORTI_API_URL = os.environ.get("FORTI_API_URL", "http://127.0.0.1:8001/api/v1")
 OMNI_API_URL = os.environ.get("OMNI_API_URL", "http://127.0.0.1:8000/api/v1")
-APP_API_KEY = os.environ.get("APP_API_KEY", "admin")
 
 REPORTS_FILE = os.path.join(DATA_DIR, "reports.json")
 IDFS_FILE = os.path.join(DATA_DIR, "idfs.json")
@@ -37,27 +48,52 @@ for fpath, default_val in [
             json.dump(default_val, f, indent=2, ensure_ascii=False)
 
 
-def _fetch_upstream(url, method="GET", headers=None, body=None, timeout=4.0):
-    """Envía peticiones HTTP a los microservicios backend (API Forti / API Omni)."""
-    hdrs = {
-        "User-Agent": "SGRS-Dashboard-Server/1.0",
-        "Accept": "application/json",
-    }
-    if APP_API_KEY:
-        hdrs["X-API-Key"] = APP_API_KEY
-    if headers:
-        for k, v in headers.items():
-            if k.lower() not in ("host", "content-length"):
-                hdrs[k] = v
-    req = urllib.request.Request(url, data=body, headers=hdrs, method=method)
+def _configured_request(config, suffix, timeout=4.0):
+    """GET only; TLS verified, DNS address pinned, redirects never followed."""
+    transport = None
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status, resp.read(), resp.headers.get("Content-Type", "application/json")
-    except urllib.error.HTTPError as e:
-        return e.code, e.read(), e.headers.get("Content-Type", "application/json")
-    except Exception as ex:
-        err_body = json.dumps({"error": f"Servicio upstream no disponible: {ex}"}).encode('utf-8')
-        return 502, err_body, "application/json"
+        parsed = urlsplit(config["url"])
+        if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("Invalid URL")
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        addresses = socket.getaddrinfo(parsed.hostname, port, type=socket.SOCK_STREAM)
+        for item in addresses:
+            ip = ipaddress.ip_address(item[4][0])
+            ip = getattr(ip, 'ipv4_mapped', None) or ip
+            if ip.is_link_local or ip.is_multicast or ip.is_unspecified or (parsed.scheme == "http" and not ip.is_loopback):
+                raise ValueError("Blocked address")
+        address = addresses[0][4][0]
+        transport = (http.client.HTTPSConnection(parsed.hostname, port, timeout=timeout, context=ssl.create_default_context())
+                     if parsed.scheme == "https" else http.client.HTTPConnection(parsed.hostname, port, timeout=timeout))
+        # Pin the checked IP while preserving the original host for TLS SNI/verification.
+        transport._create_connection = lambda target, timeout=timeout, source_address=None: socket.create_connection((address, port), timeout, source_address)
+        headers = {"Accept": "application/json", "User-Agent": "SGRS-Dashboard/2.0", **connection_headers(config)}
+        transport.request("GET", parsed.path.rstrip("/") + suffix, headers=headers)
+        response = transport.getresponse()
+        payload = response.read(4 * 1024 * 1024 + 1)
+        if len(payload) > 4 * 1024 * 1024:
+            raise ValueError("Response too large")
+        # Never reflect upstream error pages (which might echo credentials).
+        if not 200 <= response.status < 300:
+            return response.status, b'{"error":"La API no acepto la consulta."}', "application/json"
+        if "json" not in response.getheader("Content-Type", "").lower():
+            raise ValueError("Expected JSON")
+        json.loads(payload)
+        return response.status, payload, "application/json; charset=utf-8"
+    except Exception:
+        return 502, b'{"error":"Servicio API no disponible. Revisa la configuracion de conexion."}', "application/json"
+    finally:
+        if transport:
+            transport.close()
+
+
+def _fetch_upstream(url, method="GET", headers=None, body=None, timeout=4.0):
+    if method != "GET":
+        return 403, b'{"error":"Metodo no permitido."}', "application/json"
+    for name, base in (("forti", FORTI_API_URL), ("omni", OMNI_API_URL)):
+        if url.startswith(base + "/"):
+            return _configured_request(connection(name), url[len(base):], timeout)
+    return 403, b'{"error":"Destino no permitido."}', "application/json"
 
 
 def _get_device_icon(dev_type, hardware_family, os_name):
@@ -97,7 +133,7 @@ def _format_activity(is_online, last_seen):
         return str(last_seen)
 
 
-class Handler(http.server.SimpleHTTPRequestHandler):
+class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
@@ -108,11 +144,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
             self.send_header('Pragma', 'no-cache')
             self.send_header('Expires', '0')
+            self.send_header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'")
         
-        # Permitir CORS para cualquier cliente en la red local
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('X-Frame-Options', 'DENY')
+        self.send_header('Referrer-Policy', 'same-origin')
+        if getattr(self, '_session_cookie', None):
+            self.send_header('Set-Cookie', self._session_cookie)
+            self._session_cookie = None
         super().end_headers()
 
     def do_OPTIONS(self):
@@ -127,10 +166,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body_bytes)
 
     def _send_json(self, data, status=200):
+        if status == 200 and self.path not in ('/api/auth/session', '/api/auth/login'):
+            data = self.viewer_projection(data)
         body = json.dumps(data, ensure_ascii=False).encode('utf-8')
         self._send_raw(body, status=status, content_type='application/json; charset=utf-8')
 
     def do_GET(self):
+        if self.access_get():
+            return
         path = getattr(self, 'path', '')
 
         # 1. Reportes y telemetría QR
@@ -162,6 +205,126 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self._send_json(data)
             except Exception as e:
                 self._send_json({"error": str(e)}, 500)
+
+        # 3b. Consulta segura de cuentas y terminales OmniVista para Gestión de Altas.
+        # La página es sólo lectura: se exponen campos explícitos, nunca credenciales,
+        # PSK, políticas completas ni el objeto bruto del proveedor.
+        elif path == '/api/altas/omnivista':
+            def omni_collection(endpoint, fields, identity_keys):
+                """Fetch every bounded page; the provider does not publish a reliable total."""
+                rows_by_id = {}
+                status_code = 200
+                complete = False
+                page_size = 500
+                max_pages = 20
+                for page_number in range(1, max_pages + 1):
+                    code, body, _ = _fetch_upstream(f"{OMNI_API_URL}/{endpoint}?page={page_number}&page_size={page_size}", timeout=30.0)
+                    status_code = code
+                    if code != 200:
+                        return list(rows_by_id.values()), code, False
+                    try:
+                        payload = json.loads(body.decode('utf-8'))
+                        data = payload.get('data') if isinstance(payload, dict) else None
+                        page_rows = data.get('items', []) if isinstance(data, dict) else data
+                        if not isinstance(page_rows, list):
+                            return list(rows_by_id.values()), 502, False
+                    except (ValueError, UnicodeError, AttributeError):
+                        return list(rows_by_id.values()), 502, False
+                    for row in page_rows:
+                        if isinstance(row, dict):
+                            projected = {key: row.get(key) for key in fields if key in row}
+                            identity = next((str(projected.get(key) or row.get(key)) for key in identity_keys if projected.get(key) or row.get(key)), None)
+                            rows_by_id[identity or f"page-{page_number}-row-{len(rows_by_id)}"] = projected
+                    if len(page_rows) < page_size:
+                        complete = True
+                        break
+                return list(rows_by_id.values()), status_code, complete
+            users, users_status, users_complete = omni_collection('employees', ('username', 'fullName', 'department', 'position', 'accessRoleProfile', 'status', 'email'), ('username', 'id'))
+            devices, devices_status, devices_complete = omni_collection('company-properties', ('deviceMac', 'deviceName', 'account', 'employeeAccount', 'accessRoleProfile', 'deviceCategory', 'deviceFamily', 'deviceOS', 'status', 'lastAccessDeviceName', 'lastAccessLocation'), ('deviceMac', 'id'))
+            # Cotejo de Company Property contra el inventario observado por FortiGate.
+            forti_by_mac, forti_by_ip = {}, {}
+            forti_status = 502
+            try:
+                code, body, _ = _fetch_upstream(f"{FORTI_API_URL}/devices?status=all&active_window=3600", timeout=30.0)
+                forti_status = code
+                payload = json.loads(body.decode('utf-8'))
+                for item in ((payload.get('data') or {}).get('devices') or []):
+                    if not isinstance(item, dict):
+                        continue
+                    projected = {"name": item.get("hostname") or item.get("ip") or item.get("mac"), "ip": item.get("ip"), "mac": item.get("mac"), "type": item.get("device_type") or item.get("hardware_family"), "vendor": item.get("hardware_vendor"), "interface": item.get("interface"), "status": "online" if item.get("is_online") else "offline", "last_seen": item.get("last_seen")}
+                    mac = ''.join(ch for ch in str(projected.get("mac") or '').lower() if ch.isalnum())
+                    ip = str(projected.get("ip") or '').strip()
+                    if mac: forti_by_mac[mac] = projected
+                    if ip: forti_by_ip[ip] = projected
+            except (ValueError, UnicodeError, AttributeError, TypeError):
+                pass
+            def association_key(value):
+                """Canonical key for OmniVista identity fields (case/spacing/accents agnostic)."""
+                text = unicodedata.normalize('NFKD', str(value or '').strip().casefold())
+                return ''.join(char for char in text if char.isalnum())
+
+            def device_name_base(value):
+                """Return the account portion of OmniVista names such as usuario - cel/lap."""
+                raw = str(value or '').strip().casefold()
+                match = re.match(r'^(.*?)(?:\s*[-_/]\s*)(cel|lap)(?:\b|$)', raw)
+                if match:
+                    return association_key(match.group(1)), match.group(2)
+                return association_key(raw), None
+
+            user_index = {}
+            for user in users:
+                for field in ("username", "email"):
+                    value = association_key(user.get(field))
+                    if value:
+                        user_index.setdefault(value, user.get("username"))
+            # Algunos endpoints devuelven deviceName como usuario + sufijo de terminal
+            # (por ejemplo usuario-lap / usuario-cel). Se ordena por longitud para
+            # evitar que un usuario corto capture al usuario más específico.
+            prefix_index = sorted(
+                ((key, username) for key, username in user_index.items() if len(key) >= 5),
+                key=lambda item: len(item[0]),
+                reverse=True,
+            )
+            grouped = {}
+            forti_matches = 0
+            associated_devices = 0
+            for device in devices:
+                candidates = [device.get("employeeAccount"), device.get("account"), device.get("deviceName")]
+                account = None
+                association_source = None
+                for value, source in zip(candidates, ("employeeAccount", "account", "deviceName")):
+                    key = association_key(value)
+                    if key in user_index:
+                        account = user_index[key]
+                        association_source = source
+                        break
+                if not account:
+                    device_name, device_suffix = device_name_base(device.get("deviceName"))
+                    # El formato -cel/-lap es el identificador de cuenta usado por
+                    # Company Property para terminales móviles y laptops.
+                    if device_suffix:
+                        account = user_index.get(device_name)
+                        if account:
+                            association_source = f"deviceName-base-{device_suffix}"
+                if not account:
+                    device_name = association_key(device.get("deviceName"))
+                    for key, username in prefix_index:
+                        if device_name.startswith(key):
+                            account = username
+                            association_source = "deviceName-prefijo"
+                            break
+                mac = ''.join(ch for ch in str(device.get("deviceMac") or '').lower() if ch.isalnum())
+                match = forti_by_mac.get(mac)
+                if match:
+                    forti_matches += 1
+                item = {**device, "forti": match, "cotejo": "encontrado" if match else "sin coincidencia en FortiGate", "asociacion": association_source or "sin cuenta coincidente"}
+                if account:
+                    associated_devices += 1
+                    grouped.setdefault(account.casefold(), []).append(item)
+            for user in users:
+                account = str(user.get("username") or '').strip().lower()
+                user["devices"] = grouped.get(account, [])
+            self._send_json({"success": users_status == 200, "data": {"users": users, "sources": {"users": {"status": users_status, "complete": users_complete, "count": len(users)}, "company_properties": {"status": devices_status, "complete": devices_complete, "count": len(devices), "associated": associated_devices, "unassociated": max(0, len(devices) - associated_devices)}, "fortigate": {"status": forti_status, "count": len(forti_by_mac), "matches": forti_matches} }}, "message": "Cotejo completo de cuentas, dispositivos y FortiGate en modo lectura."})
 
         # 4. Catálogo general de dispositivos (Integrado en vivo con API Forti + Fallback)
         elif path.startswith('/api/devices'):
@@ -227,31 +390,33 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         elif path.startswith('/api/traffic/ip/'):
             subpath = path[len('/api/traffic/ip/'):]
             target_url = f"{FORTI_API_URL}/traffic/ip/{subpath}"
-            status_code, body, ctype = _fetch_upstream(target_url, timeout=4.0)
+            status_code, body, ctype = _fetch_upstream(target_url, timeout=12.0)
             self._send_raw(body, status=status_code, content_type=ctype)
 
         # 6. Proxy para API Forti (Puerto 8001)
         elif path.startswith('/api/forti/'):
             subpath = path[len('/api/forti/'):]
             target_url = f"{FORTI_API_URL}/{subpath}"
-            status_code, body, ctype = _fetch_upstream(target_url, timeout=4.0)
+            status_code, body, ctype = _fetch_upstream(target_url, timeout=12.0)
             self._send_raw(body, status=status_code, content_type=ctype)
 
         # 7. Proxy para API OmniVista (Puerto 8000)
         elif path.startswith('/api/omni/'):
             subpath = path[len('/api/omni/'):]
             target_url = f"{OMNI_API_URL}/{subpath}"
-            status_code, body, ctype = _fetch_upstream(target_url, timeout=4.0)
+            status_code, body, ctype = _fetch_upstream(target_url, timeout=12.0)
             self._send_raw(body, status=status_code, content_type=ctype)
 
         # 8. Verificación de salud global de la plataforma (Health Check)
         elif path == '/api/health':
-            forti_code, _, _ = _fetch_upstream(f"{FORTI_API_URL.replace('/api/v1', '')}/health", timeout=1.5)
-            omni_code, _, _ = _fetch_upstream(f"{OMNI_API_URL.replace('/api/v1', '')}/health", timeout=1.5)
+            forti_code, forti_body, _ = _fetch_upstream(f"{FORTI_API_URL}/health", timeout=5)
+            omni_code, omni_body, _ = _fetch_upstream(f"{OMNI_API_URL}/system/health", timeout=5)
+            forti_ok = upstream_healthy("forti", forti_code, forti_body)
+            omni_ok = upstream_healthy("omni", omni_code, omni_body)
             self._send_json({
-                "status": "ok",
-                "forti": forti_code == 200,
-                "omni": omni_code == 200,
+                "status": "ok" if forti_ok and omni_ok else "degraded",
+                "forti": forti_ok,
+                "omni": omni_ok,
                 "dashboard": True,
             })
 
@@ -275,64 +440,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 pass
 
     def do_POST(self):
+        if self.access_post():
+            return
         path = getattr(self, 'path', '')
 
-        # Proxy para endpoints POST de API Forti
-        if path.startswith('/api/forti/'):
-            subpath = path[len('/api/forti/'):]
-            content_length = int(self.headers.get('Content-Length', 0))
-            post_data = self.rfile.read(content_length) if content_length > 0 else None
-            status_code, body, ctype = _fetch_upstream(f"{FORTI_API_URL}/{subpath}", method="POST", body=post_data, timeout=4.0)
-            self._send_raw(body, status=status_code, content_type=ctype)
-            return
-
-        # Proxy para endpoints POST de API Omni
-        if path.startswith('/api/omni/'):
-            subpath = path[len('/api/omni/'):]
-            content_length = int(self.headers.get('Content-Length', 0))
-            post_data = self.rfile.read(content_length) if content_length > 0 else None
-            status_code, body, ctype = _fetch_upstream(f"{OMNI_API_URL}/{subpath}", method="POST", body=post_data, timeout=4.0)
-            self._send_raw(body, status=status_code, content_type=ctype)
-            return
-
-        # 1. Guardar reportes e incidencias QR
-        if path == '/api/reports':
-            try:
-                content_length = int(self.headers['Content-Length'])
-                post_data = self.rfile.read(content_length)
-                data = json.loads(post_data.decode('utf-8'))
-
-                idf_id = data.get("idf_id")
-                incident = data.get("incident")
-                telemetry = data.get("telemetry")
-
-                if not idf_id:
-                    self._send_json({"error": "Falta idf_id"}, 400)
-                    return
-
-                with _file_lock:
-                    with open(REPORTS_FILE, 'r', encoding='utf-8') as f:
-                        reports = json.load(f)
-
-                    if idf_id not in reports or type(reports[idf_id]) is list:
-                        old_incidents = reports[idf_id] if type(reports.get(idf_id)) is list else []
-                        reports[idf_id] = {"incidents": old_incidents, "telemetry": None}
-
-                    if incident:
-                        reports[idf_id]["incidents"].insert(0, incident)
-
-                    if telemetry:
-                        reports[idf_id]["telemetry"] = telemetry
-
-                    with open(REPORTS_FILE, 'w', encoding='utf-8') as f:
-                        json.dump(reports, f, indent=2, ensure_ascii=False)
-
-                self._send_json({"status": "success"})
-            except Exception as e:
-                self._send_json({"error": str(e)}, 500)
-
-        # 2. Actualizar o liberar dirección IP en el pool (Persistencia en disco)
-        elif path == '/api/ips/update':
+        # AccessRoutes handles accounts, configuration and validated mobile reports.
+        # Only authorized inventory mutations reach the compatibility handlers below.
+        if path == '/api/ips/update':
             try:
                 content_length = int(self.headers['Content-Length'])
                 post_data = self.rfile.read(content_length)
@@ -424,6 +538,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except Exception:
             pass
 
+    def probe_connection(self, value):
+        return _configured_request(value, "/health" if value["id"] == "forti" else "/system/health", timeout=8.0)
+
+    def report_context(self):
+        return REPORTS_FILE, IDFS_FILE, _file_lock
+
 
 class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
@@ -431,6 +551,24 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 
 if __name__ == "__main__":
+    # Reuse only the matching local API's existing key; never forward it to a
+    # custom destination. Explicit environment and saved connections win.
+    from dotenv import dotenv_values
+    for service, folder, api_port in (("forti", "API Forti", 8001), ("omni", "API Omni", 8000)):
+        local_url = f"http://127.0.0.1:{api_port}/api/v1"
+        key_name = f"{service.upper()}_API_KEY"
+        if not os.environ.get(key_name) and not os.environ.get("APP_API_KEY") and os.environ.get(f"{service.upper()}_API_URL", local_url) == local_url:
+            local_env = dotenv_values(os.path.join(os.path.dirname(os.path.abspath(__file__)), folder, ".env"))
+            local_key = local_env.get("APP_API_KEY") or local_env.get("API_SECRET_KEY")
+            if local_key:
+                os.environ[key_name] = local_key.split(",")[0].strip().strip("\"'")
+    public_origin = os.environ.get("SGRS_PUBLIC_ORIGIN", "")
+    if public_origin:
+        parsed_origin = urlsplit(public_origin)
+        if parsed_origin.scheme != "https" or not parsed_origin.hostname or parsed_origin.username or parsed_origin.password or parsed_origin.path not in ("", "/") or parsed_origin.query or parsed_origin.fragment:
+            raise SystemExit("SGRS_PUBLIC_ORIGIN debe ser un origen HTTPS, sin ruta ni credenciales.")
+    if not os.path.isfile(os.path.join(DIRECTORY, "index.html")):
+        raise SystemExit("Falta compilar el dashboard: ejecuta npm ci y npm run build en Dashboard/.")
     preferred_port = int(os.environ.get("DASHBOARD_PORT") or os.environ.get("PORT", 3000))
     candidate_ports = [preferred_port]
     if 3001 not in candidate_ports:
@@ -441,7 +579,7 @@ if __name__ == "__main__":
     started = False
     for p in candidate_ports:
         try:
-            server = ThreadedHTTPServer(("", p), Handler)
+            server = ThreadedHTTPServer((os.environ.get("DASHBOARD_HOST", "127.0.0.1"), p), Handler)
             PORT = p
             print("====================================================")
             print(f"  S.G.R.S Servidor Multi-hilo Activo en Puerto {PORT}")
@@ -449,7 +587,12 @@ if __name__ == "__main__":
             print("  Base de datos conectada en ./data/")
             print("====================================================")
             started = True
-            server.serve_forever()
+            stop_metrics = start_collector(lambda service, path: _configured_request(connection(service), path, timeout=12))
+            try:
+                server.serve_forever()
+            finally:
+                stop_metrics.set()
+                server.server_close()
             break
         except OSError as e:
             print(f"[SGRS] Puerto {p} ocupado ({e}). Intentando puerto alternativo...")

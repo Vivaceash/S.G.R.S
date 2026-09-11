@@ -23,8 +23,8 @@ class InfrastructureStatsResponse(BaseModel):
     accessPointsCount: int = Field(0, description="Total de Access Points")
     switchesCount: int = Field(0, description="Total de Switches")
     otherDevicesCount: int = Field(0, description="Otros equipos de infraestructura")
-    registeredEmployeesCount: int = Field(0, description="Total de cuentas de empleados registradas en UPAM")
-    registeredMacsCount: int = Field(0, description="Total de dispositivos/MACs registradas en Company Property")
+    registeredEmployeesCount: Optional[int] = Field(None, description="Total confirmado de cuentas; null cuando el proveedor no publica el total")
+    registeredMacsCount: Optional[int] = Field(None, description="Total confirmado de terminales; null cuando el proveedor no publica el total")
 
 
 class VlanItemResponse(BaseModel):

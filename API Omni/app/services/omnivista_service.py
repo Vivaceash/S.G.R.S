@@ -132,9 +132,11 @@ class OmniVistaService:
         self, page: int = 1, page_size: int = 50, search: Optional[str] = None
     ) -> Dict[str, Any]:
         """Obtiene la lista de cuentas de empleados con soporte de búsqueda y paginación"""
+        if page * page_size > 10000:
+            raise OmniVistaResponseError("La consulta supera el límite de lectura de 10,000 registros; requiere paginación compatible del proveedor.", status_code=422)
         payload = {
             "start": "",
-            "querySize": page_size * 5 if search else page_size,
+            "querySize": min(10000, max(page * page_size + 1, page_size * 5 if search else 0)),
             "queryBy": "Account"
         }
         res = self.request("POST", "/api/ham/userAccount/getPageAllAccountList", json=payload, timeout=12)
@@ -145,7 +147,7 @@ class OmniVistaService:
                 details={"upstream_status": res.status_code},
             )
 
-        data = res.json()
+        data = self._required_json(res)
         raw_items = data.get("data", [])
 
         if search:
@@ -175,10 +177,12 @@ class OmniVistaService:
 
         return {
             "items": cleaned_items,
-            "total": total,
+            "total": None,
+            "returned_count": len(cleaned_items),
+            "complete": False,
             "page": page,
             "page_size": page_size,
-            "has_more": end_idx < total
+            "has_more": True if end_idx < total else None
         }
 
     def get_employee_by_username(self, username: str) -> Optional[Dict[str, Any]]:
@@ -197,9 +201,11 @@ class OmniVistaService:
         self, page: int = 1, page_size: int = 50, search: Optional[str] = None
     ) -> Dict[str, Any]:
         """Obtiene la lista de dispositivos / MACs registradas en Company Property"""
+        if page * page_size > 10000:
+            raise OmniVistaResponseError("La consulta supera el límite de lectura de 10,000 registros; requiere paginación compatible del proveedor.", status_code=422)
         payload = {
             "start": "",
-            "querySize": page_size * 5 if search else page_size,
+            "querySize": min(10000, max(page * page_size + 1, page_size * 5 if search else 0)),
             "queryBy": "Account"
         }
         res = self.request("POST", "/api/ham/enterpriseProperty/getAllPageEnterprisePropertyInfo", json=payload, timeout=12)
@@ -210,7 +216,7 @@ class OmniVistaService:
                 details={"upstream_status": res.status_code},
             )
 
-        data = res.json()
+        data = self._required_json(res)
         raw_items = data.get("data", [])
 
         if search:
@@ -233,10 +239,12 @@ class OmniVistaService:
 
         return {
             "items": sanitize_data(paginated_items),
-            "total": total,
+            "total": None,
+            "returned_count": len(paginated_items),
+            "complete": False,
             "page": page,
             "page_size": page_size,
-            "has_more": end_idx < total
+            "has_more": True if end_idx < total else None
         }
 
     def get_company_property_by_mac(self, device_mac: str) -> Optional[Dict[str, Any]]:
@@ -295,13 +303,27 @@ class OmniVistaService:
     def get_vlans(self) -> List[Dict[str, Any]]:
         """Obtiene la lista de VLANs configuradas en la infraestructura"""
         res = self.request("GET", "/api/vlan", timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            if isinstance(data, list):
-                return sanitize_data(data)
-            if isinstance(data, dict):
-                return sanitize_data(data.get("response", data.get("data", [])))
-        return []
+        data = self._required_json(res)
+        if isinstance(data, dict):
+            data = data.get("response", data.get("data"))
+        if not isinstance(data, list) or any(not isinstance(row, dict) for row in data):
+            raise OmniVistaResponseError("El proveedor no entregó un catálogo de VLANs válido.")
+        return sanitize_data(data)
+
+    @staticmethod
+    def _required_json(response):
+        """Never represent an unavailable endpoint or HTML login page as empty data."""
+        if not 200 <= response.status_code < 300:
+            raise OmniVistaResponseError("La consulta no está disponible en el proveedor.")
+        try:
+            data = response.json()
+        except ValueError:
+            raise OmniVistaResponseError("El proveedor no entregó una respuesta JSON válida.") from None
+        if not isinstance(data, (dict, list)):
+            raise OmniVistaResponseError("El proveedor entregó un formato no compatible.")
+        if isinstance(data, dict) and (data.get("success") is False or data.get("error")):
+            raise OmniVistaResponseError("El proveedor rechazó la consulta.")
+        return data
 
     # =========================================================================
     # 4. Infraestructura, Monitoreo y Topología
@@ -339,11 +361,12 @@ class OmniVistaService:
         """Calcula el resumen métrico de infraestructura y registros"""
         devices = self.get_devices()
         aps_count = sum(1 for d in devices if "AP" in (d.get("model") or d.get("chassisType") or d.get("sysName") or ""))
-        switches_count = sum(1 for d in devices if "AOS" in (d.get("model") or d.get("chassisType") or "") or "IDF" in (d.get("sysName") or ""))
+        switches_count = sum(1 for d in devices if "AP" not in (d.get("model") or d.get("chassisType") or d.get("sysName") or "") and ("AOS" in (d.get("model") or d.get("chassisType") or "") or "IDF" in (d.get("sysName") or "")))
         other_devices = len(devices) - (aps_count + switches_count)
 
-        emp_count = self.get_employee_accounts(page=1, page_size=1).get("total", 0)
-        mac_count = self.get_company_properties(page=1, page_size=1).get("total", 0)
+        # Provider returns pages without a verified total. Never use page length.
+        emp_count = None
+        mac_count = None
 
         return {
             "totalDevices": len(devices),
@@ -357,22 +380,12 @@ class OmniVistaService:
     def get_topology(self) -> Any:
         """Obtiene la topología de interconexión de dispositivos de red"""
         res = self.request("GET", "/api/topology/devices", timeout=12)
-        if res.status_code == 200:
-            try:
-                return sanitize_data(res.json())
-            except Exception:
-                return []
-        return []
+        return sanitize_data(self._required_json(res))
 
     def get_notifications(self) -> Any:
         """Obtiene las alarmas, advertencias y notificaciones activas del NMS"""
         res = self.request("GET", "/api/notifications", timeout=10)
-        if res.status_code == 200:
-            try:
-                return sanitize_data(res.json())
-            except Exception:
-                return []
-        return []
+        return sanitize_data(self._required_json(res))
 
     # =========================================================================
     # 5. Diagnóstico y Sistema
@@ -381,12 +394,7 @@ class OmniVistaService:
     def get_system_version(self) -> Any:
         """Obtiene la información de versión y estado del sistema OmniVista"""
         res = self.request("GET", "/api/system/version", timeout=8)
-        if res.status_code == 200:
-            try:
-                return sanitize_data(res.json())
-            except Exception:
-                return None
-        return None
+        return sanitize_data(self._required_json(res))
 
     def health_check(self) -> Dict[str, Any]:
         """Prueba de conectividad y latencia con OmniVista 2500"""

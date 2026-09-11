@@ -1,0 +1,158 @@
+import { chromium } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import { strict as assert } from 'node:assert';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { createDemo } from '../src/demo.mjs';
+
+const base = process.env.SGRS_TEST_URL || 'http://127.0.0.1:5173';
+const browser = await chromium.launch({ executablePath: process.env.SGRS_BROWSER || '/opt/brave-bin/brave', headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+const results = [];
+const failures = [];
+const report = (name, details = 'passed') => results.push({ name, details });
+await mkdir('artifacts', { recursive: true });
+try {
+  const context = await browser.newContext({ viewport: { width: 1672, height: 1000 }, locale: 'es-MX', timezoneId: 'America/Mexico_City' });
+  const page = await context.newPage();
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  let apiCalls = 0;
+  await page.route('**/api/**', route => { apiCalls++; return route.fulfill({ status: 503, json: { error: 'Test unavailable' } }); });
+  await page.goto(`${base}/?demo=1`);
+  await page.getByRole('heading', { name: 'Dashboard Operativo', exact: true }).waitFor();
+  await page.screenshot({ path: 'artifacts/dashboard.png', fullPage: true });
+  assert.equal(apiCalls, 0, 'Demo must never call real APIs');
+  report('Demostración aislada de APIs');
+  for (const [route, title, screenshot] of [['altas', 'Gestión de Altas de Red', 'altas'], ['inventario', 'Recursos Disponibles', 'inventario'], ['disponibilidad', 'Direcciones IP', 'direcciones-ip'], ['idf', 'Reportes e incidencias de IDF', 'reportes-idf'], ['bitacora', 'Bitácora de Registros', 'bitacora']]) {
+    await page.goto(`${base}/?demo=1#${route}`);
+    await page.getByRole('heading', { name: title, exact: true }).waitFor();
+    if (route === 'altas') assert.equal(await page.getByRole('button', { name: 'Nueva alta', exact: true }).count(), 0, 'Gestión de altas debe ser solo consulta');
+    await page.screenshot({ path: `artifacts/${screenshot}.png`, fullPage: true });
+    const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    if (axe.violations.length) failures.push({ route, violations: axe.violations.map(v => ({ id: v.id, impact: v.impact, nodes: v.nodes.map(n => ({ target: n.target, summary: n.failureSummary })) })) });
+    report(`Render y accesibilidad: ${route}`, `${axe.violations.length} violations`);
+  }
+  await page.goto(`${base}/?demo=1#disponibilidad`);
+  await page.getByRole('button', { name: 'Página siguiente' }).click();
+  assert.match(page.url(), /ips.page=2/);
+  await page.getByRole('searchbox', { name: 'Buscar registros' }).fill('sin-resultados-imposibles');
+  await page.getByRole('heading', { name: 'No se encontraron resultados' }).waitFor();
+  await page.getByRole('button', { name: 'Limpiar búsqueda', exact: true }).click();
+  assert.equal(await page.locator('tbody tr').count(), 10);
+  report('Búsqueda, limpieza y paginación');
+  await page.getByRole('button', { name: 'Asignar', exact: true }).first().click();
+  await page.getByLabel('Equipo / Hostname').fill('Prueba temporal');
+  await page.getByRole('button', { name: 'Guardar cambios', exact: true }).click();
+  await page.getByRole('status').filter({ hasText: 'Cambios de ejemplo guardados' }).waitFor();
+  report('Edición de IP en demo sin escritura externa');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${base}/?demo=1#entrada`);
+  await page.getByRole('button', { name: 'Registrar entrada', exact: true }).click();
+  assert.equal(await page.locator('[aria-invalid="true"]').count(), 4);
+  assert.equal(await page.locator('select[aria-invalid="true"]').evaluate(el => document.activeElement === el), true);
+  await page.getByLabel('Seleccionar IDF').selectOption('idf-3');
+  await page.getByLabel('Ingeniero responsable').fill('Persona de prueba');
+  await page.getByLabel('Motivo de ingreso').fill('Inspección de prueba');
+  await page.getByLabel('Temperatura', { exact: false }).fill('22');
+  await page.getByRole('button', { name: 'Abrir navegación' }).click();
+  await page.getByRole('dialog', { name: 'Centro Operativo', exact: true }).getByRole('link', { name: 'Dashboard', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Tienes cambios sin guardar' }).waitFor();
+  await page.getByRole('button', { name: 'Seguir editando', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Registrar entrada', exact: true }).click();
+  await page.getByRole('heading', { name: 'Bitácora de Registros', exact: true }).waitFor();
+  await page.getByRole('cell', { name: 'Persona de prueba', exact: true }).waitFor();
+  assert.equal(apiCalls, 0);
+  report('Validación accesible, guardia de borrador y creación de visita');
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`${base}/?demo=1#idf`);
+  await page.getByRole('heading', { name: 'Reportes e incidencias de IDF', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Registrar entrada', exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Ver', exact: true }).first().click();
+  await page.getByRole('dialog', { name: 'Detalle del registro' }).waitFor();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('dialog[open]').count(), 0);
+  assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Ver');
+  report('IDF de escritorio solo consulta, detalle, Escape y restauración de foco');
+  for (const route of ['usuarios', 'conexiones']) {
+    await page.goto(`${base}/?demo=1#${route}`);
+    await page.getByRole('heading', { name: 'No tienes permiso para esta sección' }).waitFor();
+    assert.doesNotMatch(await page.locator('body').innerText(), /super[- ]?admin|superusuario/i);
+    assert.equal(await page.getByRole('link', { name: 'Usuarios y privilegios', exact: true }).count(), 0);
+  }
+  await page.locator('.account-button').click();
+  assert.equal(await page.locator('.role-list > div').count(), 2);
+  assert.doesNotMatch(await page.getByRole('dialog', { name: 'Acceso y privilegios' }).innerText(), /super/i);
+  await page.keyboard.press('Escape');
+  assert.equal(apiCalls, 0);
+  report('Demo operativa sin catálogo interno ni secciones reservadas ni llamadas API');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${base}/?demo=1#entrada`);
+  await page.getByRole('heading', { name: 'Registro de Entrada a IDF', exact: true }).waitFor();
+  await page.screenshot({ path: 'artifacts/entrada-idf-mobile.png', fullPage: true });
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) console.log(await page.evaluate(() => [...document.querySelectorAll('body *')].filter(el => el.getBoundingClientRect().right > innerWidth && el.getBoundingClientRect().width > 0).map(el => ({ tag: el.tagName, class: el.className, width: el.getBoundingClientRect().width })).slice(0, 15)));
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'No horizontal document overflow on mobile');
+  await page.getByRole('button', { name: 'Abrir navegación', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Centro Operativo', exact: true }).getByRole('link', { name: 'Inventario', exact: true }).click();
+  await page.getByRole('heading', { name: 'Recursos Disponibles', exact: true }).waitFor();
+  assert.equal(await page.locator('dialog[open]').count(), 0);
+  await page.screenshot({ path: 'artifacts/inventario-mobile.png', fullPage: true });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  report('Móvil, menú accesible y preferencia de movimiento reducido');
+
+  // All live-mode requests are intercepted; no real production data is read or modified.
+  const identity = { user: { id: 'test-admin', name: 'Operador de prueba', username: 'operador', role: 'admin', active: true, version: 1 }, csrf: 'test-only', capabilities: ['dashboard.read', 'inventory.read', 'idf.read', 'activity.read', 'inventory.write', 'idf.visits.write', 'inventory.export'] };
+  await page.route('**/api/auth/session', route => route.fulfill({ json: identity }));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`${base}/#inventario`);
+  await page.reload();
+  await page.getByRole('heading', { name: 'No se pudo cargar la información', exact: true }).waitFor();
+  assert.equal(await page.locator('tbody tr').count(), 0);
+  report('API no disponible sin fallback de demostración');
+  await page.unroute('**/api/**');
+  const fixture = createDemo();
+  let posts = 0;
+  let failPost = true;
+  await page.route('**/api/**', async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/auth/session') return route.fulfill({ json: identity });
+    if (route.request().method() === 'POST') {
+      posts++;
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const body = route.request().postDataJSON();
+      return route.fulfill({ status: failPost ? 403 : 200, json: failPost ? { error: 'No tienes permiso para guardar.' } : { status: 'success', incident: { ...body.incident, tech: identity.user.name }, telemetry: body.telemetry } });
+    }
+    const value = url.pathname.endsWith('dhcp-pools') ? { success: true, data: { pools: fixture.segments } } : fixture[url.pathname.split('/').pop()] ?? {};
+    return route.fulfill({ json: value });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${base}/#entrada?idf=idf-3`);
+  await page.reload();
+  await page.getByLabel('Seleccionar IDF').selectOption('idf-3');
+  assert.equal(await page.getByLabel('Ingeniero responsable').inputValue(), identity.user.name);
+  await page.getByLabel('Motivo de ingreso').fill('<img src=x onerror=alert(1)>');
+  await page.getByLabel('Temperatura', { exact: false }).fill('22');
+  await page.getByRole('button', { name: 'Registrar entrada', exact: true }).dblclick();
+  await page.getByRole('alert').filter({ hasText: 'No tienes permiso' }).waitFor();
+  assert.equal(posts, 1);
+  assert.equal(await page.getByLabel('Ingeniero responsable').inputValue(), identity.user.name);
+  failPost = false;
+  await page.getByRole('button', { name: 'Registrar entrada', exact: true }).click();
+  await page.getByRole('heading', { name: 'Bitácora de Registros', exact: true }).waitFor();
+  assert.equal(posts, 2);
+  assert.equal(await page.locator('tbody img').count(), 0);
+  report('403 preserva formulario; guardado confirmado; doble envío bloqueado; texto externo escapado');
+  await page.goto(`${base}/#usuarios`);
+  await page.getByRole('heading', { name: 'No tienes permiso para esta sección' }).waitFor();
+  report('Admin no accede a administración de usuarios por URL directa');
+  assert.deepEqual(pageErrors, []);
+  report('Sin errores JavaScript');
+  await context.close();
+} catch (error) {
+  failures.push({ test: 'runtime', message: error.message });
+  throw error;
+} finally {
+  await browser.close();
+  await writeFile('artifacts/browser-report.json', JSON.stringify({ results, failures }, null, 2));
+}
+console.log(JSON.stringify({ results, failures }, null, 2));
+assert.equal(failures.length, 0, 'Accessibility violations must be resolved');

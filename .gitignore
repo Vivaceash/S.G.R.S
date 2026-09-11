@@ -82,6 +82,7 @@ logs/
 tmp/
 temp/
 .sgrs_pids.json
+.sgrs-private/
 *.save
 *.patch
 

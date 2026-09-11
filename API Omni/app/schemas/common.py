@@ -13,7 +13,9 @@ class ApiResponse(BaseModel, Generic[T]):
 
 class PaginatedResponse(BaseModel, Generic[T]):
     items: List[T] = Field(default_factory=list, description="Lista de elementos")
-    total: int = Field(0, description="Total de elementos disponibles")
+    total: Optional[int] = Field(None, description="Total confirmado por el proveedor; null si no está disponible")
+    returned_count: int = Field(0, description="Registros incluidos en esta respuesta")
+    complete: bool = Field(False, description="Indica si se verificó la integridad del inventario completo")
     page: int = Field(1, description="Número de página actual")
     page_size: int = Field(50, description="Tamaño de página")
-    has_more: bool = Field(False, description="Indica si existen más páginas disponibles")
+    has_more: Optional[bool] = Field(None, description="Más registros observados; null si no puede confirmarse el fin")

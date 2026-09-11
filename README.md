@@ -1,12 +1,27 @@
 # S.G.R.S. — Sistema de Gestión de Redes y Seguridad
 
+## Dashboard actualizado: React + Tailwind
+
+La interfaz vigente está en `Dashboard/src` y sigue las capturas institucionales entregadas. Compilar antes de iniciar `server.py` o `run.py`:
+
+```bash
+npm --prefix Dashboard ci
+npm --prefix Dashboard run build
+```
+
+Para desarrollo: `npm --prefix Dashboard run dev`; abrir `http://127.0.0.1:5173/?demo=1` para explorar sin consultar ni modificar APIs. Sin `?demo=1` se usa el gateway existente del puerto 3000. El servidor estático ahora entrega únicamente `Dashboard/dist`.
+
+Ver [guía del dashboard](Dashboard/README.md), [usuarios y conexiones](USUARIOS_Y_CONEXIONES.md), [contratos de interacción](UX-CONTRACT.md) y [plan general de seguridad](PLAN_USUARIOS_PRIVILEGIOS.md). El gateway incorpora cuentas locales y permisos viewer/admin/super-admin; crear la primera cuenta mediante `.venv/bin/python dashboard_access.py bootstrap`. MFA/SSO, ámbitos y cifrado de secretos en reposo siguen pendientes. El HTML/JS anterior se conserva como referencia, no como entrada de producción.
+
+El [análisis de APIs y evolución del dashboard](ANALISIS_APIS_Y_EVOLUCION_DASHBOARD.md) documenta las 34 consultas de datos/diagnóstico, sus límites y las páginas propuestas. El rol Superusuario permanece interno; viewer/admin reciben un catálogo operativo de dos roles y la demo no muestra funciones internas. Esta documentación es técnica, no ayuda pública para ejecutivos.
+
 > **Plataforma centralizada de observabilidad, telemetría perimetral, inventario de infraestructura y control de acceso para redes corporativas de misión crítica.**
 
 ---
 
 ## 🏛️ Arquitectura del Sistema
 
-El ecosistema **S.G.R.S.** está diseñado bajo una arquitectura desacoplada de microservicios complementarios y un centro de visualización moderno sin dependencias externas:
+El ecosistema **S.G.R.S.** combina dos APIs FastAPI con un gateway Python y un dashboard React/Tailwind compilado con Vite:
 
 ```text
                                ┌────────────────────────────────────────┐
@@ -17,7 +32,7 @@ El ecosistema **S.G.R.S.** está diseñado bajo una arquitectura desacoplada de 
                          ▼                                                   ▼
               ┌─────────────────────┐                             ┌─────────────────────┐
               │  Dashboard Web UI   │                             │   Herramientas CLI  │
-              │  (Vanilla JS / CSS) │                             │   (run.py / tests)  │
+              │  React / Tailwind   │                             │   (run.py / tests)  │
               │     Puerto 3000     │                             └──────────┬──────────┘
               └──────────┬──────────┘                                        │
                          │                                                   │
@@ -383,12 +398,14 @@ SGRS/
 │   ├── requirements.txt            # Dependencias del microservicio
 │   └── run.py                      # Punto de entrada local del microservicio
 │
-├── Dashboard/                      # Frontend navegable de monitoreo
-│   ├── app.js                      # Lógica cliente y manipulación del DOM
-│   ├── DESIGN.md                   # Especificaciones de diseño y paleta cromática
-│   ├── index.html                  # Interfaz gráfica de centro de monitoreo
-│   ├── README.md                   # Documentación específica del frontend
-│   └── styles.css                  # Estilos visuales modernos y accesibles
+├── Dashboard/                      # Frontend React + Tailwind
+│   ├── src/                        # Pantallas, componentes, estilos y assets
+│   ├── dist/                       # Build generado, servido por Python
+│   ├── package.json                # Dependencias y comandos Vite
+│   ├── index.html                  # Entrada React
+│   ├── legacy.html                 # Interfaz anterior conservada
+│   ├── tests/                      # Verificación local con APIs simuladas
+│   └── README.md                   # Desarrollo local y límites de integración
 │
 ├── pytest.ini                      # Configuración centralizada de Pytest
 ├── run.py                          # Orquestador unificado de inicio de microservicios

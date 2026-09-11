@@ -51,7 +51,7 @@ def get_device_options(
 
 @router.get(
     "/vlans",
-    response_model=ApiResponse[List[VlanCatalogResponse]],
+    response_model=ApiResponse[VlanCatalogResponse],
     summary="Catálogo de VLANs Configuradas",
     description="Consulta el inventario de VLANs y subredes disponibles en los conmutadores Alcatel gestionados.",
 )
@@ -62,5 +62,5 @@ def get_vlans(
     return ApiResponse(
         success=True,
         message="Catálogo de VLANs obtenido correctamente",
-        data=vlans
+        data=VlanCatalogResponse(vlans=vlans, total=len(vlans))
     )

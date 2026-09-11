@@ -110,14 +110,16 @@ async def get_active_traffic_sessions(
             s = _parse_session(s_raw)
 
             # Filtros
-            if src_ip and s.src_ip and src_ip != s.src_ip:
+            if src_ip and src_ip != s.src_ip:
                 continue
-            if dst_ip and s.dst_ip and dst_ip != s.dst_ip:
+            if dst_ip and dst_ip != s.dst_ip:
                 continue
-            if dst_port and s.dst_port and dst_port != s.dst_port:
+            if dst_port and dst_port != s.dst_port:
                 continue
 
             parsed_sessions.append(s)
+            if len(parsed_sessions) >= limit:
+                break
 
     return BaseResponse(
         success=True,
@@ -217,15 +219,12 @@ async def get_traffic_activity_logs(
     if src_ip:
         filter_expr = f"srcip=={src_ip}"
 
-    try:
-        raw = await fortios_client.get_traffic_logs(
-            log_type="traffic",
-            rows_per_page=limit,
-            filter_str=filter_expr,
-            vdom=vdom,
-        )
-    except Exception:
-        raw = {"results": [], "count": 0}
+    raw = await fortios_client.get_traffic_logs(
+        log_type="traffic",
+        rows_per_page=limit,
+        filter_str=filter_expr,
+        vdom=vdom,
+    )
 
     results = raw.get("results", [])
     logs_raw = results if isinstance(results, list) else results.get("data", [])
@@ -234,7 +233,7 @@ async def get_traffic_activity_logs(
     for log_item in logs_raw:
         if isinstance(log_item, dict):
             host = log_item.get("hostname") or log_item.get("dstname") or log_item.get("domain") or log_item.get("url")
-            if hostname and host and hostname.lower() not in host.lower():
+            if hostname and (not host or hostname.lower() not in host.lower()):
                 continue
 
             rec = WebActivityRecord(

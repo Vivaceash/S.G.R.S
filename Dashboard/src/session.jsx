@@ -1,0 +1,91 @@
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { LogIn, ShieldCheck } from 'lucide-react';
+import { Button, Field, Loading, Notice, SecretInput } from './components.jsx';
+import { useForm } from './forms.jsx';
+import { request, setCsrfToken } from './domain.mjs';
+
+const SessionContext = createContext(null);
+export const useSession = () => useContext(SessionContext);
+const demoSession = {
+  user: { id: 'demo-admin', name: 'Administrador de ejemplo', username: 'admin.demo', role: 'admin', active: true },
+  capabilities: ['dashboard.read', 'inventory.read', 'idf.read', 'activity.read', 'inventory.write', 'inventory.export', 'idf.visits.write'],
+  roles: [
+    { id: 'viewer', title: 'Viewer', description: 'Consulta el dashboard, inventario y reportes. No puede registrar ni modificar datos.' },
+    { id: 'admin', title: 'Administrador', description: 'Administra la operación: inventario, visitas e incidencias de IDF.' },
+  ],
+};
+
+function Login({ onLogin, onBootstrap, onDemo, setup, error, retry, expired }) {
+  const f = useForm({ username: '', password: '' }, values => Object.fromEntries(['username', 'password'].filter(k => !values[k]).map(k => [k, 'Completa este campo.'])), onLogin, null, true);
+  const setupForm = useForm({ username: '', name: '', password: '', password_confirmation: '' }, values => {
+    const errors = Object.fromEntries(['username', 'name', 'password', 'password_confirmation'].filter(key => !String(values[key] || '').trim()).map(key => [key, 'Completa este campo.']));
+    if (values.password && values.password.length < 12) errors.password = 'Usa al menos 12 caracteres.';
+    if (values.password && values.password_confirmation && values.password !== values.password_confirmation) errors.password_confirmation = 'Las contraseñas no coinciden.';
+    return errors;
+  }, onBootstrap, null, true);
+  useEffect(() => { document.title = 'Iniciar sesión · Centro Operativo SGRS'; }, []);
+  return <main className="login-page"><section className="login-panel panel"><div className="brand-image" role="img" aria-label="ISSSTE" /><p className="eyebrow">Centro Operativo · Redes e Infraestructura</p><h1>{expired ? 'Vuelve a iniciar sesión' : 'Bienvenido al Centro Operativo'}</h1><p className="muted">Acceso con tu cuenta personal. Tus permisos dependen del rol asignado.</p>
+    {setup && <Notice title="Configuración inicial pendiente">Crea la primera cuenta local para habilitar el dashboard.<Button onClick={retry}>Comprobar disponibilidad</Button></Notice>}
+    {error && <Notice title="No se pudo consultar el acceso" tone="warning" action={<Button onClick={retry}>Reintentar</Button>}>{error}</Notice>}
+    {expired && <Notice title="Sesión no válida">Vuelve a entrar con la misma cuenta para recuperar la pantalla. Si cambias de cuenta, se descartará su contenido.</Notice>}
+    {setup && <form noValidate ref={setupForm.form} onSubmit={setupForm.submit} aria-busy={setupForm.busy} className="setup-form"><h2>Crear cuenta inicial</h2>{setupForm.error && <Notice title="No se pudo crear la cuenta" tone="danger">{setupForm.error}</Notice>}<fieldset disabled={setupForm.busy}>
+      <Field label="Usuario" required error={setupForm.errors.username}><input autoComplete="username" autoCapitalize="none" value={setupForm.values.username} onChange={e => setupForm.change('username', e.target.value)} maxLength={80} /></Field>
+      <Field label="Nombre completo" required error={setupForm.errors.name}><input autoComplete="name" value={setupForm.values.name} onChange={e => setupForm.change('name', e.target.value)} maxLength={120} /></Field>
+      <Field label="Contraseña" required error={setupForm.errors.password}><SecretInput autoComplete="new-password" value={setupForm.values.password} onChange={e => setupForm.change('password', e.target.value)} maxLength={128} /></Field>
+      <Field label="Repetir contraseña" required error={setupForm.errors.password_confirmation}><SecretInput autoComplete="new-password" value={setupForm.values.password_confirmation} onChange={e => setupForm.change('password_confirmation', e.target.value)} maxLength={128} /></Field>
+      <Button type="submit" variant="primary" className="w-full" busy={setupForm.busy}>Crear cuenta y abrir dashboard</Button>
+    </fieldset></form>}
+    {!setup && <form noValidate ref={f.form} onSubmit={f.submit} aria-busy={f.busy}>{f.error && <Notice title="No se pudo iniciar sesión" tone="danger">{f.error}</Notice>}<fieldset disabled={f.busy}>
+      <Field label="Usuario" required error={f.errors.username}><input autoComplete="username" autoCapitalize="none" value={f.values.username} onChange={e => f.change('username', e.target.value)} maxLength={80} /></Field>
+      <Field label="Contraseña" required error={f.errors.password}><SecretInput autoComplete="current-password" value={f.values.password} onChange={e => f.change('password', e.target.value)} maxLength={128} /></Field>
+      <Button type="submit" variant="primary" className="w-full" busy={f.busy} icon={LogIn}>Iniciar sesión</Button>
+    </fieldset></form>}<div className="login-footer"><ShieldCheck size={19} /><span>Sesión personal · Acceso por privilegios</span></div><Button className="w-full" disabled={f.busy || setupForm.busy} onClick={onDemo}>Explorar el diseño sin conexión</Button>
+  </section></main>;
+}
+
+export function SessionProvider({ children }) {
+  const [demo, setDemoState] = useState(() => new URLSearchParams(location.search).get('demo') === '1');
+  const [identity, setIdentity] = useState(null);
+  const [ready, setReady] = useState(demo);
+  const [expired, setExpired] = useState(false);
+  const [setup, setSetup] = useState(false);
+  const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    if (demo) { setReady(true); setCsrfToken(''); return; }
+    const controller = new AbortController(); let alive = true;
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    setError('');
+    request('/api/auth/session', { signal: controller.signal }).then(value => {
+      if (!alive || controller.signal.aborted) return;
+      setCsrfToken(value.csrf); setSetup(Boolean(value.setup_required));
+      if (value.user) { setIdentity(value); setExpired(false); }
+      else { setExpired(true); window.dispatchEvent(new Event('sgrs-session-expired')); }
+    }).catch(() => { if (alive) setError('Inicia el servidor local del dashboard para acceder con una cuenta. También puedes explorar el diseño sin conexión.'); })
+      .finally(() => { clearTimeout(timeout); if (alive) setReady(true); });
+    // Timeout must terminate the initial loading state too.
+    return () => { alive = false; clearTimeout(timeout); controller.abort(); };
+  }, [demo, revision]);
+  useEffect(() => {
+    const onExpired = () => { if (!demo) setExpired(true); };
+    const check = () => { if (!demo && !expired) setRevision(value => value+1); };
+    window.addEventListener('sgrs-session-expired', onExpired);
+    window.addEventListener('focus', check);
+    return () => { window.removeEventListener('sgrs-session-expired', onExpired); window.removeEventListener('focus', check); };
+  }, [demo, expired]);
+  const setDemo = value => {
+    setCsrfToken(''); setDemoState(value); setError(''); setExpired(false); setIdentity(null); setReady(value);
+    const url = new URL(location.href); if (value) url.searchParams.set('demo', '1'); else url.searchParams.delete('demo');
+    history.replaceState(null, '', url);
+  };
+  const signIn = async values => { const result = await request('/api/auth/login', { body: values }); setCsrfToken(result.csrf); setIdentity(result); setExpired(false); setReady(true); setError(''); };
+  const bootstrap = async values => { const result = await request('/api/auth/bootstrap', { body: values }); setCsrfToken(result.csrf); setIdentity(result); setSetup(false); setExpired(false); setReady(true); setError(''); };
+  const signOut = async () => { if (!demo) await request('/api/auth/logout', { body: {} }); setCsrfToken(''); setIdentity(null); setExpired(false); };
+  const current = demo ? demoSession : identity;
+  return <SessionContext.Provider value={{ ...current, roles: current?.roles || [], demo, setDemo, signOut, can: name => Boolean(current?.capabilities?.includes(name)) }}>
+    {!ready ? <div className="login-page"><Loading /></div> : <>
+      {current && <div hidden={!demo && expired} inert={!demo && expired ? true : undefined} key={`${demo ? 'demo' : 'live'}-${current.user.id}-${current.user.role}-${current.user.version}`}>{children}</div>}
+      {(!current || (!demo && expired)) && <Login onLogin={signIn} onBootstrap={bootstrap} onDemo={() => setDemo(true)} setup={setup} error={error} retry={() => setRevision(r => r+1)} expired={Boolean(current)} />}
+    </>}
+  </SessionContext.Provider>;
+}

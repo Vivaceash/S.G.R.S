@@ -116,7 +116,11 @@ class FortiOSClient:
                     details={"status_code": response.status_code, "path": clean_path}
                 )
 
+            if not 200 <= response.status_code < 300:
+                raise FortiOSResponseError(message="FortiOS rechazó la consulta.", status_code=502)
             data = sanitize_data(response.json())
+            if not isinstance(data, dict) or data.get("status") == "error":
+                raise FortiOSResponseError(message="FortiOS no entregó una respuesta válida.", status_code=502)
 
             # FortiOS suele retornar un objeto con http_status o status
             http_status = data.get("http_status")
@@ -245,7 +249,8 @@ class FortiOSClient:
         if "/" not in normalized_type:
             normalized_type = f"traffic/{normalized_type}"
 
-        fallback_res = {"results": [], "count": 0}
+        fallback_res = None
+        connection_failure = None
         sources = ["disk", "memory", "fortianalyzer"]
         for source in sources:
             try:
@@ -255,9 +260,16 @@ class FortiOSClient:
                     if len(res["results"]) > 0:
                         return res
                     fallback_res = res
+            except FortiOSConnectionError as exc:
+                connection_failure = connection_failure or exc
+                continue
             except Exception:
                 continue
 
+        if fallback_res is None:
+            if connection_failure:
+                raise connection_failure
+            raise FortiOSResponseError(message="Ninguna fuente de logs está disponible.", status_code=502)
         return fallback_res
 
     # -------------------------------------------------------------

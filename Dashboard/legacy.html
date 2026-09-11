@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="es-MX">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="S.G.R.S: Sistema de Gestión en Redes y Seguridad" />
+  <title>SGRS — Dashboard anterior (referencia de migración)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+    rel="stylesheet">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <!-- Favicon integrado en SVG -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23621132'/><text x='50%' y='55%' dominant-baseline='middle' text-anchor='middle' fill='%23EAAA00' font-family='sans-serif' font-weight='bold' font-size='50'>S</text></svg>" />
+  <!-- Hoja de estilos principal con versionado estricto -->
+  <link rel="stylesheet" href="styles.css?v=20260908_fullwidth_qr" />
+</head>
+
+<body>
+  <a class="skip-link" href="#contenido">Ir al contenido</a>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Navegación principal">
+      <div class="sidebar-header-block">
+        <div class="brand-titles">
+          <strong>S.G.R.S.</strong>
+          <small>Sistema de Gestión en Redes y Seguridad</small>
+        </div>
+      </div>
+
+      <nav class="main-nav">
+        <p class="nav-label">NAVEGACIÓN</p>
+        <a class="nav-item active" href="#resumen" data-view="resumen">
+          <span class="nav-text">Resumen</span>
+        </a>
+        <a class="nav-item" href="#dispositivos" data-view="dispositivos">
+          <span class="nav-text">Dispositivos</span>
+          <b class="nav-count">248</b>
+        </a>
+
+        <a class="nav-item" href="#disponibilidad" data-view="disponibilidad">
+          <span class="nav-text">Disponibilidad IP</span>
+          <b id="ipAvailableNavCount" class="nav-count">Libres</b>
+        </a>
+        <a class="nav-item" href="#actividad" data-view="actividad">
+          <span class="nav-text">Altas y bajas</span>
+        </a>
+
+        <a class="nav-item" href="#idf" data-view="idf">
+          <span class="nav-text">IDFs</span>
+          <b id="idfNavCount" class="nav-count">13</b>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <p class="nav-label" style="padding:0 0 10px">SESIÓN ACTIVA</p>
+        <div class="user-session-card">
+          <div class="user-session-head">
+            <div>
+              <strong>Luis Fernando Casillas Flores</strong>
+              <span class="user-role-badge">TÉCNICO</span>
+            </div>
+          </div>
+          <button class="logout-button" type="button" id="userButton" style="margin-top:12px">
+            <span aria-hidden="true">↪</span> Cerrar sesión
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <main id="contenido" class="main-content">
+      <header class="topbar">
+        <button class="menu-button" id="menuButton" type="button" aria-label="Abrir navegación" aria-expanded="false"
+          aria-controls="sidebar">☰</button>
+        <div>
+          <p class="eyebrow" id="topbarEyebrow">CENTRO DE MONITOREO</p>
+          <h1 id="topbarTitle">Estado general de la red</h1>
+        </div>
+        <div class="topbar-actions">
+          <span class="live-indicator"><i></i>En vivo</span>
+          <button class="icon-button" type="button" id="refreshButton" aria-label="Actualizar datos"><span
+              aria-hidden="true">↻</span></button>
+          <button class="primary-button" type="button" id="movementButton">Nuevo registro</button>
+        </div>
+      </header>
+
+      <!-- Contenedor dinámico de vistas SPA -->
+      <div id="viewContainer" class="view-container" role="region" aria-live="polite">
+        <div class="view-loader"><span class="spinner"></span>Cargando módulo...</div>
+      </div>
+    </main>
+  </div>
+
+  <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+  <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Diálogo global: Registrar movimiento -->
+  <dialog id="movementDialog" aria-labelledby="movementTitle" aria-describedby="movementDescription">
+    <div class="dialog-head">
+      <div>
+        <p class="eyebrow">CONTROL DE INVENTARIO</p>
+        <h2 id="movementTitle">Registrar movimiento</h2>
+      </div>
+      <button class="icon-button" id="closeDialog" type="button" aria-label="Cerrar">×</button>
+    </div>
+    <p id="movementDescription">Selecciona el tipo de cambio que deseas documentar en la red.</p>
+    <div class="movement-options">
+      <button type="button" data-movement="alta"><span class="activity-icon up">↑</span><span><strong>Registrar
+            alta</strong><small>Incorporar un dispositivo o segmento</small></span><span>→</span></button>
+      <button type="button" data-movement="baja"><span class="activity-icon down">↓</span><span><strong>Registrar
+            baja</strong><small>Retirar un elemento del inventario</small></span><span>→</span></button>
+    </div>
+    <div class="dialog-actions"><button class="secondary-button" id="cancelDialog" type="button">Cancelar</button></div>
+  </dialog>
+
+  <!-- Diálogo global: Levantar reporte rápido de gabinete (QR y Bitácora) -->
+  <dialog id="quickReportDialog" class="quick-report-modal" aria-labelledby="quickReportTitle"
+    aria-describedby="quickReportDesc">
+    <div class="dialog-head">
+      <div>
+        <p class="eyebrow">BITÁCORA TÉCNICA · ESCANEO QR</p>
+        <h2 id="quickReportTitle">Levantar reporte de gabinete</h2>
+      </div>
+      <button class="icon-button" id="closeQuickReportBtn" type="button" aria-label="Cerrar">×</button>
+    </div>
+    <p id="quickReportDesc" class="dialog-desc">
+      Registro en sitio para verificación de climatización mini-split y reporte de anomalías operativas.
+    </p>
+
+    <form id="quickReportForm" class="dialog-form">
+      <input type="hidden" id="reportTargetIdfId" value="idf-1" />
+
+      <!-- Campos automáticos de solo lectura: IDF, Fecha y Hora -->
+      <div class="form-row form-row-3">
+        <div class="form-group">
+          <label for="reportIdfLabel">Gabinete / IDF</label>
+          <input type="text" id="reportIdfLabel" readonly class="input-readonly input-highlight" />
+        </div>
+        <div class="form-group">
+          <label for="reportDateInput">Fecha</label>
+          <input type="text" id="reportDateInput" readonly class="input-readonly" />
+        </div>
+        <div class="form-group">
+          <label for="reportTimeInput">Hora</label>
+          <input type="text" id="reportTimeInput" readonly class="input-readonly" />
+        </div>
+      </div>
+
+      <!-- Campo 1: Grados del Mini Split -->
+      <div class="form-group temp-field-group">
+        <div class="temp-label-row">
+          <label for="reportMiniSplitTemp">Temperatura del Mini Split (°C) *</label>
+          <span id="tempStatusPill" class="temp-pill normal">16°C – 23°C (Normal)</span>
+        </div>
+        <div class="temp-input-wrap">
+          <input type="number" id="reportMiniSplitTemp" step="0.5" min="10" max="42" placeholder="Ej. 21.5" required
+            autocomplete="off" />
+          <span class="temp-unit-suffix">°C</span>
+        </div>
+        <small class="field-hint">Rango ideal de operación: 18°C a 22°C. Valores ≥ 24°C generan aviso
+          preventivo.</small>
+      </div>
+
+      <!-- Campo 2: Zona de Descripción de Incidencia en caso de haberla -->
+      <div class="form-group">
+        <label for="reportIncidentDesc">
+          Descripción de incidencia <span class="label-optional">(Opcional en caso de haberla)</span>
+        </label>
+        <textarea id="reportIncidentDesc" rows="3"
+          placeholder="Opcional: Si detectas alguna anomalía (ej. goteo de agua, zumbido, alarma de UPS, filtro sucio o enlace caído), detállala aquí..."></textarea>
+      </div>
+
+      <!-- Técnico responsable -->
+      <div class="form-group">
+        <label for="reportTechInput">Técnico en turno *</label>
+        <input type="text" id="reportTechInput" value="Israel R." required autocomplete="off" />
+      </div>
+
+      <div class="dialog-actions">
+        <button class="secondary-button" id="cancelQuickReportBtn" type="button">Cancelar</button>
+        <button class="primary-button submit-report-btn" type="submit">
+          <span aria-hidden="true">✓</span> Guardar reporte
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Diálogo / Pop-up de Confirmación Visual: Reporte Enviado Exitosamente -->
+  <dialog id="reportSuccessModal" class="report-success-dialog" aria-labelledby="successModalTitle">
+    <div class="success-dialog-card">
+      <div class="success-header-animation">
+        <div class="success-badge-glow">
+          <div class="success-icon-circle">
+            <span class="success-icon-symbol">✓</span>
+          </div>
+        </div>
+      </div>
+      
+      <p class="success-eyebrow">S.G.R.S. · REGISTRO EN SITIO</p>
+      <h2 id="successModalTitle" class="success-title">¡Reporte Enviado con Éxito!</h2>
+      <p class="success-subtitle" id="successModalSubtitle">
+        La bitácora de inspección para <strong id="successIdfName">IDF</strong> ha quedado registrada en el sistema.
+      </p>
+
+      <!-- Ficha resumen del reporte registrado -->
+      <div class="success-summary-box">
+        <div class="success-summary-row">
+          <span class="summary-label">Gabinete:</span>
+          <span class="summary-val" id="successSummaryIdf">—</span>
+        </div>
+        <div class="success-summary-row">
+          <span class="summary-label">Climatización:</span>
+          <span class="summary-val">
+            <strong id="successSummaryTemp" style="font-size:15px;color:var(--text)">—°C</strong>
+            <span id="successSummaryTempPill" class="temp-pill normal">Normal</span>
+          </span>
+        </div>
+        <div class="success-summary-row">
+          <span class="summary-label">Fecha y Hora:</span>
+          <span class="summary-val" id="successSummaryDate">—</span>
+        </div>
+        <div class="success-summary-row">
+          <span class="summary-label">Técnico:</span>
+          <span class="summary-val" id="successSummaryTech">—</span>
+        </div>
+        <div class="success-summary-row" id="successSummaryIncidentRow">
+          <span class="summary-label">Observaciones:</span>
+          <span class="summary-val" id="successSummaryIncident">Sin anomalías</span>
+        </div>
+      </div>
+
+      <div class="success-actions">
+        <button class="primary-button success-finish-btn" id="finishReportBtn" type="button">
+          <span aria-hidden="true">✓</span> Finalizar e ir al inicio
+        </button>
+        <button class="secondary-button" id="newReportBtn" type="button">
+          + Enviar otro reporte
+        </button>
+      </div>
+
+      <div id="visitConcludedMsg" class="visit-concluded-msg" style="display:none">
+        <p>✓ <strong>Inspección completada.</strong> Ya puedes cerrar esta pestaña en tu teléfono.</p>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Diálogo: Ficha individual de Código QR (Imagen 2) -->
+  <dialog id="singleQrModal" class="single-qr-dialog" aria-labelledby="singleQrCabinetTitle">
+    <div class="single-qr-dialog-content">
+      <button class="icon-button close-single-qr-btn" id="closeSingleQrModalBtn" type="button"
+        aria-label="Cerrar">×</button>
+      <div id="singleQrCardContent">
+        <!-- Renderizado dinámicamente con diseño idéntico a imagen 2 -->
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Diálogo global: Estación de Códigos QR para Racks -->
+  <dialog id="qrStationDialog" class="qr-station-modal" aria-labelledby="qrStationTitle">
+    <div class="dialog-head qr-no-print">
+      <div>
+        <p class="eyebrow">DISTRIBUCIÓN Y GABINETES</p>
+        <h2 id="qrStationTitle">Códigos QR para Racks e IDFs</h2>
+      </div>
+      <button class="icon-button" id="closeQrStationBtn" type="button" aria-label="Cerrar">×</button>
+    </div>
+
+    <div class="qr-station-toolbar qr-no-print">
+      <div class="qr-host-config">
+        <label for="qrHostInput"><strong>Dirección / IP del servidor para escaneo:</strong></label>
+        <div class="qr-host-input-wrap">
+          <input type="text" id="qrHostInput" placeholder="ej. 192.168.1.150:3000" autocomplete="off" />
+          <button class="secondary-button" id="resetQrHostBtn" type="button"
+            title="Detectar origen actual">Detectar</button>
+        </div>
+        <small class="field-hint">Si escaneas con tu celular en la red Wi-Fi, ingresa la IP local de esta máquina (ej.
+          192.168.X.X:3000) para que el enlace abra directamente.</small>
+      </div>
+
+      <div class="qr-toolbar-actions">
+        <button class="primary-button" id="printQrSheetsBtn" type="button">
+          <span aria-hidden="true">⎙</span> Imprimir planilla de QRs
+        </button>
+      </div>
+    </div>
+
+    <!-- Contenedor imprimible de las 13 tarjetas QR (IDF 1 al 12 y PACS) -->
+    <div class="qr-cards-grid" id="qrCardsGrid">
+      <!-- Renderizado dinámicamente con qrcode.js -->
+    </div>
+  </dialog>
+
+  <!-- Diálogo global: Agregar equipo al rack -->
+  <dialog id="addDeviceDialog" aria-labelledby="addDeviceTitle" aria-describedby="addDeviceDesc">
+    <div class="dialog-head">
+      <div>
+        <p class="eyebrow">GESTIÓN DE RACK</p>
+        <h2 id="addDeviceTitle">Agregar equipo al IDF</h2>
+      </div>
+      <button class="icon-button" id="closeAddDeviceDialog" type="button" aria-label="Cerrar">×</button>
+    </div>
+    <p id="addDeviceDesc">Registra un nuevo switch, patch panel, UPS o componente al inventario físico del gabinete.</p>
+
+    <form id="addDeviceForm" class="dialog-form">
+      <div class="form-group">
+        <label for="addDeviceTargetLabel">IDF Asignado</label>
+        <input type="text" id="addDeviceTargetLabel" readonly class="input-readonly" />
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="newDeviceDesc">Descripción / Dispositivo *</label>
+          <input type="text" id="newDeviceDesc" placeholder="Ej. switch lucent enterprise/Voz y Datos" required
+            autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="newDeviceRu">Nivel en Rack (RU) *</label>
+          <input type="text" id="newDeviceRu" placeholder="Ej. U40, U38 o Base" required autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="newDeviceBrand">Marca *</label>
+          <input type="text" id="newDeviceBrand" placeholder="Ej. Alcatel, CommScope, Eaton" required
+            autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="newDeviceModel">Modelo *</label>
+          <input type="text" id="newDeviceModel" placeholder="Ej. OS6560-P48Z16" required autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="newDeviceSerial">Número de Serie</label>
+          <input type="text" id="newDeviceSerial" placeholder="Ej. JSZ234500144" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="newDeviceMac">Dirección MAC</label>
+          <input type="text" id="newDeviceMac" placeholder="Ej. 78:24:59:53:55:D1" autocomplete="off" />
+        </div>
+      </div>
+
+      <input type="hidden" id="editingDeviceIdx" value="" />
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="newDevicePorts">Puertos / Capacidad</label>
+          <input type="text" id="newDevicePorts" placeholder="Ej. 48 + 4 fibra, 24" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="newDeviceType">Tipo de Componente *</label>
+          <select id="newDeviceType" required>
+            <option value="Switch Acceso L2 PoE+">Switch Acceso L2 PoE+</option>
+            <option value="Switch CCTV PoE">Switch CCTV PoE</option>
+            <option value="Switch Core / Dist">Switch Core / Dist</option>
+            <option value="Patch Panel Cat6A">Patch Panel Cat6A</option>
+            <option value="Charola Distribución Fibra">Charola Distribución Fibra</option>
+            <option value="UPS / Respaldo Eléctrico">UPS / Respaldo Eléctrico</option>
+            <option value="Banco de Baterías">Banco de Baterías</option>
+            <option value="Firewall Perimetral">Firewall Perimetral</option>
+            <option value="Módem de Enlace">Módem de Enlace</option>
+            <option value="Puesta a Tierra Rack">Puesta a Tierra Rack</option>
+            <option value="Equipo de Rack">Otro equipo de Rack</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="newDeviceStatus">Estado Operativo *</label>
+        <select id="newDeviceStatus" required>
+          <option value="online">● En servicio (Operativo)</option>
+          <option value="offline">○ Fuera de línea (En mantenimiento)</option>
+        </select>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="secondary-button" id="cancelAddDeviceBtn" type="button">Cancelar</button>
+        <button class="primary-button" id="submitDeviceBtn" type="submit">Agregar al rack</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Diálogo global: Modificar / Asignar Dirección IP (IPAM) -->
+  <dialog id="ipManagementDialog" class="quick-report-modal" aria-labelledby="ipDialogTitle"
+    aria-describedby="ipDialogDesc">
+    <div class="dialog-head">
+      <div>
+        <p class="eyebrow">GESTIÓN DE DIRECCIONAMIENTO IPAM</p>
+        <h2 id="ipDialogTitle">Modificar / Asignar Dirección IP</h2>
+      </div>
+      <button class="icon-button" id="closeIpDialogBtn" type="button" aria-label="Cerrar">×</button>
+    </div>
+    <p id="ipDialogDesc" class="dialog-desc">
+      Configura el dispositivo asignado, parámetros de red y disponibilidad de la dirección IP.
+    </p>
+
+    <form id="ipManagementForm" class="dialog-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="ipAddressInput">Dirección IPv4</label>
+          <input type="text" id="ipAddressInput" class="input-highlight" placeholder="Ej. 192.168.38.100"
+            autocomplete="off" required />
+        </div>
+        <div class="form-group">
+          <label for="ipStatusInput">Estado de la IP *</label>
+          <select id="ipStatusInput" required>
+            <option value="occupied">● Ocupada (Asignada a equipo)</option>
+            <option value="available">○ Libre (Disponible para asignación)</option>
+            <option value="reserved">▲ Reservada (Infraestructura / VIP / Gateway)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="ipHostInput">Nombre de Host / Dispositivo *</label>
+          <input type="text" id="ipHostInput" placeholder="Ej. SW-ACCESO-U38, SRV-PACS-02..." required
+            autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="ipTypeCustom">Tipo de Dispositivo *</label>
+          <input type="text" id="ipTypeCustom" name="ipTypeCustom_rand" placeholder="Ej. Switch, Servidor, PC..." required autocomplete="new-password" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="ipMacInput">Dirección MAC</label>
+          <input type="text" id="ipMacInput" placeholder="Ej. 78:24:59:53:55:D1" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="ipVlanInput">VLAN / Subred *</label>
+          <select id="ipVlanInput" required>
+            <option value="Segmento 38">Segmento 38 · Red Asistencial (192.168.38.0/24)</option>
+            <option value="Segmento 40">Segmento 40 · Red Gobierno (192.168.40.0/24)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="ipLocationCustom">Ubicación Física / Gabinete *</label>
+        <input type="text" id="ipLocationCustom" name="ipLocationCustom_rand"
+          placeholder="Ej. IDF 1 o Gabinete Principal" required autocomplete="new-password" />
+      </div>
+
+      <div class="form-group">
+        <label for="ipNotesInput">Notas / Bitácora Técnica <span class="label-optional">(Opcional)</span></label>
+        <textarea id="ipNotesInput" rows="2"
+          placeholder="Observaciones de configuración, puertos asociados o justificación de asignación estática..."></textarea>
+      </div>
+
+      <div class="dialog-actions"
+        style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <div>
+          <button class="secondary-button btn-danger-soft" id="quickReleaseFromDialogBtn" type="button"
+            style="display:none">
+            <span aria-hidden="true">✕</span> Dejar libre esta IP
+          </button>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="secondary-button" id="cancelIpDialogBtn" type="button">Cancelar</button>
+          <button class="primary-button" id="submitIpManagementBtn" type="submit">
+            <span aria-hidden="true">✓</span> Guardar cambios
+          </button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Diálogo global: Confirmar Liberación de Dirección IP -->
+  <dialog id="ipReleaseConfirmDialog" class="confirm-dialog" aria-labelledby="releaseConfirmTitle"
+    style="border:none;border-radius:16px;padding:0;max-width:460px;width:90vw;box-shadow:0 20px 45px rgba(0,0,0,0.25)">
+    <div style="padding:24px 24px 20px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <span
+          style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:#fdf2f4;color:var(--pantone-7420);font-size:20px;font-weight:700">!</span>
+        <h3 id="releaseConfirmTitle" style="margin:0;font-size:18px;color:var(--text-main);font-weight:700">Liberar
+          Dirección IP</h3>
+      </div>
+      <p style="margin:0 0 16px;font-size:13.5px;color:var(--text-muted);line-height:1.5">
+        ¿Estás seguro de que deseas liberar la dirección <strong id="confirmReleaseIpText"
+          style="color:var(--pantone-7421);font-family:var(--font-mono)">10.20.0.X</strong> asignada actualmente a
+        <strong id="confirmReleaseHostText">—</strong>?
+      </p>
+      <div
+        style="background:#f9f8f6;border-radius:8px;padding:10px 14px;margin-bottom:20px;border:1px solid #eae5dc;font-size:12.5px;color:#666">
+        <span>El equipo será desasignado y la dirección pasará de inmediato al estado <strong>Libre</strong> para que
+          pueda ser utilizada por otro dispositivo en la red.</span>
+      </div>
+      <div class="dialog-actions" style="display:flex;justify-content:flex-end;gap:10px">
+        <button class="secondary-button" id="cancelReleaseConfirmBtn" type="button">Cancelar</button>
+        <button class="primary-button" id="confirmReleaseActionBtn" type="button"
+          style="background:var(--pantone-7420);border-color:var(--pantone-7420)">
+          <span aria-hidden="true">✓</span> Confirmar y liberar
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Diálogo global: Detalle y Telemetría de Dispositivo (API Forti Integration) -->
+  <dialog id="deviceDetailDialog" class="device-detail-dialog" aria-labelledby="devDetailTitle">
+    <div class="device-detail-inner">
+      <div class="device-detail-header">
+        <div class="dev-title-block">
+          <span class="device-avatar-icon" id="devDetailIcon">💻</span>
+          <div>
+            <h3 id="devDetailTitle" style="margin:0; font-size:18px; font-weight:700;">Dispositivo</h3>
+            <small id="devDetailSubtitle" style="color:var(--text-muted); font-size:12px;">MAC: — | IP: —</small>
+          </div>
+          <span id="devDetailStatusBadge" class="status-pill online"><i></i>En línea</span>
+        </div>
+        <button type="button" class="close-modal-btn" id="closeDevDetailBtn" aria-label="Cerrar modal">×</button>
+      </div>
+
+      <div class="device-detail-tabs">
+        <button type="button" class="dev-tab-btn active" data-dev-tab="info">Información Técnica</button>
+        <button type="button" class="dev-tab-btn" data-dev-tab="traffic">Telemetría de Tráfico (En Vivo)</button>
+      </div>
+
+      <div class="device-detail-body">
+        <!-- Pestaña 1: Información Técnica -->
+        <div class="dev-tab-pane active" id="devPaneInfo">
+          <div class="dev-info-grid">
+            <div class="info-cell">
+              <span class="info-label">Dirección IPv4/IPv6</span>
+              <strong class="info-val ip-highlight" id="devInfoIp">—</strong>
+            </div>
+            <div class="info-cell">
+              <span class="info-label">Dirección MAC</span>
+              <strong class="info-val mono-highlight" id="devInfoMac">—</strong>
+            </div>
+            <div class="info-cell">
+              <span class="info-label">Nombre de Host</span>
+              <strong class="info-val" id="devInfoHostname">—</strong>
+            </div>
+            <div class="info-cell">
+              <span class="info-label">Fabricante / Marca</span>
+              <strong class="info-val" id="devInfoVendor">—</strong>
+            </div>
+            <div class="info-cell">
+              <span class="info-label">Tipo de Equipo</span>
+              <strong class="info-val" id="devInfoType">—</strong>
+            </div>
+            <div class="info-cell">
+              <span class="info-label">Sistema Operativo</span>
+              <strong class="info-val" id="devInfoOs">—</strong>
+            </div>
+            <div class="info-cell">
+              <span class="info-label">Interfaz de Red</span>
+              <strong class="info-val" id="devInfoInterface">—</strong>
+            </div>
+            <div class="info-cell">
+              <span class="info-label">Última Actividad</span>
+              <strong class="info-val" id="devInfoActivity">—</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pestaña 2: Telemetría de Tráfico -->
+        <div class="dev-tab-pane" id="devPaneTraffic">
+          <div class="traffic-toolbar">
+            <div class="traffic-ip-search">
+              <label for="trafficIpInput" style="font-size:12px; font-weight:600; color:var(--text-muted);">IP a analizar:</label>
+              <input type="text" id="trafficIpInput" class="traffic-input" placeholder="ej. 192.168.38.110" />
+              <button type="button" id="refreshTrafficBtn" class="secondary-button" style="padding:6px 12px; font-size:12px;">
+                ↻ Actualizar
+              </button>
+            </div>
+            <div class="traffic-direction-filters">
+              <button type="button" class="traffic-dir-btn active" data-dir="all">Todas</button>
+              <button type="button" class="traffic-dir-btn" data-dir="outbound">↗ Salida</button>
+              <button type="button" class="traffic-dir-btn" data-dir="inbound">↙ Entrada</button>
+            </div>
+          </div>
+
+          <div id="trafficLoading" class="traffic-loader" style="display:none;">
+            <span class="spinner"></span> Consultando telemetría de sesiones y logs en FortiGate...
+          </div>
+
+          <div id="trafficContent">
+            <!-- Métricas resumen de tráfico -->
+            <div class="traffic-metrics-row">
+              <div class="traffic-mini-card">
+                <span class="t-label">Sesiones Activas</span>
+                <strong class="t-val" id="tActiveSessions">0</strong>
+                <small id="tSessionSplit" class="t-sub">Salida: 0 | Entrada: 0</small>
+              </div>
+              <div class="traffic-mini-card">
+                <span class="t-label">Datos Enviados (Tx)</span>
+                <strong class="t-val" id="tBytesSent">0 B</strong>
+                <small class="t-sub">Tráfico generado</small>
+              </div>
+              <div class="traffic-mini-card">
+                <span class="t-label">Datos Recibidos (Rx)</span>
+                <strong class="t-val" id="tBytesRcvd">0 B</strong>
+                <small class="t-sub">Tráfico descargado</small>
+              </div>
+              <div class="traffic-mini-card">
+                <span class="t-label">Logs Recientes</span>
+                <strong class="t-val" id="tLogCount">0</strong>
+                <small class="t-sub">Eventos de seguridad</small>
+              </div>
+            </div>
+
+            <!-- Sesiones activas -->
+            <div class="traffic-section-block">
+              <h4 style="margin:14px 0 8px; font-size:13px; font-weight:700; color:var(--text-main);">
+                Sesiones en Curso (FortiOS Stateful Sessions)
+              </h4>
+              <div class="table-wrap" style="max-height:160px; overflow-y:auto;">
+                <table class="traffic-table">
+                  <thead>
+                    <tr>
+                      <th>Dir.</th>
+                      <th>Destino</th>
+                      <th>Puerto / Serv.</th>
+                      <th>Aplicación</th>
+                      <th>Datos (Tx / Rx)</th>
+                      <th>Duración</th>
+                    </tr>
+                  </thead>
+                  <tbody id="trafficSessionRows">
+                    <tr><td colspan="6" style="text-align:center; color:#888;">Sin sesiones activas detectadas</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Historial de logs recientes -->
+            <div class="traffic-section-block">
+              <h4 style="margin:14px 0 8px; font-size:13px; font-weight:700; color:var(--text-main);">
+                Historial de Navegación y Logs de Seguridad
+              </h4>
+              <div class="table-wrap" style="max-height:160px; overflow-y:auto;">
+                <table class="traffic-table">
+                  <thead>
+                    <tr>
+                      <th>Hora</th>
+                      <th>Dir.</th>
+                      <th>Destino / Hostname</th>
+                      <th>Servicio</th>
+                      <th>Categoría</th>
+                      <th>Acción</th>
+                      <th>Volumen</th>
+                    </tr>
+                  </thead>
+                  <tbody id="trafficLogRows">
+                    <tr><td colspan="7" style="text-align:center; color:#888;">Sin registros recientes</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Principales destinos visitados -->
+            <div class="traffic-section-block" id="topDestBlock">
+              <h4 style="margin:14px 0 8px; font-size:13px; font-weight:700; color:var(--text-main);">
+                Principales Destinos Visitados
+              </h4>
+              <div id="topDestList" class="top-dest-grid"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="qrcode.js?v=20260907_1"></script>
+  <script src="app.js?v=20260908_clean_incidents"></script>
+</body>
+
+</html>
