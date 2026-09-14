@@ -322,3 +322,8 @@ td .button { min-height: 31px; font-size: 11px; padding: 6px 13px; border-radius
 }
 @media print { .sidebar-admin, .login-page, .connection-panel, .idf-mobile { display: none; }.idf-desktop { display: block; } }
 @media (max-width: 420px) { .institutional-header .brand-image { width: 145px; height: 44px; background-size: 1088px 612px; background-position: -26px -5px; } }
+.segment-picker { display: grid; gap: 12px; margin: 20px 0; }
+.segment-picker .panel { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; }
+.segment-picker .panel > div { min-width: 0; overflow-wrap: anywhere; }
+.dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+@media (max-width: 600px) { .segment-picker .panel { flex-direction: column; align-items: stretch; } }

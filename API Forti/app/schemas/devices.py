@@ -12,6 +12,9 @@ class DeviceItem(BaseModel):
     os_version: Optional[str] = Field(None, description="Versión específica del SO")
     interface: Optional[str] = Field(None, description="Interfaz de red a la que está conectado (ej. port1, lan, wifi)")
     is_online: Optional[bool] = Field(None, description="Si el dispositivo se encuentra activo actualmente")
+    is_reserved: bool = Field(False, description="La IP y MAC corresponden a una reserva DHCP configurada")
+    reserved_ip: Optional[str] = Field(None, description="IP de la reserva DHCP configurada")
+    ip_source: Optional[str] = Field(None, description="Fuente del cotejo de IP; unconfirmed si aún no se pudo resolver")
     last_seen: Optional[Union[str, int, float]] = Field(None, description="Última vez visto o timestamp")
     device_type: Optional[str] = Field(None, description="Categoría de dispositivo (ej. Phone, Computer, IoT, Server)")
 

@@ -76,7 +76,7 @@ export function Loading() {
   return <div className="loading-state" role="status"><LoaderCircle className="spinner" size={26} aria-hidden="true" />Consultando información…</div>;
 }
 export function useListState(id) {
-  const read = () => { const p = new URLSearchParams(location.search); return { page: Number(p.get(`${id}.page`)) || 1, sort: p.get(`${id}.sort`) || '', asc: p.get(`${id}.order`) !== 'desc', filters: Object.fromEntries([...p].filter(([k]) => k.startsWith(`${id}.filter.`)).map(([k, v]) => [k.slice(`${id}.filter.`.length), v])) }; };
+  const read = () => { const p = new URLSearchParams(location.search); return { page: Number(p.get(`${id}.page`)) || 1, pageSize: p.get(`${id}.size`) || '', sort: p.get(`${id}.sort`) || '', asc: p.get(`${id}.order`) !== 'desc', filters: Object.fromEntries([...p].filter(([k]) => k.startsWith(`${id}.filter.`)).map(([k, v]) => [k.slice(`${id}.filter.`.length), v])) }; };
   const [state, setState] = useState(read);
   const [query, setQuery] = useState('');
   useEffect(() => { const restore = () => setState(read()); window.addEventListener('popstate', restore); return () => window.removeEventListener('popstate', restore); }, [id]);
@@ -85,12 +85,13 @@ export function useListState(id) {
     const url = new URL(location.href);
     for (const k of [...url.searchParams.keys()]) if (k.startsWith(`${id}.`)) url.searchParams.delete(k);
     if (next.page > 1) url.searchParams.set(`${id}.page`, next.page);
+    if (next.pageSize) url.searchParams.set(`${id}.size`, next.pageSize);
     if (next.sort) { url.searchParams.set(`${id}.sort`, next.sort); url.searchParams.set(`${id}.order`, next.asc ? 'asc' : 'desc'); }
     for (const [k, v] of Object.entries(next.filters)) if (v) url.searchParams.set(`${id}.filter.${k}`, v);
     history.replaceState(null, '', url);
     return next;
   });
-  return { ...state, query, setQuery: q => { setQuery(q); update({ page: 1 }); }, setPage: page => update({ page }), setFilter: (key, value) => update({ page: 1, filters: { ...state.filters, [key]: value } }), setSort: sort => update({ sort, asc: sort === state.sort ? !state.asc : true }), reset: () => { setQuery(''); update({ page: 1, filters: {} }); } };
+  return { ...state, query, setQuery: q => { setQuery(q); update({ page: 1 }); }, setPage: page => update({ page }), setPageSize: pageSize => update({ pageSize, page: 1 }), setFilter: (key, value) => update({ page: 1, filters: { ...state.filters, [key]: value } }), setSort: sort => update({ sort, asc: sort === state.sort ? !state.asc : true }), reset: () => { setQuery(''); update({ page: 1, filters: {} }); } };
 }
 export function downloadCsv(name, columns, rows) {
   const url = URL.createObjectURL(new Blob([makeCsv(columns, rows)], { type: 'text/csv;charset=utf-8' }));
@@ -101,7 +102,7 @@ export function downloadCsv(name, columns, rows) {
 export function DataTable({ title, rows, columns, state, noun = 'registros', pageSize = 10, toolbar, exportable = false, loading = false, error, onRetry, emptyText, rowKey = 'id' }) {
   const visible = selectRows(rows, state.query, state.filters, state.sort, state.asc);
   const page = paginate(visible, state.page, pageSize);
-  useEffect(() => { if (page.current !== state.page) state.setPage(page.current); }, [page.current, state.page]);
+  useEffect(() => { if (!loading && !error && page.current !== state.page) state.setPage(page.current); }, [page.current, state.page, loading, error]);
   return <section className="table-panel" aria-label={title}>
     {(toolbar || exportable) && <div className="table-panel-heading"><div>{toolbar}</div>{exportable && <Button icon={Download} onClick={() => downloadCsv(title, columns.filter(c => c.key !== 'actions'), visible)} disabled={!visible.length}>Exportar consulta</Button>}</div>}
     <div className="table-scroll" tabIndex={0} role="region" aria-label={`${title}. Desplázate para ver todas las columnas.`}>

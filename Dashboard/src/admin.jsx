@@ -3,7 +3,7 @@ import { Users, UserPlus, ShieldCheck, Eye, Settings2, PlugZap, Save, RefreshCw,
 import { Badge, Button, DataTable, Dialog, Field, Loading, Notice, SearchField, SecretInput, Select, useListState } from './components.jsx';
 import { PageHeading } from './pages.jsx';
 import { useForm } from './forms.jsx';
-import { request, dateTime } from './domain.mjs';
+import { roleLabel, request, dateTime } from './domain.mjs';
 import { useSession } from './session.jsx';
 
 export const initialDemoUsers = [
@@ -46,11 +46,11 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
     <fieldset disabled={f.busy || f.uncertain}><div className="form-grid">
       <Field label="Nombre completo" required error={f.errors.name}><input value={f.values.name} maxLength={120} autoComplete="off" onChange={e => change('name', e.target.value)} /></Field>
       <Field label="Usuario de acceso" required error={f.errors.username}><input value={f.values.username} maxLength={80} autoCapitalize="none" autoComplete="off" onChange={e => change('username', e.target.value)} /></Field>
-      <Field label="Rol asignado" required><select value={f.values.role} disabled={row?.id === currentId} onChange={e => change('role', e.target.value)}>{roleInfo.map(role => <option key={role.id} value={role.id}>{role.title}</option>)}</select></Field>
+      <Field label="Rol asignado" required><select value={f.values.role} disabled={row?.id === currentId} onChange={e => change('role', e.target.value)}>{roleInfo.map(role => <option key={role.id} value={role.id}>{roleLabel(role.id)}</option>)}</select></Field>
       <Field label="Estado de la cuenta"><select value={f.values.active ? 'active' : 'inactive'} disabled={row?.id === currentId} onChange={e => change('active', e.target.value === 'active')}><option value="active">Activa</option><option value="inactive">Suspendida</option></select></Field>
       <div className="col-span-full"><Field label={row ? 'Nueva contraseña (opcional)' : 'Contraseña inicial'} required={!row} error={f.errors.password} hint={row ? 'Déjala vacía para conservarla. Al cambiarla se cerrarán las sesiones del usuario.' : '12–128 caracteres. Entrégala a la persona por un canal seguro.'}><SecretInput autoComplete="new-password" value={f.values.password} maxLength={128} onChange={e => change('password', e.target.value)} /></Field></div>
-    </div><Notice title={`Permisos de ${f.values.role}`} tone={f.values.active ? 'info' : 'warning'}>{roleInfo.find(r => r.id === f.values.role)?.description} {!f.values.active && 'La cuenta no podrá iniciar sesión. Sus registros se conservarán.'} {row && 'Los cambios de rol, contraseña o suspensión revocan sus sesiones.'}</Notice>
-    <Field label={`Confirmo ${row ? 'actualizar' : 'crear'} esta cuenta con el rol ${f.values.role}`} required error={f.errors.confirmed}><input className="confirmation-checkbox" type="checkbox" checked={f.values.confirmed} onChange={e => f.change('confirmed', e.target.checked)} /></Field>
+    </div><Notice title={`Permisos de ${roleLabel(f.values.role)}`} tone={f.values.active ? 'info' : 'warning'}>{roleInfo.find(r => r.id === f.values.role)?.description} {!f.values.active && 'La cuenta no podrá iniciar sesión. Sus registros se conservarán.'} {row && 'Los cambios de rol, contraseña o suspensión revocan sus sesiones.'}</Notice>
+    <Field label={`Confirmo ${row ? 'actualizar' : 'crear'} esta cuenta con el rol ${roleLabel(f.values.role)}`} required error={f.errors.confirmed}><input className="confirmation-checkbox" type="checkbox" checked={f.values.confirmed} onChange={e => f.change('confirmed', e.target.checked)} /></Field>
     </fieldset><div className="form-actions"><Button disabled={f.busy} onClick={cancel}>Cancelar</Button><Button type="submit" icon={Save} variant="primary" busy={f.busy} disabled={f.uncertain}>{row ? 'Guardar usuario y permisos' : 'Crear usuario y asignar rol'}</Button></div>
   </form>;
 }
@@ -85,11 +85,11 @@ export function UsersPage({ demoUsers, setDemoUsers, notify }) {
   };
   const rows = (list.value?.users || []).map(u => ({ ...u, state: u.active ? 'active' : 'inactive' }));
   return <><PageHeading eyebrow="Administración del sistema" title="Usuarios y privilegios" description="Cuentas personales y permisos de acceso al Centro Operativo"><Button icon={UserPlus} variant="primary" disabled={list.loading || Boolean(list.error)} onClick={() => { setDirty(false); setDiscard(false); setEditor({ row: null }); }}>Crear usuario</Button></PageHeading>
-    <div className="role-cards">{roleInfo.map(({ id, title, description }) => <article className="role-card panel" key={id}><ShieldCheck size={24} /><h2>{title}</h2><p>{description}</p><span>{rows.filter(u => u.role === id).length} cuentas</span></article>)}</div>
-    <div className="toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar por nombre o usuario…" /><Select label="Rol" value={state.filters.role || ''} onChange={e => state.setFilter('role', e.target.value)}><option value="">Todos los roles</option>{roleInfo.map(r => <option key={r.id}>{r.id}</option>)}</Select><Select label="Estado" value={state.filters.state || ''} onChange={e => state.setFilter('state', e.target.value)}><option value="">Todas las cuentas</option><option value="active">Activas</option><option value="inactive">Suspendidas</option></Select></div>
+    <div className="role-cards">{roleInfo.map(({ id, title, description }) => <article className="role-card panel" key={id}><ShieldCheck size={24} /><h2>{roleLabel(id)}</h2><p>{description}</p><span>{rows.filter(u => u.role === id).length} cuentas</span></article>)}</div>
+    <div className="toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar por nombre o usuario…" /><Select label="Rol" value={state.filters.role || ''} onChange={e => state.setFilter('role', e.target.value)}><option value="">Todos los roles</option>{roleInfo.map(r => <option key={r.id} value={r.id}>{roleLabel(r.id)}</option>)}</Select><Select label="Estado" value={state.filters.state || ''} onChange={e => state.setFilter('state', e.target.value)}><option value="">Todas las cuentas</option><option value="active">Activas</option><option value="inactive">Suspendidas</option></Select></div>
     <DataTable title="Usuarios del sistema" rows={rows} state={state} noun="usuarios" loading={list.loading} error={list.error} onRetry={list.refresh} columns={[
       { key: 'name', label: 'Nombre', render: r => <div className="cell-detail"><strong>{r.name}</strong><small>{r.id === user.id ? 'Tu cuenta' : 'Cuenta personal'}</small></div> },
-      { key: 'username', label: 'Usuario' }, { key: 'role', label: 'Rol', render: r => <span className="network-tag">{r.role}</span> },
+      { key: 'username', label: 'Usuario' }, { key: 'role', label: 'Rol', render: r => <span className="network-tag">{roleLabel(r.role)}</span> },
       { key: 'state', label: 'Estado', render: r => <Badge status={r.active ? 'online' : 'offline'}>{r.active ? 'Activa' : 'Suspendida'}</Badge> },
       { key: 'actions', label: 'Permisos', sortable: false, render: r => <Button icon={Settings2} onClick={() => { setDirty(false); setDiscard(false); setEditor({ row: r }); }}>Administrar</Button> },
     ]} />

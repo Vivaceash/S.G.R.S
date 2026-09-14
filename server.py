@@ -331,12 +331,12 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
             devices_data = None
             summary_info = None
             try:
-                status_code, body, _ = _fetch_upstream(f"{FORTI_API_URL}/devices?status=all&active_window=3600", timeout=3.0)
+                status_code, body, _ = _fetch_upstream(f"{FORTI_API_URL}/devices?view=operational&status=all&active_window=3600", timeout=10.0)
                 if status_code == 200:
                     raw_json = json.loads(body.decode('utf-8'))
                     forti_data = raw_json.get("data") or {}
                     forti_devices = forti_data.get("devices", [])
-                    if isinstance(forti_devices, list) and forti_devices:
+                    if isinstance(forti_devices, list):
                         summary_info = {
                             "total_inventory": forti_data.get("total_inventory", len(forti_devices)),
                             "online_devices": forti_data.get("online_devices", 0),
@@ -362,6 +362,9 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                                 "icon": icon,
                                 "location": location,
                                 "status": status,
+                                "is_reserved": bool(dev.get("is_reserved")),
+                                "ip_source": dev.get("ip_source"),
+                                "reserved_ip": dev.get("reserved_ip"),
                                 "activity": activity,
                                 "mac": dev.get("mac") or "—",
                                 "vendor": vendor,
@@ -374,12 +377,8 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 pass
 
             if devices_data is None:
-                try:
-                    with _file_lock:
-                        with open(DEVICES_FILE, 'r', encoding='utf-8') as f:
-                            devices_data = json.load(f)
-                except Exception as e:
-                    devices_data = []
+                self._send_json({"error": "No se pudo comprobar la actividad y las reservas DHCP. Actualiza la consulta."}, 502)
+                return
 
             if path.startswith('/api/devices/summary') and summary_info:
                 self._send_json(summary_info)

@@ -1,5 +1,15 @@
 # Contratos de interacción · SGRS
 
+## Dashboard principal · decisión del usuario del 14 de septiembre de 2026
+
+Inventario visible: solo equipos en línea y reservas DHCP configuradas, incluidas las desconectadas o no detectadas previamente. La reserva se coteja por interfaz, IP y MAC; no se deduce de una asignación del inventario local. La vista `operational` usa el conjunto nativo `unified_latest` sin imponer una ventana horaria local. DHCP y ARP resuelven la IP por MAC, pero no eliminan equipos activos por falta de dirección o por una IP histórica. Si no es posible atribuir una IP sin duplicarla, se muestra «Pendiente de confirmar» y el equipo permanece en su interfaz reportada. Las tarjetas y el listado usan `deviceInSegment` para conservar ese mismo alcance. Si falla una fuente requerida, el gateway devuelve error y no sustituye la respuesta por el inventario histórico local. La tabla identifica las IP reservadas y su filtro de desconectados muestra únicamente esas reservas.
+
+La presentación de roles utiliza `domain.mjs:roleLabel`: `super-admin` se muestra como `Admin` y `admin` como `admin`. Se conservan identificadores, catálogo autorizado y permisos del servidor.
+
+Las tarjetas principales se eligen en el Dialog compartido, con botones Agregar/Quitar, Cancelar y Guardar selección. Por defecto se muestran las primeras tres. La selección explícita, incluso vacía, se guarda por cuenta y modo en este navegador; contiene solo claves de segmentos, nunca credenciales. Ver todos mantiene la selección. No se cambian los tokens institucionales.
+
+Ver dispositivos transmite la clave de segmento en el hash. `ipInSegment` aplica CIDR o gateway/máscara (incluidos equipos con IP fija); usa rangos DHCP como respaldo. Se filtra antes de buscar, ordenar, exportar y paginar. Un segmento ausente no abre todo el inventario. Tamaño de página 25, 50, 100 o Todos, persistido por `useListState` en la URL; cambiar tamaño reinicia página. Todos abarca los equipos cargados del segmento y filtros activos, dentro del scroll compartido de tabla.
+
 ## Consultas e históricos · actualización del 11 de septiembre de 2026
 
 Fuente de negocio: autorización actual del usuario para implementar y probar con las APIs disponibles; retención elegida expresamente de métricas agregadas por 30 días. Esta autorización reemplaza la prohibición de pruebas de la etapa anterior documentada al final.

@@ -7,6 +7,7 @@ from app.core.security import verify_api_key
 from app.clients.fortios import fortios_client
 from app.schemas.common import BaseResponse
 from app.schemas.devices import DeviceItem, DeviceListSummary
+from app.operational_devices import collection, current_devices, mac as normalize_mac
 
 router = APIRouter(
     prefix="/devices",
@@ -47,17 +48,15 @@ def _parse_device(
 
     clean_mac = (mac or "").lower().replace("-", ":")
 
-    # Validación estricta de recencia temporal:
-    # Un dispositivo NUNCA puede ser considerado ONLINE si no tuvo actividad dentro de la ventana activa.
-    # Esto previene que anomalías internas o volcados completos de caché de FortiOS marquen todo el inventario histórico como activo.
+    # The native active set owns liveness. Recency is only a fallback when it is unavailable.
     has_valid_ts = bool(last_seen and isinstance(last_seen, (int, float)) and last_seen > 0)
     delta = (now - last_seen) if has_valid_ts else float("inf")
     is_recent = bool(has_valid_ts and delta <= active_window_seconds and last_seen <= now + 300)
 
-    if not is_recent:
-        is_online = False
-    elif live_macs is not None:
+    if live_macs is not None:
         is_online = bool(clean_mac and clean_mac in live_macs)
+    elif not is_recent:
+        is_online = False
     elif item.get("is_online") is not None:
         is_online = bool(item.get("is_online"))
     else:
@@ -86,6 +85,7 @@ def _parse_device(
     summary="Listar dispositivos detectados por el FortiGate (Inventario histórico, conectados y desconectados)",
 )
 async def list_connected_devices(
+    view: str = Query('history', pattern='^(history|operational)$'),
     status_filter: Optional[str] = Query(
         None,
         alias="status",
@@ -117,7 +117,7 @@ async def list_connected_devices(
     now_ts = int(time.time())
     t_all = fortios_client.get_connected_devices(vdom=vdom)
     t_latest = fortios_client.get_connected_devices(
-        params={
+        params={"query_type": "unified_latest", "count": 5000} if view == 'operational' else {
             "query_type": "unified_latest",
             "count": 5000,
             "timestamp_from": now_ts - active_window,
@@ -154,6 +154,19 @@ async def list_connected_devices(
     ]
     ref_time = max(raw_last_seens) if raw_last_seens else time.time()
 
+    if view == 'operational':
+        try:
+            raw_list = collection(raw_all, 'devices')
+            latest_list = collection(raw_latest, 'devices')
+        except (ValueError, AttributeError):
+            raise HTTPException(status_code=502, detail='No se pudo obtener el inventario nativo completo de FortiGate.')
+        live_macs = {d['mac'].lower().replace('-', ':') for d in latest_list if d.get('mac') and d.get('is_online') is not False}
+
+    # Prefer the latest IP observation, not just membership in the active MAC set.
+    if view == 'operational':
+        latest_by_mac = {normalize_mac(d.get('mac')): d for d in latest_list if isinstance(d, dict) and d.get('mac')}
+        raw_list = [{**d, **latest_by_mac.get(normalize_mac(d.get('mac')), {})} if isinstance(d, dict) else d for d in raw_list]
+
     # Parsear todos los dispositivos reportados por FortiOS
     seen_macs: Set[str] = set()
     all_devices: List[DeviceItem] = []
@@ -185,8 +198,24 @@ async def list_connected_devices(
                 all_devices.append(dev)
 
     total_inventory = len(all_devices)
+    if view == 'operational':
+        try:
+            if isinstance(responses[0], Exception) or isinstance(responses[1], Exception):
+                raise ValueError('Device sources unavailable')
+            reserved_raw, leases_raw, arp_raw = await asyncio.gather(
+                fortios_client.request('GET', 'api/v2/cmdb/system.dhcp/server', vdom=vdom),
+                fortios_client.get_dhcp_leases(vdom=vdom),
+                fortios_client.get_arp_table(vdom=vdom),
+            )
+            operational = current_devices(
+                [d.model_dump() for d in all_devices], collection(reserved_raw, 'servers'),
+                collection(leases_raw, 'leases'), collection(arp_raw, 'arp'),
+            )
+            all_devices = [DeviceItem(**d) for d in operational]
+        except Exception:
+            raise HTTPException(status_code=502, detail='No se pudo verificar el inventario activo y las reservas DHCP.')
     global_online_count = sum(1 for d in all_devices if d.is_online)
-    global_offline_count = total_inventory - global_online_count
+    global_offline_count = len(all_devices) - global_online_count
 
     # Determinar modo de filtrado por estado
     target_status = "all"

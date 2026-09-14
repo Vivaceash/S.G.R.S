@@ -1,6 +1,12 @@
 import time
 import pytest
 from app.routers.devices import _parse_device, list_connected_devices
+
+
+def test_native_online_is_not_overridden_by_local_activity_window():
+    result = _parse_device({'mac': 'aa:bb:cc:dd:ee:ff', 'last_seen': None},
+                           live_macs={'aa:bb:cc:dd:ee:ff'})
+    assert result.is_online is True
 from app.schemas.devices import DeviceItem
 
 def test_parse_device_historical_cache_is_marked_offline():
@@ -138,4 +144,3 @@ def test_live_macs_exact_count_in_inventory():
     assert online == 35
     assert offline == 65
     assert online + offline == 100
-

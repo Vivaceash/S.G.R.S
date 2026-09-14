@@ -1,5 +1,35 @@
 export const LOCALE = 'es-MX';
 export const TIME_ZONE = 'America/Mexico_City';
+export const roleLabel = role => role === 'super-admin' ? 'Admin' : role === 'admin' ? 'admin' : role;
+export const segmentKey = segment => JSON.stringify([segment.id ?? '', segment.interface ?? '']);
+const ipv4 = value => {
+  const parts = String(value ?? '').trim().split('.');
+  return parts.length === 4 && parts.every(p => /^\d{1,3}$/.test(p) && Number(p) <= 255)
+    ? parts.reduce((n, p) => n * 256 + Number(p), 0) : null;
+};
+export function ipInSegment(address, segment) {
+  const ip = ipv4(address);
+  if (ip === null || !segment) return false;
+  const [network, prefix] = String(segment.subnet || '').split('/');
+  const base = ipv4(network) ?? ipv4(segment.default_gateway);
+  let mask = ipv4(segment.netmask);
+  if (prefix !== undefined && /^\d+$/.test(prefix) && Number(prefix) <= 32) mask = (0xffffffff << (32 - Number(prefix))) >>> 0;
+  if (prefix === '0') mask = 0;
+  if (base !== null && mask !== null) {
+    const inverse = (~mask) >>> 0;
+    if ((inverse & (inverse + 1)) === 0) return ((ip & mask) >>> 0) === ((base & mask) >>> 0);
+  }
+  return (segment.ip_ranges || []).some(range => {
+    const [start, end] = String(range).split('-').map(ipv4);
+    return start !== null && end != null && ip >= start && ip <= end;
+  });
+}
+export function deviceInSegment(device, segment) {
+  if (!segment) return false;
+  if (ipInSegment(device.ip, segment)) return true;
+  if (device.is_reserved && !device.ip && ipInSegment(device.reserved_ip, segment)) return true;
+  return device.ip_source === 'unconfirmed' && Boolean(device.interface) && device.interface === segment.interface;
+}
 export const number = value => value == null ? '—' : new Intl.NumberFormat(LOCALE).format(value);
 export const dateTime = value => {
   if (!value) return 'Sin registro';
