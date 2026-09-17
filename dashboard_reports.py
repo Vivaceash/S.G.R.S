@@ -7,12 +7,64 @@ import math
 import os
 import re
 import tempfile
+import hashlib
 from pathlib import Path
 
 from dashboard_access import AccessError, PRIVATE
+from dashboard_inventory import cabinets_with_documentary
+
+
+def report_key(record):
+    raw = {k: v for k, v in record.items() if k != 'record_key'}
+    return hashlib.sha256(json.dumps(raw, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def tagged_reports(groups):
+    def tag(row):
+        return {**row, 'record_key': report_key(row)}
+    return {key: [tag(r) for r in value] if isinstance(value, list) else
+            {**value, 'incidents': [tag(r) for r in value.get('incidents', [])]} for key, value in groups.items()}
 
 
 class ReportRoutes:
+    def resolve_report(self, body):
+        idf_id, key = body.get('idf_id'), body.get('record_key')
+        if not isinstance(idf_id, str) or not re.fullmatch(r'[a-f0-9]{64}', str(key)):
+            raise AccessError(422, 'Selecciona una incidencia vigente de la bitácora.')
+        reports_file, idfs_file, lock = self.report_context()
+        with lock:
+            reports = json.loads(Path(reports_file).read_text(encoding='utf-8'))
+            idfs = json.loads(Path(idfs_file).read_text(encoding='utf-8'))
+            group = reports.get(idf_id, {})
+            incidents = group if isinstance(group, list) else group.get('incidents', [])
+            embedded = next((i.get('incidents', []) for i in idfs if i.get('id') == idf_id), [])
+            target = next((r for r in [*incidents, *embedded] if report_key(r) == key), None)
+            if not target:
+                raise AccessError(409, 'La incidencia cambió. Actualiza la bitácora antes de resolverla.')
+            # An embedded historical record may already have a newer stored resolution.
+            newer = next((r for r in incidents if (target.get('id') and r.get('id') == target['id']) or r.get('origin_key') == key), None)
+            if newer and report_key(newer) != key:
+                raise AccessError(409, 'Existe una versión más reciente. Actualiza la bitácora.')
+            saved = {**target, 'status': 'resolved', 'resolved_at': datetime.now(timezone.utc).isoformat(),
+                     'resolved_by': self.identity['user']['id'], 'origin_key': target.get('origin_key') or target.get('id') or key}
+            if target in incidents:
+                incidents = [saved if r is target else r for r in incidents]
+            else:
+                incidents = [saved, *incidents]
+            reports[idf_id] = {**({} if isinstance(group, list) else group), 'incidents': incidents}
+            temp_path = None
+            try:
+                with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=Path(reports_file).parent, delete=False) as stream:
+                    temp_path = stream.name
+                    json.dump(reports, stream, ensure_ascii=False, indent=2)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temp_path, reports_file)
+            finally:
+                if temp_path and os.path.exists(temp_path):
+                    os.unlink(temp_path)
+        self._send_json({'incident': {**saved, 'record_key': report_key(saved)}})
+
     def save_report(self, body):
         incident = body.get("incident")
         idf_id = body.get("idf_id")
@@ -52,7 +104,7 @@ class ReportRoutes:
         with lock:
             with open(idfs_file, encoding="utf-8") as stream:
                 idfs = json.load(stream)
-            if not any(row.get("id") == idf_id for row in idfs):
+            if not any(row.get("id") == idf_id for row in cabinets_with_documentary(idfs)):
                 raise AccessError(422, "Selecciona un IDF del catálogo.")
             with open(reports_file, encoding="utf-8") as stream:
                 reports = json.load(stream)
@@ -61,7 +113,7 @@ class ReportRoutes:
                     if row.get("id") == report_id:
                         if row.get("actor_id") != actor["id"]:
                             raise AccessError(409, "Ese identificador ya está en uso.")
-                        self._send_json({"status": "success", "incident": row, "duplicate": True})
+                        self._send_json({"status": "success", "incident": {**row, 'record_key': report_key(row)}, "duplicate": True})
                         return
             previous = reports.get(idf_id, {})
             incidents = previous if isinstance(previous, list) else previous.get("incidents", [])
@@ -86,7 +138,7 @@ class ReportRoutes:
                 if image:
                     (PRIVATE / "evidence" / saved["evidence"]).unlink(missing_ok=True)
                 raise
-        self._send_json({"status": "success", "incident": saved, "telemetry": telemetry})
+        self._send_json({"status": "success", "incident": {**saved, 'record_key': report_key(saved)}, "telemetry": telemetry})
 
     def send_evidence(self, identifier):
         if not re.fullmatch(r"IDF-[a-fA-F0-9-]{36}\.(png|jpg)", identifier):

@@ -2,13 +2,14 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Bell, Building2, ChevronDown, CircleHelp, FileText, Home, Menu, RefreshCw, Server, ShieldCheck, Wifi, X, ArrowRight, Eye, CheckCircle2, Copy, Printer, Users, PlugZap, LogOut, Download } from 'lucide-react';
 import { Badge, Button, Dialog, Empty, IconButton, Loading, Notice, SearchField } from './components.jsx';
 import { Addresses, AuditLog, Devices, Inventory, Overview, PageHeading, Requests } from './pages.jsx';
-import { EditForm, EntryForm } from './forms.jsx';
+import { EditForm, EntryForm, ResolveReport } from './forms.jsx';
 import { ApiError, roleLabel, dateTime, inventoryFromIdfs, reportsFromData, request } from './domain.mjs';
 import { createDemo } from './demo.mjs';
 import { useSession } from './session.jsx';
 import { UsersPage, ConnectionsPage, initialDemoUsers, initialDemoConnections } from './admin.jsx';
 import { TelemetryNav, TelemetryPage, useTelemetryCatalog } from './telemetry.jsx';
 import '../qrcode.js';
+import { DocumentaryInventory } from './inventory.jsx';
 
 const emptyData = () => ({ segments: [], ips: [], devices: [], resources: [], requests: [], idfs: [], reports: {}, health: null, updatedAt: null });
 const navItems = [ ['resumen', 'Dashboard', Home], ['altas', 'Gestión de altas', Wifi], ['inventario', 'Inventario', Server], ['idf', 'Registro IDF', Building2], ['bitacora', 'Bitácora', FileText] ];
@@ -21,7 +22,7 @@ function readRoute() {
   return { path: alias[base] || base, params: new URLSearchParams(query), raw };
 }
 function Nav({ route, navigate, administration = false }) {
-  const active = ['disponibilidad', 'dispositivos'].includes(route) ? 'inventario' : route === 'entrada' ? 'idf' : route;
+  const active = ['disponibilidad', 'dispositivos', 'catalogo', 'aps', 'cctv'].includes(route) ? 'inventario' : route === 'entrada' ? 'idf' : route;
   return <nav className="main-nav" aria-label={administration ? 'Administración' : 'Navegación principal'}>{(administration ? adminItems : navItems).map(([path, label, Icon]) => <a key={path} href={`#${path}`} aria-current={active === path ? 'page' : undefined} onClick={e => { if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); navigate(path); } }}><Icon size={23} strokeWidth={1.7} aria-hidden="true" /><span>{label}</span></a>)}</nav>;
 }
 function Brand() { return <div className="brand-image" role="img" aria-label="ISSSTE · Instituto de Seguridad y Servicios Sociales de los Trabajadores del Estado" />; }
@@ -131,7 +132,7 @@ export default function App() {
     window.addEventListener('hashchange', changed); return () => window.removeEventListener('hashchange', changed);
   }, [dirty]);
   useEffect(() => {
-    const title = route.path.startsWith('consulta/') ? can('traffic.read') ? catalog.modules.find(item => item.id === route.path.slice(9))?.title || 'Consultas de red' : 'Acceso restringido' : titles[route.path] || 'Página no encontrada';
+    const title = route.path.startsWith('consulta/') ? can('traffic.read') ? catalog.modules.find(item => item.id === route.path.slice(9))?.title || 'Consultas de red' : 'Acceso restringido' : ({ catalogo: 'Inventario documental de IDF', aps: 'Inventario de access points', cctv: 'Inventario CCTV' })[route.path] || titles[route.path] || 'Página no encontrada';
     document.title = `${title} · Centro Operativo SGRS`;
     if (document.querySelector('dialog[open]')) return;
     [...document.querySelectorAll('.main-content h1')].find(node => node.offsetParent !== null)?.focus({ preventScroll: true });
@@ -193,6 +194,18 @@ export default function App() {
     catch (e) { const uncertain = !e.status || e.status >= 500; setReleaseUncertain(uncertain); setReleaseError(uncertain ? 'No se pudo confirmar la liberación. Consulta el inventario antes de repetir la acción.' : e.message); }
     finally { setReleaseBusy(false); }
   }
+  async function resolveReport() {
+    if (!can('idf.visits.write')) throw new ApiError(403);
+    const row = modal.row;
+    const incident = demo ? { ...row, status: 'resolved', resolved_at: new Date().toISOString() }
+      : (await mutate('/api/reports/resolve', { idf_id: row.idfId, record_key: row.record_key })).incident;
+    setData(old => {
+      const group = old.reports[row.idfId] || {};
+      const incidents = Array.isArray(group) ? group : group.incidents || [];
+      return { ...old, reports: { ...old.reports, [row.idfId]: { ...(Array.isArray(group) ? {} : group), incidents: [...incidents.filter(i => (i.record_key !== row.record_key || !row.record_key) && (!row.id || i.id !== row.id)), incident] } } };
+    });
+    setModal(null); notify(demo ? 'Incidencia de ejemplo resuelta.' : 'Incidencia resuelta. El historial se conserva.');
+  }
   const records = reportsFromData(data.reports, data.idfs);
   const shared = { data, demo, navigate, openEditor, loading, errors, refresh, canWrite: can('inventory.write'), canExport: can('inventory.export') };
   let page;
@@ -200,6 +213,7 @@ export default function App() {
   else if (route.path === 'resumen') page = <Overview {...shared} userId={user.id} errors={Object.values(errors)} />;
   else if (route.path === 'altas') page = <Requests {...shared} />;
   else if (route.path === 'inventario') page = <Inventory {...shared} />;
+  else if (['catalogo', 'aps', 'cctv'].includes(route.path)) page = <DocumentaryInventory key={`${route.path}-${demo}`} {...shared} route={route.path} mutate={mutate} notify={notify} onDirty={setDirty} />;
   else if (route.path === 'disponibilidad') page = <Addresses {...shared} />;
   else if (route.path === 'dispositivos') page = <Devices {...shared} selectedSegment={route.params.get('segmento')} />;
   else if (['idf', 'entrada'].includes(route.path)) page = <><div className="idf-desktop"><AuditLog {...shared} records={records} idfView /></div><div className="idf-mobile"><EntryForm key={route.raw} {...shared} user={user} canRegister={can('idf.visits.write')} idfId={route.params.get('idf')} save={saveEntry} onDirty={setDirty} /></div></>;
@@ -228,6 +242,7 @@ export default function App() {
       {modal && ['request-detail', 'report-detail'].includes(modal.kind) && <dl className="detail-grid">{Object.entries(modal.kind === 'request-detail' ? { Folio: modal.row.id, Usuario: modal.row.name, Área: modal.row.area, Red: modal.row.network, Responsable: modal.row.actor, Fecha: dateTime(modal.row.date) } : { Folio: modal.row.id, IDF: modal.row.idf, Responsable: modal.row.actor, Actividad: modal.row.title, Descripción: modal.row.description, Temperatura: modal.row.temp == null ? '—' : `${modal.row.temp} °C`, Fecha: dateTime(modal.row.date) }).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>}
       {modal?.kind === 'services' && <><ServiceStatus health={data.health} demo={demo} /><p className="muted">Que un servicio responda no garantiza que los equipos de red estén operativos.</p><Button icon={RefreshCw} busy={loading} onClick={refresh}>Actualizar información</Button></>}
       {modal?.kind === 'report-detail' && (modal.row.evidence || modal.row.evidenceDemo) && <a className="button button-secondary evidence-download" href={demo ? modal.row.evidenceDemo : `/api/reports/evidence/${encodeURIComponent(modal.row.evidence)}`} download="evidencia-idf"><Download size={18} />Descargar evidencia fotográfica</a>}
+      {modal?.kind === 'report-detail' && modal.row.status !== 'resolved' && can('idf.visits.write') && (demo || modal.row.record_key) && <ResolveReport row={modal.row} save={resolveReport} />}
       {modal?.kind === 'access' && <><Notice title={demo ? 'Identidad de demostración' : user.name}>{demo ? 'Este perfil solo opera sobre datos ficticios.' : `Usuario: ${user.username} · Rol: ${roleLabel(user.role)}`}</Notice><div className="role-list">{roleInfo.map(role => <div key={role.id}><ShieldCheck size={25} /><div><strong>{roleLabel(role.id)}</strong><p>{role.description}</p></div></div>)}</div>{logoutError && <Notice title="No se pudo cerrar la sesión" tone="danger">{logoutError}</Notice>}{!demo && <Button icon={LogOut} busy={logoutBusy} onClick={async () => { const exit = async () => { setLogoutBusy(true); setLogoutError(''); try { await signOut(); } catch (e) { setLogoutError(e.message); } finally { setLogoutBusy(false); } }; if (dirty) { setModal(null); setPendingNavigation(() => exit); } else await exit(); }}>Cerrar sesión</Button>}</>}
     </Dialog>
     <div className="toast-region" role="status" aria-live="polite" aria-atomic="true">{toast && <div className="toast"><CheckCircle2 size={21} /><span>{toast}</span><IconButton icon={X} label="Cerrar notificación" onClick={() => setToast('')} /></div>}</div>

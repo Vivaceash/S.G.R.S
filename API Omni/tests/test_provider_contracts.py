@@ -5,7 +5,7 @@ from app.errors import OmniVistaResponseError
 from app.routers.catalogs import get_vlans
 
 
-@pytest.mark.parametrize("operation", ["get_vlans", "get_topology", "get_notifications", "get_system_version"])
+@pytest.mark.parametrize("operation", ["get_vlans", "get_topology", "get_notifications", "get_system_version", "get_devices"])
 @pytest.mark.parametrize("http", [200, 404, 500])
 def test_unavailable_is_not_an_empty_collection(operation, http):
     service = OmniVistaService()

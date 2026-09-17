@@ -332,12 +332,16 @@ class OmniVistaService:
     def get_devices(self) -> List[Dict[str, Any]]:
         """Lista completa de switches y APs en la red"""
         res = self.request("GET", "/api/devices", timeout=12)
-        if res.status_code == 200:
+        if res.status_code != 200:
+            raise OmniVistaResponseError('No se pudo consultar el inventario administrado.')
+        try:
             data = res.json()
-            if isinstance(data, list):
-                return sanitize_data(data)
-            return sanitize_data(data.get("response", []))
-        return []
+        except ValueError:
+            raise OmniVistaResponseError('El inventario administrado no contiene JSON válido.') from None
+        rows = data if isinstance(data, list) else data.get('response') if isinstance(data, dict) else None
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise OmniVistaResponseError('El inventario administrado tiene un formato no reconocido.')
+        return sanitize_data(rows)
 
     def get_device_by_ip(self, ip_address: str) -> Optional[Dict[str, Any]]:
         """Busca un equipo de infraestructura por su dirección IP"""

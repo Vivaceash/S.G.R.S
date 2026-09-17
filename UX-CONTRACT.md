@@ -1,5 +1,16 @@
 # Contratos de interacción · SGRS
 
+## Inventario documental · integración del 17 de septiembre de 2026
+
+Se conserva el dashboard, sus métricas operativas y sus componentes canónicos. Inventario añade IDF documental, Access points y CCTV mediante InventoryTabs, DataTable, Dialog y useForm existentes; la única adaptación visual es permitir varias líneas de pestañas. La ruta IDF mantiene formulario móvil y reportes de escritorio.
+
+- El catálogo documental conserva origen, fila/tabla, huella del archivo y valores originales. Las correcciones físicas son una capa local versionada y auditada, nunca escrituras hacia FortiGate u OmniVista. CCTV original es de solo lectura.
+- Cotejar APIs es explícito: una identidad única por MAC o serie permite mostrar la IP operativa por encima de la histórica. IP o nombre solos no prueban identidad. Duplicados y desacuerdos entre proveedores quedan por confirmar. Ausencia no significa desconexión; error de proveedor no equivale a colección vacía.
+- La corrección usa el diálogo y validación compartidos, conserva campos ante errores, impide doble envío y protege borradores. Un 409 requiere revisar y reabrir la ficha actualizada. Los filtros no cambian la identidad del recurso editado.
+- Las descargas originales requieren permiso de exportación y verificación de huella. Estructura.xlsm no se descarga ni se expone íntegramente: solo se importan resúmenes expresamente permitidos, sin contraseñas ni macros.
+- Resolver una incidencia conserva el registro y evidencia originales; añade resolución con identidad y fecha del servidor. Se rechazan resoluciones basadas en una versión anterior.
+- Verificación de esta entrega: pruebas unitarias locales, compilación y navegador con APIs interceptadas; no equivalen a validación contra equipos reales. Las limitaciones de etapas anteriores indicadas abajo son históricas, no resultados de esta entrega.
+
 ## Dashboard principal · decisión del usuario del 14 de septiembre de 2026
 
 Inventario visible: solo equipos en línea y reservas DHCP configuradas, incluidas las desconectadas o no detectadas previamente. La reserva se coteja por interfaz, IP y MAC; no se deduce de una asignación del inventario local. La vista `operational` usa el conjunto nativo `unified_latest` sin imponer una ventana horaria local. DHCP y ARP resuelven la IP por MAC, pero no eliminan equipos activos por falta de dirección o por una IP histórica. Si no es posible atribuir una IP sin duplicarla, se muestra «Pendiente de confirmar» y el equipo permanece en su interfaz reportada. Las tarjetas y el listado usan `deviceInSegment` para conservar ese mismo alcance. Si falla una fuente requerida, el gateway devuelve error y no sustituye la respuesta por el inventario histórico local. La tabla identifica las IP reservadas y su filtro de desconectados muestra únicamente esas reservas.

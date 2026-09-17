@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 from integration_health import upstream_healthy
 from dashboard_catalog import CATALOG
 from dashboard_history import history
+import dashboard_inventory as inventory
 
 from dashboard_access import (AccessError, SESSION_SECONDS, database, session, login,
                               public_user, save_user, connection, connection_values,
@@ -109,6 +110,27 @@ class AccessRoutes:
                 self._send_json({k: v for k, v in identity.items() if k != "token_hash"} if identity else {"user": None, "setup_required": setup})
                 return True
             self._authorize()
+            if path == '/api/inventory/catalog':
+                result = inventory.catalog()
+                if self.identity['user']['role'] == 'viewer':
+                    result['observations'] = []
+                    result['structure'] = {}
+                self._send_json(result)
+                return True
+            if path == '/api/inventory/reconcile':
+                self._send_json(inventory.live_reconciliation(self.inventory_fetch))
+                return True
+            if path.startswith('/api/inventory/documents/'):
+                if 'inventory.export' not in self.identity['capabilities']:
+                    raise AccessError(403, 'No tienes permiso para descargar documentos de inventario.')
+                raw, filename = inventory.source_download(path.rsplit('/', 1)[-1])
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/octet-stream')
+                self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
+                self.send_header('Content-Length', str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+                return True
             if path == "/api/admin/history":
                 self._manage()
                 self._send_json(history())
@@ -167,6 +189,16 @@ class AccessRoutes:
                 return True
             self._authorize(mutation=True)
             actor = self.identity["user"]["id"]
+            if path == '/api/reports/resolve':
+                if 'idf.visits.write' not in self.identity['capabilities']:
+                    raise AccessError(403, 'No tienes permiso para resolver incidencias.')
+                self.resolve_report(self._body())
+                return True
+            if path == '/api/inventory/asset':
+                if 'inventory.write' not in self.identity['capabilities']:
+                    raise AccessError(403, 'No tienes permiso para modificar el inventario.')
+                self._send_json(inventory.save_asset(self._body(), actor))
+                return True
             if path == "/api/auth/logout":
                 with database(write=True) as db:
                     db.execute("DELETE FROM sessions WHERE token_hash=?", (self.identity["token_hash"],))
@@ -221,7 +253,7 @@ class AccessRoutes:
     def viewer_projection(self, data):
         """Minimize personal data and raw upstream objects for read-only accounts."""
         if getattr(self, "identity", None) and self.identity["user"]["role"] == "viewer":
-            hidden = {"raw", "mac", "serial", "tech", "actor", "actor_id", "username", "notes", "description", "evidence", "hostname", "user", "users"}
+            hidden = {"raw", "mac", "serial", "tech", "actor", "actor_id", "resolved_by", "username", "notes", "description", "evidence", "hostname", "user", "users"}
             def clean(value):
                 if isinstance(value, dict):
                     return {k: clean(v) for k, v in value.items() if k not in hidden}

@@ -15,9 +15,10 @@ import unicodedata
 from urllib.parse import urlsplit
 from dashboard_access import connection, connection_headers, AccessError
 from dashboard_routes import AccessRoutes
-from dashboard_reports import ReportRoutes
+from dashboard_reports import ReportRoutes, report_key, tagged_reports
 from integration_health import upstream_healthy
 from dashboard_history import start_collector
+from dashboard_inventory import cabinets_with_documentary
 
 # Lock global para proteger lecturas/escrituras concurrentes a archivos JSON
 _file_lock = threading.Lock()
@@ -134,6 +135,9 @@ def _format_activity(is_online, last_seen):
 
 
 class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
+    def inventory_fetch(self, provider, endpoint):
+        return _configured_request(connection(provider), endpoint, timeout=6)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
@@ -182,7 +186,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 with _file_lock:
                     with open(REPORTS_FILE, 'r', encoding='utf-8') as f:
                         data = json.load(f)
-                self._send_json(data)
+                self._send_json(tagged_reports(data))
             except Exception as e:
                 self._send_json({"error": str(e)}, 500)
 
@@ -192,7 +196,8 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 with _file_lock:
                     with open(IDFS_FILE, 'r', encoding='utf-8') as f:
                         data = json.load(f)
-                self._send_json(data)
+                self._send_json([{**idf, 'incidents': [{**r, 'record_key': report_key(r)} for r in idf.get('incidents', [])]}
+                                 for idf in cabinets_with_documentary(data)])
             except Exception as e:
                 self._send_json({"error": str(e)}, 500)
 

@@ -2,6 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { csvCell, paginate, selectRows, inventoryFromIdfs, reportsFromData } from '../src/domain.mjs';
 
+test('Incidencias sin ID conservan su identidad y la resolución sustituye solo su origen', () => {
+  const idfs = [{ id: 'idf-1', name: 'IDF 1', incidents: [
+    { record_key: 'original-a', title: 'A', status: 'open' },
+    { record_key: 'original-b', title: 'B', status: 'open' },
+  ] }];
+  const reports = { 'idf-1': { incidents: [{ record_key: 'resolved-a', origin_key: 'original-a', title: 'A', status: 'resolved' }] } };
+  const rows = reportsFromData(reports, idfs);
+  assert.equal(rows.length, 2);
+  assert.equal(rows.find(r => r.title === 'A').status, 'resolved');
+  assert.equal(rows.find(r => r.title === 'B').status, 'open');
+});
+
 test('CSV neutraliza fórmulas incluso después de espacios y conserva comillas', () => {
   for (const text of ['=1+1', '  +SUM(A1)', '\t@formula', '-2+4', '\r=1']) assert.ok(csvCell(text).startsWith('"\''));
   assert.equal(csvCell('Área "Clínica"'), '"Área ""Clínica"""');

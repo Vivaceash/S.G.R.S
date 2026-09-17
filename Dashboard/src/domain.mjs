@@ -86,9 +86,10 @@ export function reportsFromData(reports, idfs) {
   for (const idf of idfs) {
     const stored = reports[idf.id];
     const incidents = [...(idf.incidents || []), ...(Array.isArray(stored) ? stored : stored?.incidents || [])];
-    for (const incident of incidents) records.set(`${idf.id}:${incident.id}`, {
-      ...incident, key: `${idf.id}:${incident.id}`, idfId: idf.id, idf: idf.name, actor: incident.tech || 'Sin responsable',
-    });
+    for (const [index, incident] of incidents.entries()) {
+      const key = `${idf.id}:${incident.origin_key || incident.id || incident.record_key || `legacy-${index}`}`;
+      records.set(key, { ...incident, key, idfId: idf.id, idf: idf.name, actor: incident.tech || incident.reporter || 'Sin responsable' });
+    }
   }
   return [...records.values()].sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0));
 }
@@ -111,7 +112,7 @@ export async function request(path, { signal, body } = {}) {
   });
   if (!response.ok) {
     if (response.status === 401 && !path.startsWith('/api/auth/')) window.dispatchEvent(new Event('sgrs-session-expired'));
-    const local = path.startsWith('/api/admin/') || path.startsWith('/api/auth/') || path === '/api/reports';
+    const local = path.startsWith('/api/admin/') || path.startsWith('/api/auth/') || path.startsWith('/api/inventory/') || path.startsWith('/api/reports');
     const payload = await response.json().catch(() => ({}));
     throw new ApiError(response.status, local && response.status < 500 && typeof payload.error === 'string' ? payload.error : undefined);
   }

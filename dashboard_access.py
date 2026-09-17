@@ -85,6 +85,9 @@ def database(write=False):
             target TEXT NOT NULL, created_at INTEGER NOT NULL);
           CREATE TABLE IF NOT EXISTS metric_samples (
             sampled_at INTEGER PRIMARY KEY, metrics TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS inventory_edits (
+            asset_id TEXT PRIMARY KEY, version INTEGER NOT NULL,
+            fields TEXT NOT NULL, updated_at TEXT NOT NULL);
         """)
         if write:
             db.execute("BEGIN IMMEDIATE")
