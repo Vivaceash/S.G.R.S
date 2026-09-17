@@ -67,9 +67,17 @@ def get_dashboard_port() -> int:
     if env_port and env_port.isdigit():
         return int(env_port)
     pids = load_pids()
-    # Si el proceso dashboard registrado está corriendo en 3001
-    if pids.get("dashboard") and is_port_in_use(3001):
-        return 3001
+    # Persistir el puerto evita que un dashboard ya escuchando en 3000 sea
+    # interpretado como una colisión y se reporte erróneamente como 3001.
+    registered_port = pids.get("dashboard_port")
+    if pids.get("dashboard") and isinstance(registered_port, int) and registered_port > 0:
+        return registered_port
+    # Compatibilidad con registros generados antes de dashboard_port.
+    if pids.get("dashboard"):
+        if is_port_in_use(3000):
+            return 3000
+        if is_port_in_use(3001):
+            return 3001
     # Probar si el puerto 3000 está disponible para bind
     s = socket.socket()
     try:
@@ -348,6 +356,7 @@ def start_services(detached: bool = True):
             "api_forti": proc_forti.pid,
             "api_omni": proc_omni.pid,
             "dashboard": proc_dash.pid if proc_dash else None,
+            "dashboard_port": dash_port if proc_dash else None,
         })
 
         # Breve pausa para asegurar arranque
@@ -423,6 +432,7 @@ def start_services(detached: bool = True):
         "api_forti": proc_forti.pid,
         "api_omni": proc_omni.pid,
         "dashboard": proc_dash.pid if proc_dash else None,
+        "dashboard_port": dash_port if proc_dash else None,
     })
 
     t_forti = threading.Thread(target=stream_logs_to_output, args=(proc_forti.stdout, "[API-FORTI]", log_file), daemon=True)
