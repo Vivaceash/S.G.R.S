@@ -256,6 +256,10 @@ def connection(service, public=False):
 def connection_values(service, body):
     old = connection(service)
     url = str(body.get("url", "")).strip().rstrip("/")
+    if url.endswith("/health"):
+        url = url[:-len("/health")]
+    elif url.endswith("/system/health"):
+        url = url[:-len("/system/health")]
     try:
         parsed = urlsplit(url)
         if parsed.port is not None and not 1 <= parsed.port <= 65535:

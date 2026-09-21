@@ -63,11 +63,22 @@ def _configured_request(config, suffix, timeout=4.0):
             ip = getattr(ip, 'ipv4_mapped', None) or ip
             if ip.is_link_local or ip.is_multicast or ip.is_unspecified or (parsed.scheme == "http" and not ip.is_loopback):
                 raise ValueError("Blocked address")
-        address = addresses[0][4][0]
+        def _connect_pinned(target, timeout=timeout, source_address=None):
+            last_err = None
+            for item in addresses:
+                candidate_ip = item[4][0]
+                try:
+                    return socket.create_connection((candidate_ip, port), timeout, source_address)
+                except OSError as err:
+                    last_err = err
+            if last_err:
+                raise last_err
+            raise OSError(f"No valid address to connect for {parsed.hostname}")
+
         transport = (http.client.HTTPSConnection(parsed.hostname, port, timeout=timeout, context=ssl.create_default_context())
                      if parsed.scheme == "https" else http.client.HTTPConnection(parsed.hostname, port, timeout=timeout))
         # Pin the checked IP while preserving the original host for TLS SNI/verification.
-        transport._create_connection = lambda target, timeout=timeout, source_address=None: socket.create_connection((address, port), timeout, source_address)
+        transport._create_connection = _connect_pinned
         headers = {"Accept": "application/json", "User-Agent": "SGRS-Dashboard/2.0", **connection_headers(config)}
         transport.request("GET", parsed.path.rstrip("/") + suffix, headers=headers)
         response = transport.getresponse()
