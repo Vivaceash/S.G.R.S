@@ -30,6 +30,92 @@ export function deviceInSegment(device, segment) {
   if (device.is_reserved && !device.ip && ipInSegment(device.reserved_ip, segment)) return true;
   return device.ip_source === 'unconfirmed' && Boolean(device.interface) && device.interface === segment.interface;
 }
+export function getSegmentDevices(devices, segment) {
+  if (!Array.isArray(devices) || !segment) return [];
+  return devices.filter(device => deviceInSegment(device, segment));
+}
+
+export function formatDeviceType(typeOrDevice, osOrName = '', nameOrVendor = '', vendorParam = '') {
+  let type = '';
+  let os = '';
+  let name = '';
+  let vendor = '';
+
+  if (typeOrDevice && typeof typeOrDevice === 'object') {
+    type = typeOrDevice.type || '';
+    os = typeOrDevice.os || typeOrDevice.raw?.os_name || '';
+    name = typeOrDevice.name || '';
+    vendor = typeOrDevice.vendor || '';
+  } else {
+    type = typeOrDevice || '';
+    if (vendorParam !== '') {
+      os = osOrName || '';
+      name = nameOrVendor || '';
+      vendor = vendorParam || '';
+    } else if (nameOrVendor !== '') {
+      const testOs = String(osOrName).toLowerCase();
+      if (/windows|macos|mac_os|mac\s*os|os\s*x|android|ios|iphone|ipad|ipados|linux/.test(testOs)) {
+        os = osOrName;
+        name = nameOrVendor;
+      } else {
+        name = osOrName;
+        vendor = nameOrVendor;
+      }
+    } else {
+      const testOs = String(osOrName).toLowerCase();
+      if (/windows|macos|mac_os|mac\s*os|os\s*x|android|ios|iphone|ipad|ipados|linux/.test(testOs)) {
+        os = osOrName;
+      } else {
+        name = osOrName;
+      }
+    }
+  }
+
+  const osLower = String(os || '').toLowerCase();
+  if (/(windows|macos|mac_os|mac\s*os|os\s*x)/i.test(osLower)) {
+    return 'Computadora';
+  }
+  if (/(android|ios|iphone|ipad|ipados)/i.test(osLower)) {
+    return 'Teléfono';
+  }
+
+  if (type === 'Computadora' || type === 'Teléfono' || type === 'Impresora') return type;
+  if (type === 'Móvil') return 'Teléfono';
+
+  const text = `${type || ''} ${name || ''} ${vendor || ''}`.toLowerCase();
+  if (/(phone|iphone|android|movil|móvil|celular|ipad|tablet|poco|redmi|xiaomi|samsung|huawei|motorola|oppo|vivo|realme|galaxy)/i.test(text)) {
+    return 'Teléfono';
+  }
+  if (/(desktop|laptop|pc|macbook|imac|thinkpad|workstation|dell|lenovo|hp|computer)/i.test(text)) {
+    return 'Computadora';
+  }
+  if (/(printer|impresora|kyocera|ricoh|epson)/i.test(text)) {
+    return 'Impresora';
+  }
+
+  if (!type || type === 'Unknown' || type === 'Dispositivo') return 'Desconocido';
+  return type;
+}
+
+function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function formatLocation(location, vendor = '', segmentName = '') {
+  if (!location || location === '—') return '—';
+  let clean = String(location).trim();
+  if (segmentName && clean.includes(segmentName)) {
+    const esc = escapeRegex(segmentName);
+    clean = clean.replace(new RegExp(`\\s*[·\\-/]\\s*${esc}\\b`, 'gi'), '').replace(new RegExp(`\\b${esc}\\s*[·\\-/]\\s*`, 'gi'), '').trim();
+  }
+  if (vendor && clean.startsWith(`${vendor} ·`)) {
+    clean = clean.replace(`${vendor} ·`, '').trim();
+  }
+  if (vendor && clean.toLowerCase() === vendor.toLowerCase()) {
+    return '—';
+  }
+  return clean || '—';
+}
 export const number = value => value == null ? '—' : new Intl.NumberFormat(LOCALE).format(value);
 export const dateTime = value => {
   if (!value) return 'Sin registro';
@@ -47,6 +133,25 @@ export const statusNames = {
 export const statusTone = status => ['online', 'normal', 'available', 'approved', 'resolved'].includes(status) ? 'success'
   : ['warning', 'pending', 'low', 'in_progress'].includes(status) ? 'warning'
     : ['critical', 'rejected', 'open'].includes(status) ? 'danger' : status === 'review' ? 'info' : 'neutral';
+
+export function getUtilizationTone(percent) {
+  const p = Number(percent) || 0;
+  if (p < 40) return 'green';
+  if (p < 70) return 'yellow';
+  if (p < 85) return 'orange';
+  return 'red';
+}
+
+export function getUtilizationColor(percent) {
+  const tone = getUtilizationTone(percent);
+  switch (tone) {
+    case 'green': return '#19BF3E';
+    case 'yellow': return '#d97706';
+    case 'orange': return '#ea580c';
+    case 'red': return '#ae1234';
+    default: return '#19BF3E';
+  }
+}
 
 // Every exported value is quoted; spreadsheet formulas and leading controls are neutralized.
 export function csvCell(value) {

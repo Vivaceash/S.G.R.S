@@ -145,6 +145,82 @@ def _format_activity(is_online, last_seen):
         return str(last_seen)
 
 
+# Cache en memoria para cotejo no bloqueante con OmniVista (Company Property)
+_omni_cache_lock = threading.Lock()
+_omni_devices_cache = {
+    "by_mac": {},
+    "updated_at": 0,
+    "fetching": False
+}
+
+def _refresh_omni_devices_cache():
+    with _omni_cache_lock:
+        if _omni_devices_cache["fetching"]:
+            return
+        _omni_devices_cache["fetching"] = True
+    try:
+        by_mac = {}
+        for page in range(1, 10):
+            code, body, _ = _fetch_upstream(f"{OMNI_API_URL}/company-properties?page={page}&page_size=500", timeout=6.0)
+            if code != 200:
+                break
+            try:
+                payload = json.loads(body.decode("utf-8"))
+                items = (payload.get("data") or {}).get("items") or []
+            except Exception:
+                break
+            if not items:
+                break
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                raw_mac = item.get("deviceMac") or ""
+                clean_mac = "".join(c for c in str(raw_mac).upper() if c.isalnum())
+                if clean_mac:
+                    by_mac[clean_mac] = {
+                        "matched": True,
+                        "mac": clean_mac,
+                        "device_name": item.get("deviceName"),
+                        "account": item.get("account") or item.get("employeeAccount"),
+                        "location": item.get("lastAccessLocation"),
+                        "ap_name": item.get("lastAccessDeviceName"),
+                        "ssid": item.get("lastAccessDeviceSSID"),
+                        "profile": item.get("accessRoleProfile"),
+                        "category": item.get("deviceCategory"),
+                        "family": item.get("deviceFamily"),
+                        "os": item.get("deviceOS"),
+                        "status": item.get("status"),
+                    }
+            if len(items) < 500:
+                break
+        if by_mac:
+            with _omni_cache_lock:
+                _omni_devices_cache["by_mac"] = by_mac
+                _omni_devices_cache["updated_at"] = time.time()
+    except Exception:
+        pass
+    finally:
+        with _omni_cache_lock:
+            _omni_devices_cache["fetching"] = False
+
+def get_omni_device_by_mac(mac):
+    clean_mac = "".join(c for c in str(mac or "").upper() if c.isalnum())
+    if not clean_mac:
+        return None
+    now = time.time()
+    if now - _omni_devices_cache["updated_at"] > 300 and not _omni_devices_cache["fetching"]:
+        threading.Thread(target=_refresh_omni_devices_cache, daemon=True).start()
+    return _omni_devices_cache["by_mac"].get(clean_mac)
+
+def ensure_omni_cache_warm(max_wait=1.5):
+    if _omni_devices_cache["by_mac"]:
+        return
+    if not _omni_devices_cache["fetching"]:
+        t = threading.Thread(target=_refresh_omni_devices_cache, daemon=True)
+        t.start()
+        t.join(timeout=max_wait)
+
+
 class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
     def inventory_fetch(self, provider, endpoint):
         return _configured_request(connection(provider), endpoint, timeout=6)
@@ -359,15 +435,25 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                             "offline_devices": forti_data.get("offline_devices", 0),
                             "returned_count": forti_data.get("returned_count", len(forti_devices)),
                         }
+                        ensure_omni_cache_warm(max_wait=1.5)
                         mapped_devices = []
                         for dev in forti_devices:
                             ip = dev.get("ip") or "—"
+                            raw_mac = dev.get("mac") or ""
+                            clean_mac = "".join(c for c in str(raw_mac).upper() if c.isalnum())
+                            ov = get_omni_device_by_mac(clean_mac) if clean_mac else None
+
                             name = dev.get("hostname") or dev.get("mac") or ip
-                            dev_type = dev.get("device_type") or dev.get("hardware_family") or dev.get("os_name") or "Dispositivo"
-                            icon = _get_device_icon(dev.get("device_type"), dev.get("hardware_family"), dev.get("os_name"))
-                            vendor = dev.get("hardware_vendor") or "Fortinet"
-                            interface = dev.get("interface") or "LAN"
-                            location = f"{vendor} · {interface}"
+                            if ov and ov.get("device_name"):
+                                h = str(dev.get("hostname") or "")
+                                if not h or h == ip or h == raw_mac or h.startswith("MAC-") or len(h) == 36:
+                                    name = ov.get("device_name")
+
+                            dev_type = dev.get("device_type") or dev.get("hardware_family") or (ov.get("category") if ov else None) or dev.get("os_name") or (ov.get("os") if ov else None) or "Dispositivo"
+                            icon = _get_device_icon(dev.get("device_type"), dev.get("hardware_family"), dev.get("os_name") or (ov.get("os") if ov else None))
+                            vendor = dev.get("hardware_vendor") or (ov.get("family") if ov else None) or "Fortinet"
+                            interface = dev.get("interface") or (ov.get("ssid") if ov else None) or "LAN"
+                            location = (ov.get("location") if (ov and ov.get("location")) else None) or f"{vendor} · {interface}"
                             is_online = bool(dev.get("is_online"))
                             status = "online" if is_online else "offline"
                             activity = _format_activity(is_online, dev.get("last_seen"))
@@ -382,10 +468,11 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                                 "ip_source": dev.get("ip_source"),
                                 "reserved_ip": dev.get("reserved_ip"),
                                 "activity": activity,
-                                "mac": dev.get("mac") or "—",
+                                "mac": raw_mac or "—",
                                 "vendor": vendor,
-                                "os": dev.get("os_name") or "—",
+                                "os": dev.get("os_name") or (ov.get("os") if ov else None) or "—",
                                 "interface": interface,
+                                "omnivista": ov,
                                 "raw": dev,
                             })
                         devices_data = mapped_devices

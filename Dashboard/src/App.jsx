@@ -54,6 +54,23 @@ function DeviceDetail({ row, demo }) {
     finally { clearTimeout(timer); if (controller.current === current) setLoading(false); }
   };
   return <><dl className="detail-grid">{[['Dirección IP', row.ip], ['MAC', row.mac], ['Fabricante', row.vendor], ['Sistema operativo', row.os], ['Interfaz', row.interface], ['Estado', row.status]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || 'No informado'}</dd></div>)}</dl>
+    {row.omnivista?.matched && <div className="omni-detail-box">
+      <div className="omni-detail-header">
+        <CheckCircle2 size={18} className="text-success" aria-hidden="true" />
+        <h4>Información cotejada en OmniVista 2500</h4>
+      </div>
+      <dl className="detail-grid">
+        <div><dt>Nombre en OmniVista</dt><dd><strong>{row.omnivista.device_name || '—'}</strong></dd></div>
+        <div><dt>Cuenta asignada</dt><dd>{row.omnivista.account || 'Sin cuenta individual'}</dd></div>
+        <div><dt>Ubicación física (IDF / Puerto)</dt><dd><strong className="text-location">{row.omnivista.location || 'No informada'}</strong></dd></div>
+        <div><dt>Punto de acceso (AP)</dt><dd>{row.omnivista.ap_name || 'No informado'}</dd></div>
+        <div><dt>SSID reportado</dt><dd>{row.omnivista.ssid || row.interface || '—'}</dd></div>
+        <div><dt>Perfil de acceso</dt><dd>{row.omnivista.profile || '—'}</dd></div>
+        <div><dt>Categoría / Familia</dt><dd>{[row.omnivista.category, row.omnivista.family].filter(Boolean).join(' · ') || '—'}</dd></div>
+        <div><dt>Sistema operativo OmniVista</dt><dd>{row.omnivista.os || '—'}</dd></div>
+        <div><dt>Estado en OmniVista</dt><dd><Badge status={row.omnivista.status?.toLowerCase() === 'online' ? 'online' : 'offline'} /> {row.omnivista.status || '—'}</dd></div>
+      </dl>
+    </div>}
     {can('traffic.read') && <>
       <Button icon={RefreshCw} busy={loading} disabled={demo || !row.ip || row.ip === '—'} onClick={load}>Consultar telemetría de tráfico</Button>
       {demo && <p className="muted">La telemetría requiere una conexión real con FortiGate.</p>}

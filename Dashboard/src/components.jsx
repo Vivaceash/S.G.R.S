@@ -99,7 +99,7 @@ export function downloadCsv(name, columns, rows) {
   link.href = url; link.download = `${name}.csv`; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export function DataTable({ title, rows, columns, state, noun = 'registros', pageSize = 10, toolbar, exportable = false, loading = false, error, onRetry, emptyText, rowKey = 'id' }) {
+export function DataTable({ title, rows, columns, state, noun = 'registros', pageSize = 10, toolbar, exportable = false, loading = false, error, onRetry, emptyText, rowKey = 'id', onRowClick, rowClassName }) {
   const visible = selectRows(rows, state.query, state.filters, state.sort, state.asc);
   const page = paginate(visible, state.page, pageSize);
   useEffect(() => { if (!loading && !error && page.current !== state.page) state.setPage(page.current); }, [page.current, state.page, loading, error]);
@@ -108,7 +108,10 @@ export function DataTable({ title, rows, columns, state, noun = 'registros', pag
     <div className="table-scroll" tabIndex={0} role="region" aria-label={`${title}. Desplázate para ver todas las columnas.`}>
       <table><caption className="sr-only">{title}</caption><thead><tr>{columns.map(column => <th key={column.key} scope="col" aria-sort={state.sort === column.key ? state.asc ? 'ascending' : 'descending' : undefined}>
         {column.sortable === false ? column.label : <button type="button" className="sort-button" onClick={() => state.setSort(column.key)}>{column.label}<ArrowDownUp size={13} aria-hidden="true" /></button>}
-      </th>)}</tr></thead><tbody>{!loading && !error && page.rows.map((row, index) => <tr key={row[rowKey] || index}>{columns.map(column => <td key={column.key}>{column.render ? column.render(row) : String(row[column.key] ?? '—')}</td>)}</tr>)}</tbody></table>
+      </th>)}</tr></thead><tbody>{!loading && !error && page.rows.map((row, index) => {
+        const cls = typeof rowClassName === 'function' ? rowClassName(row) : rowClassName;
+        return <tr key={row[rowKey] || index} className={cls} role={onRowClick ? 'button' : undefined} tabIndex={onRowClick ? 0 : undefined} onClick={onRowClick ? () => onRowClick(row) : undefined} onKeyDown={onRowClick ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(row); } } : undefined} title={onRowClick ? 'Haz clic para ver el detalle técnico' : undefined}>{columns.map(column => <td key={column.key}>{column.render ? column.render(row) : String(row[column.key] ?? '—')}</td>)}</tr>;
+      })}</tbody></table>
       {loading ? <Loading /> : error ? <Empty title="No se pudo cargar la información" action={<Button icon={RefreshCw} onClick={onRetry}>Volver a intentar</Button>}>{error}</Empty> : !visible.length && <Empty title={rows.length ? 'No se encontraron resultados' : 'Aún no hay registros'} action={rows.length ? <Button onClick={state.reset}>Limpiar filtros</Button> : null}>{rows.length ? 'Prueba otra búsqueda o elimina los filtros activos.' : emptyText}</Empty>}
     </div>
     <div className="table-footer"><span role="status">{visible.length ? `Mostrando ${(page.current - 1) * pageSize + 1}–${Math.min(page.current * pageSize, page.total)} de ${number(page.total)} ${noun}` : `0 ${noun}`}</span>

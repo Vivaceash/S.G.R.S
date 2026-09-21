@@ -12,6 +12,7 @@ tools:
   - write_to_file
   - find_by_name
   - grep_search
+  - run_command
 ---
 
 # Core Instructions: Especialista Frontend

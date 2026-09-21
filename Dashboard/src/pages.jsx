@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { Activity, ArrowRight, Building2, CalendarDays, Check, CheckCircle2, Clock3, Download, FileText, Layers3, Monitor, Network, Package, Plus, Router, Server, ShieldCheck, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw } from 'lucide-react';
-import { Badge, Button, DataTable, Dialog, Empty, Metric, Note, Notice, SearchField, Select, downloadCsv, useListState } from './components.jsx';
-import { dateTime, number, request, selectRows, segmentKey, deviceInSegment } from './domain.mjs';
+import React, { useEffect, useRef, useState } from 'react';
+import { Activity, ArrowRight, Building2, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, FileText, Info, Layers3, Monitor, Network, Package, Plus, Router, Server, ShieldCheck, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { Badge, Button, DataTable, Dialog, Empty, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, useListState } from './components.jsx';
+import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getSegmentDevices, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames } from './domain.mjs';
 
 export function PageHeading({ eyebrow, title, description, updatedAt, children, headingId = 'page-title' }) {
   return <div className="page-heading"><div className="page-heading-copy"><p className="eyebrow">{eyebrow}</p><h1 tabIndex={-1} id={headingId}>{title}</h1><p>{description}</p></div><div className="page-heading-actions">{children}{updatedAt && <div className="update-stamp"><CalendarDays size={23} aria-hidden="true" /><div><span>Última consulta</span><strong>{dateTime(updatedAt)}</strong></div></div>}</div></div>;
@@ -9,7 +9,9 @@ export function PageHeading({ eyebrow, title, description, updatedAt, children, 
 const options = values => [...new Set(values.filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'es-MX', { numeric: true })).map(v => <option key={v} value={v}>{v}</option>);
 const detailText = (primary, secondary) => <div className="cell-detail"><strong>{primary || '—'}</strong>{secondary && <small>{secondary}</small>}</div>;
 
-export function Overview({ data, demo, navigate, loading, errors, userId }) {
+export function Overview({ data, demo, navigate, loading, errors, userId, openEditor }) {
+  const [activeSegmentKey, setActiveSegmentKey] = useState(null);
+  const devicesPanelRef = useRef(null);
   const { segments, ips, devices, resources } = data;
   const available = ips.filter(ip => ip.status === 'available').length;
   const online = devices.filter(d => d.status === 'online').length;
@@ -23,6 +25,7 @@ export function Overview({ data, demo, navigate, loading, errors, userId }) {
   const [draft, setDraft] = useState([]);
   const [preferenceError, setPreferenceError] = useState('');
   const principalKeys = chosen ?? segments.slice(0, 3).map(segmentKey);
+  const activeSegment = segments.find(s => segmentKey(s) === activeSegmentKey) || null;
   const visibleSegments = all ? segments : segments.filter(s => principalKeys.includes(segmentKey(s)));
   const editSegments = () => { setDraft(principalKeys); setPreferenceError(''); setEditing(true); };
   const saveSegments = () => {
@@ -42,16 +45,21 @@ export function Overview({ data, demo, navigate, loading, errors, userId }) {
       <article className="network-state"><h3>Estado de los segmentos</h3><div className="flex items-center gap-5"><div className="donut" style={{ '--healthy': `${segments.length ? (segments.length - warnings) / segments.length * 100 : 0}%` }} role="img" aria-label={`${segments.length - warnings} de ${segments.length} segmentos sin alerta de capacidad`}><span>{number(segments.length)}<small>segmentos</small></span></div><div className="donut-legend"><span><i className="legend-success" />Operativos <b>{segments.length - warnings}</b></span><span><i className="legend-warning" />Con alerta <b>{warnings}</b></span><span><i className="legend-neutral" />Origen <b>{demo ? 'Demo' : 'DHCP'}</b></span></div></div></article>
     </section>
     <section className="segment-section"><div className="section-heading"><Layers3 className="section-icon" size={31} aria-hidden="true" /><div><h2>Segmentos de Red y VLANs</h2><p>Capacidad y asignación de los principales segmentos de la infraestructura</p></div><div className="section-actions"><span>{number(segments.length)} segmentos</span><Button onClick={editSegments} icon={Plus} disabled={loading || !segments.length}>Elegir principales</Button><Button onClick={() => setAll(!all)} icon={ArrowRight}>{all ? 'Ver principales' : 'Ver todos'}</Button></div></div>
-      {segments.length ? <><div className="segment-grid">{visibleSegments.map((segment, index) => <article className={`segment-card segment-${index % 3}`} key={`${segment.id}-${segment.interface}`}>
+      {segments.length ? <><div className="segment-grid">{visibleSegments.map((segment, index) => {
+        const isSelected = activeSegmentKey === segmentKey(segment);
+        const meterTone = getUtilizationTone(segment.utilization_percent);
+        const meterColor = getUtilizationColor(segment.utilization_percent);
+        return <article className={`segment-card segment-${index % 3} ${isSelected ? 'segment-card-selected' : ''}`} key={`${segment.id}-${segment.interface}`}>
         <div className="segment-card-heading"><h3><span className="segment-dot" />{segment.name || segment.interface}</h3><Badge status={segment.status} /></div>
         <div className="segment-address"><small>{segment.vlan || segment.interface}</small><strong>{segment.subnet || segment.ip_ranges?.[0] || 'Rango no informado'}</strong></div>
         <dl className="segment-details"><div><dt><Router size={16} />Gateway</dt><dd className="font-mono">{segment.default_gateway || '—'}</dd></div><div><dt><Network size={16} />Máscara</dt><dd className="font-mono">{segment.netmask || '—'}</dd></div><div><dt><FileText size={16} />IPs asignadas</dt><dd><strong>{number(segment.active_leases)} / {number(segment.capacity)}</strong></dd></div></dl>
         <dl className="segment-details segment-secondary"><div><dt><Monitor size={16} />{'Dispositivos en línea'}</dt><dd className="text-success"><strong>{number(devices.filter(device => device.status === 'online' && deviceInSegment(device, segment)).length)}</strong></dd></div><div><dt><Clock3 size={16} />{demo ? 'Promedio diario' : 'Duración de concesión'}</dt><dd>{demo ? number(segment.average) : segment.lease_time_seconds ? `${number(segment.lease_time_seconds)} s` : 'No informada'}</dd></div></dl>
-        <div className="capacity-meter"><meter min="0" max="100" value={segment.utilization_percent || 0} aria-label={`Utilización de ${segment.interface}`} /><small>{number(segment.utilization_percent)}% utilizado</small></div>
+        <div className={`capacity-meter capacity-meter-${meterTone}`} style={{ '--meter-fill': meterColor }}><meter min="0" max="100" value={segment.utilization_percent || 0} className={`meter-${meterTone}`} style={{ '--meter-fill': meterColor }} aria-label={`Utilización de ${segment.interface}`} /><small><span className={`meter-bullet meter-bullet-${meterTone}`} style={{ background: meterColor }} aria-hidden="true" />{number(segment.utilization_percent)}% utilizado</small></div>
         <div className="segment-description"><Building2 size={21} aria-hidden="true" /><p>{segment.description || `Pool de direcciones de la interfaz ${segment.interface}. Consulta los equipos asociados a este segmento.`}</p></div>
-        <Button variant="primary" className="w-full" icon={Server} onClick={() => { const url = new URL(location.href); url.searchParams.delete('equipos.page'); url.searchParams.delete('equipos.filter.status'); history.replaceState(null, '', url); navigate(`dispositivos?segmento=${encodeURIComponent(segmentKey(segment))}`); }}>Ver dispositivos <ArrowRight size={17} /></Button>
-      </article>)}</div>{!visibleSegments.length && <Empty title="Sin segmentos principales" action={<Button icon={Plus} onClick={editSegments}>Elegir principales</Button>}>Agrega los segmentos que quieres ver en tu dashboard.</Empty>}</> : <div className="panel"><Empty title={loading ? 'Consultando segmentos de red' : 'Sin segmentos disponibles'}>{loading ? 'Espera mientras se consulta la capacidad DHCP.' : 'La conexión con el servicio DHCP no devolvió segmentos. Puedes revisar el inventario IP o actualizar la consulta.'}</Empty></div>}
+        <Button variant={isSelected ? 'secondary' : 'primary'} className={`w-full ${isSelected ? 'is-selected' : ''}`} icon={Server} aria-expanded={isSelected} onClick={() => { const key = segmentKey(segment); if (activeSegmentKey === key) { setActiveSegmentKey(null); } else { setActiveSegmentKey(key); setTimeout(() => { devicesPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 60); } }}>{isSelected ? 'Ocultar dispositivos' : 'Ver dispositivos'} {isSelected ? <ChevronDown size={17} /> : <ArrowRight size={17} />}</Button>
+      </article>; })}</div>{!visibleSegments.length && <Empty title="Sin segmentos principales" action={<Button icon={Plus} onClick={editSegments}>Elegir principales</Button>}>Agrega los segmentos que quieres ver en tu dashboard.</Empty>}</> : <div className="panel"><Empty title={loading ? 'Consultando segmentos de red' : 'Sin segmentos disponibles'}>{loading ? 'Espera mientras se consulta la capacidad DHCP.' : 'La conexión con el servicio DHCP no devolvió segmentos. Puedes revisar el inventario IP o actualizar la consulta.'}</Empty></div>}
     </section>
+    {activeSegment && <SegmentDevicesPanel panelRef={devicesPanelRef} segment={activeSegment} devices={devices} onClose={() => setActiveSegmentKey(null)} openEditor={openEditor} />}
     <Dialog open={editing} onClose={() => setEditing(false)} title="Elegir segmentos principales" wide>
       <p className="muted">Selecciona las tarjetas que quieres mostrar al abrir el dashboard. Esta preferencia se guarda para tu cuenta en este navegador.</p>
       <div className="segment-picker">{segments.map(segment => { const key = segmentKey(segment); const selected = draft.includes(key); return <article className="panel" key={key}><div><strong>{segment.name || segment.interface}</strong><p className="muted font-mono">{segment.subnet || segment.ip_ranges?.join(', ') || segment.default_gateway || 'Rango no informado'}</p></div><Button aria-pressed={selected} aria-label={`${selected ? 'Quitar' : 'Agregar'} ${segment.name || segment.interface}`} icon={selected ? Check : Plus} variant={selected ? 'primary' : 'secondary'} onClick={() => setDraft(old => selected ? old.filter(value => value !== key) : [...old, key])}>{selected ? 'Visible · Quitar' : 'Agregar'}</Button></article>; })}</div>
@@ -134,13 +142,93 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
   const segment = data.segments.find(item => segmentKey(item) === selectedSegment);
   const eligible = data.devices.filter(device => device.status === 'online' || device.is_reserved === true);
   const devices = selectedSegment ? eligible.filter(device => deviceInSegment(device, segment)) : eligible;
+  const omniMatchedCount = devices.filter(d => d.omnivista?.matched).length;
   const sizeChoice = ['25', '50', '100', 'all'].includes(state.pageSize) ? state.pageSize : '25';
   const pageSize = sizeChoice === 'all' ? Math.max(1, devices.length) : Number(sizeChoice);
-  const columns = [{ key: 'name', label: 'Dispositivo', render: r => detailText(r.name, r.vendor) }, { key: 'ip', label: 'Dirección IP', render: r => <div className="cell-detail"><span className="ip-address">{r.ip_source === 'unconfirmed' ? 'Pendiente de confirmar' : r.ip}</span>{r.is_reserved && <small>IP reservada{r.reserved_ip && r.reserved_ip !== r.ip ? `: ${r.reserved_ip}` : ''}</small>}</div> }, { key: 'type', label: 'Tipo' }, { key: 'location', label: 'Ubicación / Interfaz' }, { key: 'status', label: 'Estado reportado', render: r => <Badge status={r.status} /> }, { key: 'activity', label: 'Última actividad' }, { key: 'actions', label: 'Acciones', sortable: false, render: r => <Button onClick={() => openEditor('device-detail', r)}>Ver detalle</Button> }];
-  return <><PageHeading eyebrow="Inventario de infraestructura" title="Dispositivos de Red" description="Equipos detectados y consulta de información técnica" updatedAt={data.updatedAt} /><InventoryTabs current="dispositivos" navigate={navigate} />
+
+  const columns = [
+    {
+      key: 'name',
+      label: 'Dispositivo',
+      value: r => r.omnivista?.device_name || r.name,
+      render: r => (
+        <div className="cell-detail">
+          <div className="flex items-center gap-2">
+            <strong>{r.omnivista?.device_name || r.name}</strong>
+            {r.omnivista?.matched && <span className="network-tag omni-tag" title="Cotejado con Company Property de OmniVista 2500">OmniVista</span>}
+          </div>
+          <small>{[r.vendor, r.omnivista?.account && `Cuenta: ${r.omnivista.account}`, r.name !== r.omnivista?.device_name && r.name].filter(Boolean).join(' · ')}</small>
+        </div>
+      )
+    },
+    {
+      key: 'ip',
+      label: 'Dirección IP',
+      value: r => r.ip_source === 'unconfirmed' ? 'Pendiente de confirmar' : (r.ip || '—'),
+      render: r => (
+        <div className="cell-detail">
+          <span className="ip-address">{r.ip_source === 'unconfirmed' ? 'Pendiente de confirmar' : (r.ip || '—')}</span>
+          {r.is_reserved && <small>IP reservada{r.reserved_ip && r.reserved_ip !== r.ip ? `: ${r.reserved_ip}` : ''}</small>}
+        </div>
+      )
+    },
+    {
+      key: 'mac',
+      label: 'MAC',
+      value: r => r.mac || '—',
+      render: r => <span className="font-mono text-muted">{r.mac || '—'}</span>
+    },
+    {
+      key: 'type',
+      label: 'Tipo',
+      value: r => formatDeviceType(r.type, r.os || r.omnivista?.os || r.raw?.os_name, r.omnivista?.device_name || r.name, r.vendor),
+      render: r => formatDeviceType(r.type, r.os || r.omnivista?.os || r.raw?.os_name, r.omnivista?.device_name || r.name, r.vendor)
+    },
+    {
+      key: 'location',
+      label: 'Ubicación',
+      value: r => r.omnivista?.location || formatLocation(r.location, r.vendor, segment?.name || r.interface),
+      render: r => r.omnivista?.location ? (
+        <div className="cell-detail">
+          <strong className="text-location">{r.omnivista.location}</strong>
+          {r.omnivista.ap_name && <small className="text-muted">AP: {r.omnivista.ap_name}</small>}
+        </div>
+      ) : (
+        formatLocation(r.location, r.vendor, segment?.name || r.interface)
+      )
+    },
+    {
+      key: 'status',
+      label: 'Estado reportado',
+      value: r => statusNames[r.status] || r.status,
+      render: r => <Badge status={r.status} />
+    },
+    {
+      key: 'activity',
+      label: 'Última actividad',
+      value: r => r.activity || r.last_seen || 'Reciente',
+      render: r => r.activity || r.last_seen || 'Reciente'
+    }
+  ];
+
+  const rows = devices.map((d, i) => ({
+    ...d,
+    id: `${d.interface || ''}:${d.mac || d.ip}:${i}`,
+    _search_name: d.omnivista?.device_name || d.name || '',
+    _search_loc: d.omnivista?.location || formatLocation(d.location, d.vendor, segment?.name || d.interface) || '',
+    _search_type: formatDeviceType(d.type, d.os || d.omnivista?.os || d.raw?.os_name, d.omnivista?.device_name || d.name, d.vendor) || '',
+    _search_acc: d.omnivista?.account || '',
+    _search_ap: d.omnivista?.ap_name || '',
+    _search_mac: d.mac || '',
+  }));
+
+  return <><PageHeading eyebrow="Inventario de infraestructura" title="Dispositivos de Red" description="Equipos detectados y consulta de información técnica" updatedAt={data.updatedAt}>
+    {omniMatchedCount > 0 && <span className="network-tag omni-badge">{number(omniMatchedCount)} cotejados en OmniVista</span>}
+    {canExport && <Button icon={Download} disabled={!devices.length} onClick={() => downloadCsv('Dispositivos-de-Red', columns, rows)}>Exportar</Button>}
+  </PageHeading><InventoryTabs current="dispositivos" navigate={navigate} />
     {selectedSegment && <Notice title={segment ? `Segmento: ${segment.name || segment.interface}` : 'Segmento no disponible'} action={<Button onClick={() => { state.setPage(1); navigate('dispositivos'); }}>Ver todos los segmentos</Button>}>{segment ? [segment.subnet, segment.default_gateway && `Gateway ${segment.default_gateway}`, segment.netmask && `Máscara ${segment.netmask}`].filter(Boolean).join(' · ') || segment.ip_ranges?.join(', ') : 'Actualiza la consulta para cargar este segmento.'}</Notice>}
-    <div className="toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar dispositivo, dirección IP o ubicación…" /><Select label="Estado" value={state.filters.status || ''} onChange={e => state.setFilter('status', e.target.value)}><option value="">Todos los estados</option><option value="online">En servicio</option><option value="offline">Reservados fuera de línea</option></Select><Select label="Dispositivos por página" value={sizeChoice} onChange={e => state.setPageSize(e.target.value)}><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="all">Todos</option></Select></div>
-    <DataTable title="Dispositivos de red" rows={devices.map((d, i) => ({ ...d, id: `${d.interface || ''}:${d.mac || d.ip}:${i}` }))} columns={columns} state={state} pageSize={pageSize} noun="dispositivos" exportable={canExport} loading={loading} error={errors.devices || (selectedSegment && errors.segments)} onRetry={refresh} />
+    <div className="toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar por equipo, IP, MAC o fabricante…" /><Select label="Estado" value={state.filters.status || ''} onChange={e => state.setFilter('status', e.target.value)}><option value="">Todos los estados</option><option value="online">En servicio</option><option value="offline">Reservados fuera de línea</option></Select><Select label="Dispositivos por página" value={sizeChoice} onChange={e => state.setPageSize(e.target.value)}><option value="25">25 dispositivos</option><option value="50">50 dispositivos</option><option value="100">100 dispositivos</option><option value="all">Todos los dispositivos</option></Select><div className="segment-devices-hint"><Info size={16} aria-hidden="true" /><span>Selecciona cualquier fila para abrir el detalle técnico</span></div></div>
+    <DataTable title="Dispositivos de red" rows={rows} columns={columns} state={state} pageSize={pageSize} noun="dispositivos" exportable={false} loading={loading} error={errors.devices || (selectedSegment && errors.segments)} onRetry={refresh} onRowClick={r => openEditor('device-detail', r)} rowClassName="segment-device-row" />
     <Note>Se muestran equipos en línea y equipos con reserva DHCP, aunque estén desconectados. El estado en línea proviene de FortiGate. Las IP se actualizan por MAC con DHCP y ARP; los equipos sin dirección confirmada permanecen visibles en su interfaz. Los registros históricos sin reserva se excluyen.</Note></>;
 }
 export function AuditLog({ data, records, navigate, openEditor, loading, errors, refresh, idfView = false, canWrite, canExport }) {
@@ -152,4 +240,145 @@ export function AuditLog({ data, records, navigate, openEditor, loading, errors,
     <DataTable title={idfView ? 'Reportes enviados desde móvil' : 'Bitácora de visitas'} rows={records} rowKey="key" columns={columns} state={state} noun="registros" exportable={canExport} loading={loading} error={errors.reports || errors.idfs} onRetry={refresh} />
     {!idfView && canWrite && <div className="idf-mobile"><Button icon={Plus} onClick={() => navigate('idf')}>Registrar otra entrada</Button></div>}
     <Note>Horarios de Ciudad de México. Los registros nuevos incluyen la identidad de la cuenta y la fecha asignadas por el servidor. Los registros históricos conservan la información declarada originalmente.</Note></>;
+}
+
+
+export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, openEditor }) {
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [pageSizeChoice, setPageSizeChoice] = useState('25');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const segmentDevices = getSegmentDevices(devices, segment);
+  const onlineCount = segmentDevices.filter(d => d.status === 'online').length;
+  const omniMatchedCount = segmentDevices.filter(d => d.omnivista?.matched).length;
+
+  const filtered = segmentDevices.filter(d => {
+    if (statusFilter && d.status !== statusFilter) return false;
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    const devType = formatDeviceType(d.type, d.os || d.omnivista?.os || d.raw?.os_name, d.omnivista?.device_name || d.name, d.vendor).toLowerCase();
+    const devLoc = (d.omnivista?.location || formatLocation(d.location, d.vendor, segment.name || segment.interface)).toLowerCase();
+    const ovName = (d.omnivista?.device_name || '').toLowerCase();
+    const ovAcc = (d.omnivista?.account || '').toLowerCase();
+    const ovAp = (d.omnivista?.ap_name || '').toLowerCase();
+    return (
+      (d.name && d.name.toLowerCase().includes(q)) ||
+      (d.ip && d.ip.toLowerCase().includes(q)) ||
+      (d.mac && d.mac.toLowerCase().includes(q)) ||
+      (d.vendor && d.vendor.toLowerCase().includes(q)) ||
+      (d.os && d.os.toLowerCase().includes(q)) ||
+      ovName.includes(q) ||
+      ovAcc.includes(q) ||
+      ovAp.includes(q) ||
+      devType.includes(q) ||
+      devLoc.includes(q)
+    );
+  });
+
+  const pageSize = pageSizeChoice === 'all' ? Math.max(1, filtered.length) : Number(pageSizeChoice);
+  const pageData = paginate(filtered, currentPage, pageSize);
+
+  useEffect(() => {
+    if (pageData.current !== currentPage) {
+      setCurrentPage(pageData.current);
+    }
+  }, [pageData.current, currentPage]);
+
+  const handleQuery = q => { setQuery(q); setCurrentPage(1); };
+  const handleStatus = e => { setStatusFilter(e.target.value); setCurrentPage(1); };
+  const handleSize = e => { setPageSizeChoice(e.target.value); setCurrentPage(1); };
+
+  return <section className="segment-devices-panel" ref={panelRef} aria-labelledby="segment-devices-title">
+    <div className="segment-devices-header">
+      <div className="segment-devices-title-area">
+        <h3 id="segment-devices-title"><Server size={22} className="text-brand" aria-hidden="true" />Dispositivos en {segment.name || segment.interface}</h3>
+        <div className="segment-devices-meta">
+          <span>Red: <strong>{segment.subnet || segment.ip_ranges?.[0] || 'Rango no informado'}</strong></span>
+          {segment.default_gateway && <span>Gateway: <strong>{segment.default_gateway}</strong></span>}
+          <Badge status={segment.status} />
+          <span className="network-tag">{number(segmentDevices.length)} dispositivos ({number(onlineCount)} en línea)</span>
+          {omniMatchedCount > 0 && <span className="network-tag omni-badge">{number(omniMatchedCount)} cotejados en OmniVista</span>}
+        </div>
+      </div>
+      <div className="segment-devices-actions">
+        <Button icon={X} variant="secondary" onClick={onClose}>Cerrar</Button>
+      </div>
+    </div>
+    <div className="segment-devices-toolbar">
+      <SearchField value={query} onChange={handleQuery} placeholder="Buscar por equipo, IP, MAC o fabricante…" />
+      <Select label="Estado" value={statusFilter} onChange={handleStatus}>
+        <option value="">Todos los estados</option>
+        <option value="online">En servicio</option>
+        <option value="offline">Fuera de línea / Reservados</option>
+      </Select>
+      <Select label="Dispositivos por página" value={pageSizeChoice} onChange={handleSize}>
+        <option value="25">25 dispositivos</option>
+        <option value="50">50 dispositivos</option>
+        <option value="100">100 dispositivos</option>
+        <option value="all">Todos los dispositivos</option>
+      </Select>
+      <div className="segment-devices-hint"><Info size={16} aria-hidden="true" /><span>Selecciona cualquier fila para abrir el detalle técnico</span></div>
+    </div>
+    <div className="segment-devices-list">
+      {filtered.length ? <>
+        <table className="segment-devices-table" aria-label={`Dispositivos pertenecientes a ${segment.name || segment.interface}`}>
+          <thead>
+            <tr>
+              <th>Dispositivo</th>
+              <th>Dirección IP</th>
+              <th>MAC</th>
+              <th>Tipo</th>
+              <th>Ubicación</th>
+              <th>Estado</th>
+              <th>Última actividad</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageData.rows.map((d, index) => <tr key={`${d.mac || d.ip || d.id || index}`} className="segment-device-row" role="button" tabIndex={0} onClick={() => openEditor?.('device-detail', d)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEditor?.('device-detail', d); } }} title={`Haz clic para ver la información técnica de ${d.omnivista?.device_name || d.name || d.ip || 'este dispositivo'}`}>
+              <td>
+                <div className="cell-detail">
+                  <div className="flex items-center gap-2">
+                    <strong>{d.omnivista?.device_name || d.name}</strong>
+                    {d.omnivista?.matched && <span className="network-tag omni-tag" title="Cotejado con Company Property de OmniVista 2500">OmniVista</span>}
+                  </div>
+                  <small>{[d.vendor, d.omnivista?.account && `Cuenta: ${d.omnivista.account}`, d.name !== d.omnivista?.device_name && d.name].filter(Boolean).join(' · ')}</small>
+                </div>
+              </td>
+              <td><div className="cell-detail"><span className="ip-address">{d.ip_source === 'unconfirmed' ? 'Pendiente de confirmar' : (d.ip || '—')}</span>{d.is_reserved && <small>IP reservada{d.reserved_ip && d.reserved_ip !== d.ip ? `: ${d.reserved_ip}` : ''}</small>}</div></td>
+              <td><span className="font-mono text-muted">{d.mac || '—'}</span></td>
+              <td>{formatDeviceType(d.type, d.os || d.omnivista?.os || d.raw?.os_name, d.omnivista?.device_name || d.name, d.vendor)}</td>
+              <td>
+                {d.omnivista?.location ? (
+                  <div className="cell-detail">
+                    <strong className="text-location">{d.omnivista.location}</strong>
+                    {d.omnivista.ap_name && <small className="text-muted">AP: {d.omnivista.ap_name}</small>}
+                  </div>
+                ) : (
+                  formatLocation(d.location, d.vendor, segment.name || segment.interface)
+                )}
+              </td>
+              <td><Badge status={d.status} /></td>
+              <td>{d.activity || d.last_seen || 'Reciente'}</td>
+            </tr>)}
+          </tbody>
+        </table>
+        <div className="table-footer">
+          <span role="status">
+            {pageSizeChoice === 'all'
+              ? `Mostrando todos los ${number(filtered.length)} dispositivos`
+              : `Mostrando ${(pageData.current - 1) * pageSize + 1}–${Math.min(pageData.current * pageSize, pageData.total)} de ${number(pageData.total)} dispositivos`}
+          </span>
+          {pageData.pages > 1 && <nav className="pagination" aria-label={`Paginación de dispositivos de ${segment.name || segment.interface}`}>
+            <IconButton icon={ChevronLeft} label="Página anterior" disabled={pageData.current <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} />
+            {Array.from({ length: Math.min(5, pageData.pages) }, (_, i) => {
+              const start = Math.min(Math.max(1, pageData.current - 2), Math.max(1, pageData.pages - 4));
+              return start + i;
+            }).map(p => <button type="button" key={p} className={p === pageData.current ? 'current' : ''} aria-label={`Página ${p}`} aria-current={p === pageData.current ? 'page' : undefined} onClick={() => setCurrentPage(p)}>{p}</button>)}
+            <IconButton icon={ChevronRight} label="Página siguiente" disabled={pageData.current >= pageData.pages} onClick={() => setCurrentPage(p => Math.min(pageData.pages, p + 1))} />
+          </nav>}
+        </div>
+      </> : <Empty title={segmentDevices.length ? 'Sin coincidencias' : 'Sin dispositivos en este segmento'} action={segmentDevices.length ? <Button onClick={() => { setQuery(''); setStatusFilter(''); }}>Limpiar filtros</Button> : undefined}>{segmentDevices.length ? 'No hay dispositivos que coincidan con los criterios de búsqueda.' : `No se detectaron dispositivos asociados ni reservas DHCP registradas para la red ${segment.name || segment.interface}.`}</Empty>}
+    </div>
+  </section>;
 }
