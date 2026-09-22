@@ -46,13 +46,12 @@ export function EntryForm({ data, demo, idfId, save, navigate, onDirty, user, ca
   const [reading, setReading] = useState(false);
   const picker = useRef(null);
   const reader = useRef(null);
-  const reportId = useRef(`IDF-${crypto.randomUUID()}`);
+  const reportId = useRef(`IDF-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`);
   useEffect(() => () => reader.current?.abort(), []);
-  const f = useForm({ reportId: reportId.current, idf: idfId || '', actor: demo ? '' : user?.name || '', reason: '', temp: '', issue: false, description: '', evidence: null }, values => {
-    const errors = requiredErrors(values, ['idf', 'actor', 'reason', 'temp']);
+  const f = useForm({ reportId: reportId.current, idf: idfId || '', actor: demo ? '' : user?.name || '', temp: '', description: '', evidence: null }, values => {
+    const errors = requiredErrors(values, ['idf', 'actor', 'temp', 'description']);
     if (!data.idfs.some(idf => idf.id === values.idf)) errors.idf = 'Selecciona un IDF del catálogo.';
     if (values.temp !== '' && (!Number.isFinite(Number(values.temp)) || Number(values.temp) < 10 || Number(values.temp) > 42)) errors.temp = 'Ingresa una temperatura entre 10 y 42 °C.';
-    if (values.issue && !values.description.trim()) errors.description = 'Describe el inconveniente detectado.';
     return errors;
   }, save, onDirty);
   const pick = file => {
@@ -65,27 +64,25 @@ export function EntryForm({ data, demo, idfId, save, navigate, onDirty, user, ca
     current.readAsDataURL(file);
   };
   return <><nav className="breadcrumb" aria-label="Ubicación"><Home size={13} aria-hidden="true" /><a href="#idf" onClick={e => { e.preventDefault(); navigate('idf'); }}>Registro IDF</a><span aria-hidden="true">›</span><span aria-current="page">Entrada a IDF</span></nav>
-    <PageHeading headingId="idf-entry-title" eyebrow="Registro de entrada a IDFs" title="Registro de Entrada a IDF" description="Control de accesos físicos a cuartos de telecomunicaciones" />
+    <PageHeading headingId="idf-entry-title" eyebrow="Reporte de incidencia" title="Reportar inconveniente en IDF" description="Documenta las condiciones observadas y la incidencia del gabinete" />
     <form className="entry-form panel" noValidate ref={f.form} onSubmit={f.submit} aria-busy={f.busy}>
-      <div className="form-heading"><span className="metric-icon metric-icon-brand"><FileText size={25} /></span><div><h2>Datos del registro</h2><p>Completa la información de la visita</p></div><span className="required-note">* Campos obligatorios</span></div>
+      <div className="form-heading"><span className="metric-icon metric-icon-brand"><TriangleAlert size={25} /></span><div><h2>Datos del reporte</h2><p>Describe el inconveniente observado en el gabinete</p></div><span className="required-note">* Campos obligatorios</span></div>
       {f.error && <Notice title={f.uncertain ? 'Guardado sin confirmar' : 'No se pudo guardar'} tone="danger">{f.error}</Notice>}
       {!data.idfs.length && <Notice title="No hay un catálogo de IDFs disponible" tone="warning">Vuelve al registro IDF y actualiza la información para poder seleccionar un gabinete.</Notice>}
       {!canRegister && <Notice title="Solo consulta">Necesitas un perfil administrador para registrar una visita.</Notice>}
       <fieldset disabled={f.busy || f.uncertain || !canRegister}><div className="form-grid">
         <Field icon={MapPin} label="Seleccionar IDF" required error={f.errors.idf}><select value={f.values.idf} onChange={e => f.change('idf', e.target.value)}><option value="">Seleccione un IDF…</option>{data.idfs.map(idf => <option key={idf.id} value={idf.id}>{idf.name} · {idf.zone}</option>)}</select></Field>
         <Field icon={UserRound} label="Ingeniero responsable" required error={f.errors.actor}><input autoComplete="name" placeholder="Nombre completo" readOnly={!demo} maxLength={120} value={f.values.actor} onChange={e => f.change('actor', e.target.value)} /></Field>
-        <div className="col-span-full entry-reason"><Field icon={FileText} label="Motivo de ingreso" required error={f.errors.reason} hint={`${f.values.reason.length}/500`}><textarea className="resize-none" rows={3} maxLength={500} placeholder="Descripción de la actividad a realizar…" value={f.values.reason} onChange={e => f.change('reason', e.target.value)} /></Field></div>
-        <div className="entry-environment col-span-full"><Field icon={Thermometer} label="Temperatura" required error={f.errors.temp}><input type="number" step="0.5" min="10" max="42" inputMode="decimal" placeholder="22 °C" value={f.values.temp} onChange={e => f.change('temp', e.target.value)} /></Field>
-        <Field icon={CalendarDays} label="Fecha y hora" hint="Automática al guardar"><input value={new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date())} readOnly /></Field></div>
+        <Field icon={Thermometer} label="Temperatura (°C)" required error={f.errors.temp}><input type="number" step="0.5" min="10" max="42" inputMode="decimal" placeholder="Ej. 22" value={f.values.temp} onChange={e => f.change('temp', e.target.value)} /></Field>
+        <div className="field-report-help"><CalendarDays size={17} /><span>La fecha y hora se registran automáticamente al enviar.</span></div>
+        <div className="col-span-full entry-reason"><Field icon={TriangleAlert} label="Inconveniente detectado" required error={f.errors.description} hint={`${f.values.description.length}/1000`}><textarea className="resize-none" rows={4} maxLength={1000} placeholder="Describe el problema, el equipo afectado y los síntomas observados…" value={f.values.description} onChange={e => f.change('description', e.target.value)} /></Field></div>
         <div className="col-span-full evidence-field"><span className="field-label">Evidencia fotográfica</span><input ref={picker} className="sr-only" tabIndex={-1} aria-label="Seleccionar evidencia fotográfica" type="file" accept="image/png,image/jpeg" onChange={e => { pick(e.target.files?.[0]); e.target.value = ''; }} /><button className="evidence-picker" type="button" disabled={reading} onClick={() => picker.current?.click()} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); pick(e.dataTransfer.files?.[0]); }}><UploadCloud size={27} /><span>{reading ? 'Preparando imagen…' : 'Toca para seleccionar imágenes'}</span><small>PNG, JPG hasta 10 MB · Una por registro</small></button>
           {imageError && <small className="field-error" role="alert">{imageError}</small>}{f.values.evidence && <div className="evidence-selected" role="status"><FileText size={18} /><span>{f.values.evidence.name}<small>{Math.ceil(f.values.evidence.size / 1024)} KB · Se enviará al registrar</small></span><Button onClick={() => f.change('evidence', null)}>Quitar</Button></div>}
         </div>
-        <div className="col-span-full"><label className="issue-toggle"><TriangleAlert size={26} /><span><strong>¿Se detectaron inconvenientes?</strong><small>Activa si se presentaron problemas durante la visita.</small></span><input type="checkbox" role="switch" checked={f.values.issue} onChange={e => f.change('issue', e.target.checked)} /><span className="switch-track" aria-hidden="true" /></label></div>
-        {f.values.issue && <div className="col-span-full"><Field label="Descripción del inconveniente" required error={f.errors.description}><textarea className="resize-none" rows={3} maxLength={1000} value={f.values.description} onChange={e => f.change('description', e.target.value)} placeholder="Describe la incidencia y el equipo afectado…" /></Field></div>}
       </div></fieldset>
       {clearAsked && <Notice title="¿Descartar los datos del formulario?" tone="warning" action={<div className="flex gap-2"><Button onClick={() => setClearAsked(false)}>Seguir editando</Button><Button variant="danger" onClick={() => { reader.current?.abort(); reader.current = null; setReading(false); f.reset(); setImageError(''); setClearAsked(false); }}>Descartar</Button></div>}>Se eliminarán únicamente los datos que aún no has guardado.</Notice>}
-      <div className="form-actions"><Button icon={Trash2} disabled={f.busy || f.uncertain || !canRegister} onClick={() => setClearAsked(true)}>Limpiar formulario</Button><Button type="submit" variant="primary" icon={Save} busy={f.busy} disabled={reading || f.uncertain || !data.idfs.length || !canRegister}>Registrar entrada</Button></div>
-    </form><Note title="Nota">Todos los registros de entrada quedan almacenados en la bitácora del sistema. {demo ? 'En demostración, los cambios duran hasta recargar o cambiar al modo del sistema.' : 'El servidor registra la fecha y la identidad de la cuenta autenticada.'}</Note></>;
+      <div className="form-actions"><Button icon={Trash2} disabled={f.busy || f.uncertain || !canRegister} onClick={() => setClearAsked(true)}>Limpiar formulario</Button><Button type="submit" variant="primary" icon={Save} busy={f.busy} disabled={reading || f.uncertain || !data.idfs.length || !canRegister}>Enviar reporte de incidencia</Button></div>
+    </form><Note title="Nota">El reporte quedará visible de inmediato en la bitácora y en el dashboard del IDF. {demo ? 'En demostración, los cambios duran hasta recargar o cambiar al modo del sistema.' : 'El servidor registra la fecha y la identidad de la cuenta autenticada.'}</Note></>;
 }
 export function EditForm({ kind, row, data, save, cancel, onDirty }) {
   const isIp = kind === 'ip';

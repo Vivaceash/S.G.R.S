@@ -4,14 +4,10 @@
  * Compatible with modern browsers and Node.js.
  */
 (function (root, factory) {
-  if (typeof define === 'function' && define.amd) {
-    define([], factory);
-  } else if (typeof exports === 'object') {
-    module.exports = factory();
-  } else {
-    root.QRCode = factory();
-  }
-}(typeof self !== 'undefined' ? self : this, function () {
+  // This file is bundled as an ES module by Vite. Register explicitly on the
+  // real global rather than relying on the CommonJS/UMD branch detection.
+  root.QRCode = factory();
+}(globalThis, function () {
 
   // QR Mode
   var QRMode = {
@@ -621,3 +617,8 @@
 
   return QRCode;
 }));
+
+// ESM bridge for the React dashboard. The UMD body registers the implementation
+// on the browser global; exporting this wrapper makes the dependency explicit
+// so bundlers preserve it instead of dropping the side-effect-only import.
+export const generateSvg = (...args) => globalThis.QRCode.generateSvg(...args);

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { RefreshCw, Save, Server, Camera, Wifi, TriangleAlert } from 'lucide-react';
+import { RefreshCw, Save, Server, Camera, Wifi, TriangleAlert, Users } from 'lucide-react';
 import { Badge, Button, DataTable, Dialog, Field, Metric, Notice, SearchField, Select, useListState } from './components.jsx';
-import { InventoryTabs, PageHeading } from './pages.jsx';
+import { PageHeading } from './pages.jsx';
 import { useForm } from './forms.jsx';
 import { dateTime, number, request } from './domain.mjs';
 
@@ -51,6 +51,83 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   const state = useListState(`documentos-${route}`);
   const defaultDataset = route === 'cctv' ? 'cctv' : route === 'aps' ? 'ap' : 'idf';
   const dataset = route === 'cctv' && state.filters.dataset === 'cctv_original' ? 'cctv_original' : defaultDataset;
+
+  // Estado y telemetría en vivo para Access Points vía OmniVista
+  const [activeTab, setActiveTab] = useState('omnivista');
+  const [omniAps, setOmniAps] = useState([]);
+  const [omniSummary, setOmniSummary] = useState({ total: 0, online: 0, offline: 0, clients: 0 });
+  const [omniLoading, setOmniLoading] = useState(false);
+  const [omniError, setOmniError] = useState('');
+  const [omniRevision, setOmniRevision] = useState(0);
+  const [omniUpdatedAt, setOmniUpdatedAt] = useState(null);
+  const [selectedAp, setSelectedAp] = useState(null);
+  const omniState = useListState('omnivista-aps');
+  const omniBusyRef = useRef(false);
+
+  useEffect(() => {
+    if (route !== 'aps') return;
+    if (demo) {
+      const demoList = data?.aps || [];
+      setOmniAps(demoList);
+      setOmniSummary({
+        total: demoList.length,
+        online: demoList.filter(a => a.status === 'online').length,
+        offline: demoList.filter(a => a.status !== 'online').length,
+        clients: demoList.reduce((acc, a) => acc + (a.clients || 0), 0),
+      });
+      setOmniLoading(false);
+      setOmniUpdatedAt(data?.updatedAt || new Date().toISOString());
+      return;
+    }
+
+    let active = true;
+    const fetchOmniAps = async (silent = false) => {
+      if (!active || omniBusyRef.current) return;
+      if (silent && document.hidden) return;
+      omniBusyRef.current = true;
+      if (!silent) {
+        setOmniLoading(true);
+        setOmniError('');
+      }
+      try {
+        const res = await request('/api/aps/omnivista');
+        if (!active) return;
+        const aps = res.aps || [];
+        setOmniAps(aps);
+        setOmniSummary(res.summary || {
+          total: aps.length,
+          online: aps.filter(a => a.status === 'online').length,
+          offline: aps.filter(a => a.status !== 'online').length,
+          clients: aps.reduce((acc, a) => acc + (a.clients || 0), 0),
+        });
+        setOmniUpdatedAt(new Date().toISOString());
+        setOmniError('');
+      } catch (err) {
+        if (active && !silent) {
+          setOmniError(err.name === 'AbortError' ? 'La consulta a OmniVista tardó demasiado.' : err.message);
+        }
+      } finally {
+        omniBusyRef.current = false;
+        if (active && !silent) setOmniLoading(false);
+      }
+    };
+
+    // Consulta inicial explícita
+    fetchOmniAps(false);
+
+    // Auto-refresco en segundo plano cada 15 segundos para detectar caídas de APs al momento
+    const timer = window.setInterval(() => fetchOmniAps(true), 15000);
+    const onVisible = () => {
+      if (!document.hidden && active) fetchOmniAps(true);
+    };
+    window.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [route, demo, data, omniRevision]);
   useEffect(() => {
     setNetwork(null); setNetworkError('');
     if (demo) { setCatalog(demoCatalog()); setError(''); setLoading(false); return; }
@@ -94,6 +171,20 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
     { key: 'documented_ip', label: 'IP documentada' }, { key: 'current_ip', label: 'IP observada en API' },
     { key: 'comparison', label: 'Cotejo' }, { key: 'status', label: 'Estado API', render: a => <Badge status={a.status} /> },
     { key: 'actions', label: 'Acciones', sortable: false, render: a => <Button onClick={() => setModal({ type: 'detail', asset: a })}>Ver ficha</Button> }];
+
+  const idfOptions = Array.from(new Set(omniAps.map(a => a.idf_tag).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const modelOptions = Array.from(new Set(omniAps.map(a => a.model).filter(Boolean))).sort();
+  const omniColumns = [
+    { key: 'name', label: 'Punto de Acceso' },
+    { key: 'status', label: 'Estado', render: a => <Badge status={a.status}>{a.status_raw || (a.status === 'online' ? 'Up' : 'Down')}</Badge> },
+    { key: 'location', label: 'Ubicación / Conexión' },
+    { key: 'model', label: 'Modelo' },
+    { key: 'ip', label: 'Dirección IP' },
+    { key: 'mac', label: 'MAC' },
+    { key: 'serial', label: 'N.º Serie' },
+    { key: 'clients', label: 'Clientes', render: a => <strong>{number(a.clients)}</strong> },
+    { key: 'actions', label: 'Acciones', sortable: false, render: a => <Button onClick={() => setSelectedAp(a)}>Ver detalles</Button> },
+  ];
   const save = async fields => {
     const asset = modal.asset;
     generation.current++; requestRef.current?.abort(); setChecking(false);
@@ -105,40 +196,160 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   const selected = modal?.asset;
   const title = route === 'cctv' ? 'Inventario CCTV' : route === 'aps' ? 'Inventario de access points' : 'Inventario documental de IDF';
   return <>
-    <PageHeading eyebrow="Inventario físico y cotejo de red" title={title} description="Datos documentados, correcciones físicas y observaciones actuales de las APIs" updatedAt={catalog.imported_at} />
-    <InventoryTabs current={route} navigate={navigate} />
-    <Notice title="La documentación no acredita el estado actual">La IP y el estado observados se muestran solo cuando existe una coincidencia de identidad con las APIs. Un equipo sin coincidencia no se considera dado de baja.</Notice>
-    <section className="metric-grid"><Metric icon={route === 'cctv' ? Camera : route === 'aps' ? Wifi : Server} label="Registros documentados" value={number(rows.length)} caption={dataset === 'cctv_original' ? 'catálogo histórico' : 'catálogo seleccionado'} /><Metric icon={Server} label="Racks / Contenedores" value={number(rows.filter(r => r.kind === 'rack').length)} caption="separados de los equipos" /><Metric icon={TriangleAlert} label="Con observaciones de datos" value={number(rows.filter(r => r.issues?.length).length)} caption="revisar en la ficha" /><Metric icon={RefreshCw} label="Identidades cotejadas" value={number(rows.filter(r => ['matched', 'changed'].includes(network?.assets[r.id]?.comparison)).length)} caption="en la consulta de APIs" /></section>
-    <div className="toolbar">
-      {route === 'cctv' && <Select label="Fuente CCTV" value={dataset} onChange={e => state.setFilter('dataset', e.target.value)}><option value="cctv">Actualizadas</option><option value="cctv_original">Originales</option></Select>}
-      <Select label="Gabinete documental" value={state.filters.idf_id || ''} onChange={e => state.setFilter('idf_id', e.target.value)}><option value="">Todos los gabinetes</option>{catalog.cabinets.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select>
-      {route === 'cctv' && dataset === 'cctv' && <Select label="Reubicación" value={state.filters.relocation || ''} onChange={e => state.setFilter('relocation', e.target.value)}><option value="">Todas</option><option>Reubicada</option><option>Por confirmar</option><option>Sin reubicación</option></Select>}
-      <SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar descripción, serie, MAC o ubicación…" />
-      <Button icon={RefreshCw} busy={loading} disabled={busy || checking} onClick={reload}>Actualizar catálogo</Button>
-      <Button variant="primary" busy={checking} disabled={demo || loading || Boolean(error) || !catalog.assets.length} onClick={check}>Cotejar APIs</Button>
-    </div>
-    {networkError && <Notice title="No se pudo completar el cotejo" tone="warning">{networkError}</Notice>}
-    {network && <Notice title={network.sources.every(s => s.available) ? 'Cotejo realizado' : 'Cotejo parcial · Fuentes no disponibles'} tone={network.sources.every(s => s.available) ? 'info' : 'warning'}>{network.sources.map(s => `${s.provider === 'forti' ? 'FortiGate' : 'OmniVista'}: ${s.available ? `${s.count} registros consultados` : 'no disponible'} · ${dateTime(s.observed_at)}`).join(' / ')}. {network.scope} {network.only_api.length} registros de API sin vínculo confirmado con el catálogo.</Notice>}
-    <DataTable title={title} rows={rows} columns={columns} state={{ ...state, filters: { ...state.filters, ...(dataset === 'cctv_original' ? { relocation: '' } : {}) } }} loading={loading} error={error} onRetry={reload} exportable={canExport} />
-    <Button disabled={loading || Boolean(error)} onClick={() => setModal({ type: 'sources' })}>Fuentes y discrepancias documentales</Button>
-    {network?.only_api.length > 0 && <Button onClick={() => setModal({ type: 'unlinked' })}>Ver registros de API sin vínculo confirmado</Button>}
-    <Dialog open={Boolean(modal)} onClose={close} title={modal?.type === 'edit' ? 'Corregir datos físicos' : modal?.type === 'unlinked' ? 'API sin vínculo confirmado' : modal?.type === 'sources' ? 'Fuentes documentales' : 'Ficha del recurso'} wide busy={busy}>
-      {discard && <Notice title="¿Descartar los cambios sin guardar?" tone="warning" action={<><Button autoFocus onClick={() => setDiscard(false)}>Seguir editando</Button><Button variant="danger" onClick={() => { markDirty(false); setDiscard(false); setModal(null); }}>Descartar</Button></>}>La fuente original y las correcciones guardadas se conservan.</Notice>}
-      {modal?.type === 'edit' && <AssetForm key={selected.id} asset={selected} cabinets={catalog.cabinets} onSave={save} onDirty={markDirty} onBusy={setBusy} onCancel={close} />}
-      {modal?.type === 'detail' && <>
-        <dl className="detail-grid">{Object.entries({ Descripción: selected.name, Gabinete: selected.idf, Tipo: selected.kindLabel, Rack: selected.rack, Ubicación: selected.location, Modelo: selected.model, Serie: selected.serial, MAC: selected.mac, Puertos: selected.ports, 'IP documentada': selected.documented_ip, 'IP observada en API': selected.current_ip, Cotejo: selected.comparison, 'Última corrección': selected.corrected_at ? dateTime(selected.corrected_at) : 'Sin correcciones', Reubicación: selected.dataset === 'cctv' ? selected.relocation : 'No aplica', Destino: selected.destination, Fuente: selected.sourceText }).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value || 'No informado'}</dd></div>)}</dl>
-        {selected.issuesText && <Notice title="Observaciones de la fuente" tone="warning">{selected.issuesText}</Notice>}
-        {selected.documented && selected.corrected_at && <Notice title="Valores originales conservados">Ubicación: {selected.documented.location || 'no informada'}. Gabinete: {selected.documented.idf_id || 'sin asignar'}. Destino: {selected.documented.destination || 'no informado'}.</Notice>}
-        {(network?.assets[selected.id]?.observations || []).map((o, i) => <Notice key={i} title={`Observación de ${o.provider}`}>IP: {o.ip || 'no informada'} · Estado: {o.status} · Interfaz: {o.interface || 'no informada'} · {dateTime(o.observed_at)}</Notice>)}
-        {catalog.observations.filter(o => o.idf_id === selected.idf_id).length > 0 && <><h3>Observaciones históricas del gabinete</h3><ul>{catalog.observations.filter(o => o.idf_id === selected.idf_id).map((o, i) => <li key={i}>{o.text}</li>)}</ul></>}
-        <div className="form-actions">
-          {data.idfs.some(c => c.id === selected.idf_id) && <Button onClick={() => { setModal(null); openEditor('qr', data.idfs.find(c => c.id === selected.idf_id)); }}>Código QR del gabinete</Button>}
-          {canWrite && selected.dataset !== 'cctv_original' && <Button variant="primary" onClick={() => setModal({ type: 'edit', asset: selected })}>Corregir datos físicos</Button>}
+    {route === 'aps' && (
+      <nav className="inventory-tabs" role="tablist" aria-label="Modo de consulta de Access Points">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'omnivista'}
+          className={activeTab === 'omnivista' ? 'active' : ''}
+          onClick={() => setActiveTab('omnivista')}
+        >
+          <Wifi size={15} aria-hidden="true" />
+          En vivo (OmniVista) · {omniLoading && !omniAps.length ? '…' : number(omniSummary.total || omniAps.length)}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'documentary'}
+          className={activeTab === 'documentary' ? 'active' : ''}
+          onClick={() => setActiveTab('documentary')}
+        >
+          <Server size={15} aria-hidden="true" />
+          Catálogo documental · {number(rows.length)}
+        </button>
+      </nav>
+    )}
+
+    {route === 'aps' && activeTab === 'omnivista' ? (
+      <>
+        <PageHeading
+          eyebrow="Red inalámbrica institucional · Monitoreo"
+          title="Puntos de Acceso en Vivo (OmniVista)"
+          description="Dispositivos inalámbricos monitoreados en tiempo real con sincronización automática cada 15 s. Detecta caídas de enlace, clientes conectados y canales de radio."
+          updatedAt={omniUpdatedAt}
+        />
+        {omniError && <Notice title="No se pudo consultar OmniVista" tone="danger" action={<Button onClick={() => setOmniRevision(r => r + 1)}>Reintentar</Button>}>{omniError}</Notice>}
+        {omniSummary.offline > 0 && (
+          <Notice title={`${omniSummary.offline} Access Point(s) fuera de servicio detectado(s)`} tone="danger">
+            OmniVista reporta equipos sin enlace activo o desconectados. Puedes filtrar por estado &quot;Fuera de servicio (Down)&quot; para identificar su ubicación física y puerto de switch/IDF.
+          </Notice>
+        )}
+        <section className="metric-grid">
+          <Metric icon={Wifi} label="Access Points monitoreados" value={omniLoading && !omniAps.length ? '…' : number(omniSummary.total)} caption="detectados en OmniVista" />
+          <Metric icon={Wifi} tone="success" label="En servicio (Up)" value={omniLoading && !omniAps.length ? '…' : number(omniSummary.online)} caption="transmitiendo en la red" />
+          <Metric icon={TriangleAlert} tone={omniSummary.offline > 0 ? 'danger' : 'neutral'} label="Fuera de servicio (Down)" value={omniLoading && !omniAps.length ? '…' : number(omniSummary.offline)} caption={omniSummary.offline > 0 ? 'requiere revisión física' : 'sin caídas reportadas'} />
+          <Metric icon={Users} tone="info" label="Clientes inalámbricos" value={omniLoading && !omniAps.length ? '…' : number(omniSummary.clients)} caption="dispositivos WiFi activos" />
+        </section>
+        <div className="toolbar">
+          <Select label="Estado en vivo" value={omniState.filters.status || ''} onChange={e => omniState.setFilter('status', e.target.value)}>
+            <option value="">Todos los estados</option>
+            <option value="online">En servicio (Up)</option>
+            <option value="offline">Fuera de servicio (Down)</option>
+          </Select>
+          {idfOptions.length > 1 && (
+            <Select label="Gabinete / Switch" value={omniState.filters.idf_tag || ''} onChange={e => omniState.setFilter('idf_tag', e.target.value)}>
+              <option value="">Todas las ubicaciones</option>
+              {idfOptions.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+            </Select>
+          )}
+          {modelOptions.length > 1 && (
+            <Select label="Modelo" value={omniState.filters.model || ''} onChange={e => omniState.setFilter('model', e.target.value)}>
+              <option value="">Todos los modelos</option>
+              {modelOptions.map(m => <option key={m} value={m}>{m}</option>)}
+            </Select>
+          )}
+          <SearchField value={omniState.query} onChange={omniState.setQuery} placeholder="Buscar AP, IP, MAC, serie o ubicación…" />
         </div>
-      </>}
-      {modal?.type === 'unlinked' && <Unlinked rows={network?.only_api || []} canExport={canExport} />}
-      {modal?.type === 'sources' && <Sources catalog={catalog} canExport={canExport && !demo} />}
-    </Dialog>
+        <DataTable
+          title="Puntos de acceso en red (OmniVista)"
+          rows={omniAps}
+          columns={omniColumns}
+          state={omniState}
+          noun="access points"
+          loading={omniLoading}
+          error={omniError}
+          onRetry={() => setOmniRevision(r => r + 1)}
+          exportable={canExport}
+          emptyText="OmniVista no devolvió puntos de acceso en esta consulta."
+        />
+        {selectedAp && (
+          <Dialog open={Boolean(selectedAp)} onClose={() => setSelectedAp(null)} title={`Ficha técnica · ${selectedAp.name}`} wide>
+            <dl className="detail-grid">
+              <div><dt>Nombre de AP</dt><dd><strong>{selectedAp.name}</strong></dd></div>
+              <div><dt>Estado de enlace</dt><dd><Badge status={selectedAp.status}>{selectedAp.status_raw || selectedAp.status}</Badge></dd></div>
+              <div><dt>Modelo</dt><dd>{selectedAp.model}</dd></div>
+              <div><dt>Versión de firmware</dt><dd>{selectedAp.version || '—'}</dd></div>
+              <div><dt>Dirección IP</dt><dd className="font-mono">{selectedAp.ip}</dd></div>
+              <div><dt>Dirección MAC</dt><dd className="font-mono">{selectedAp.mac}</dd></div>
+              <div><dt>Número de Serie</dt><dd className="font-mono">{selectedAp.serial}</dd></div>
+              <div><dt>Ubicación / Switch conectado</dt><dd>{selectedAp.location}</dd></div>
+              <div><dt>Clientes WiFi conectados</dt><dd><strong>{number(selectedAp.clients)}</strong> dispositivos</dd></div>
+              <div><dt>Última respuesta registrada</dt><dd>{selectedAp.last_seen ? dateTime(selectedAp.last_seen) : 'Sin fecha reciente'}</dd></div>
+            </dl>
+            {Array.isArray(selectedAp.channels) && selectedAp.channels.length > 0 && (
+              <div style={{ marginTop: '18px' }}>
+                <h3 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '8px', color: 'var(--color-brand)' }}>Canales y frecuencias de radio</h3>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {selectedAp.channels.map((ch, idx) => (
+                    <span key={idx} className="network-tag">{ch}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {Array.isArray(selectedAp.ssids) && selectedAp.ssids.length > 0 && (
+              <div style={{ marginTop: '18px' }}>
+                <h3 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '8px', color: 'var(--color-brand)' }}>Redes inalámbricas (SSIDs) activas</h3>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {selectedAp.ssids.map((ssid, idx) => (
+                    <span key={idx} className="badge badge-neutral">{ssid}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="form-actions" style={{ marginTop: '20px' }}>
+              <Button onClick={() => setSelectedAp(null)}>Cerrar ficha</Button>
+            </div>
+          </Dialog>
+        )}
+      </>
+    ) : (
+      <>
+        <PageHeading eyebrow="Inventario físico y cotejo de red" title={title} description="Datos documentados, correcciones físicas y observaciones actuales de las APIs" updatedAt={catalog.imported_at} />
+        <Notice title="La documentación no acredita el estado actual">La IP y el estado observados se muestran solo cuando existe una coincidencia de identidad con las APIs. Un equipo sin coincidencia no se considera dado de baja.</Notice>
+        <section className="metric-grid"><Metric icon={route === 'cctv' ? Camera : route === 'aps' ? Wifi : Server} label="Registros documentados" value={number(rows.length)} caption={dataset === 'cctv_original' ? 'catálogo histórico' : 'catálogo seleccionado'} /><Metric icon={Server} label="Racks / Contenedores" value={number(rows.filter(r => r.kind === 'rack').length)} caption="separados de los equipos" /><Metric icon={TriangleAlert} label="Con observaciones de datos" value={number(rows.filter(r => r.issues?.length).length)} caption="revisar en la ficha" /><Metric icon={RefreshCw} label="Identidades cotejadas" value={number(rows.filter(r => ['matched', 'changed'].includes(network?.assets[r.id]?.comparison)).length)} caption="en la consulta de APIs" /></section>
+        <div className="toolbar">
+          {route === 'cctv' && <Select label="Fuente CCTV" value={dataset} onChange={e => state.setFilter('dataset', e.target.value)}><option value="cctv">Actualizadas</option><option value="cctv_original">Originales</option></Select>}
+          <Select label="Gabinete documental" value={state.filters.idf_id || ''} onChange={e => state.setFilter('idf_id', e.target.value)}><option value="">Todos los gabinetes</option>{catalog.cabinets.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select>
+          {route === 'cctv' && dataset === 'cctv' && <Select label="Reubicación" value={state.filters.relocation || ''} onChange={e => state.setFilter('relocation', e.target.value)}><option value="">Todas</option><option>Reubicada</option><option>Por confirmar</option><option>Sin reubicación</option></Select>}
+          <SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar descripción, serie, MAC o ubicación…" />
+          <Button icon={RefreshCw} busy={loading} disabled={busy || checking} onClick={reload}>Actualizar catálogo</Button>
+          <Button variant="primary" busy={checking} disabled={demo || loading || Boolean(error) || !catalog.assets.length} onClick={check}>Cotejar APIs</Button>
+        </div>
+        {networkError && <Notice title="No se pudo completar el cotejo" tone="warning">{networkError}</Notice>}
+        {network && <Notice title={network.sources.every(s => s.available) ? 'Cotejo realizado' : 'Cotejo parcial · Fuentes no disponibles'} tone={network.sources.every(s => s.available) ? 'info' : 'warning'}>{network.sources.map(s => `${s.provider === 'forti' ? 'FortiGate' : 'OmniVista'}: ${s.available ? `${s.count} registros consultados` : 'no disponible'} · ${dateTime(s.observed_at)}`).join(' / ')}. {network.scope} {network.only_api.length} registros de API sin vínculo confirmado con el catálogo.</Notice>}
+        <DataTable title={title} rows={rows} columns={columns} state={{ ...state, filters: { ...state.filters, ...(dataset === 'cctv_original' ? { relocation: '' } : {}) } }} loading={loading} error={error} onRetry={reload} exportable={canExport} />
+        <Button disabled={loading || Boolean(error)} onClick={() => setModal({ type: 'sources' })}>Fuentes y discrepancias documentales</Button>
+        {network?.only_api.length > 0 && <Button onClick={() => setModal({ type: 'unlinked' })}>Ver registros de API sin vínculo confirmado</Button>}
+        <Dialog open={Boolean(modal)} onClose={close} title={modal?.type === 'edit' ? 'Corregir datos físicos' : modal?.type === 'unlinked' ? 'API sin vínculo confirmado' : modal?.type === 'sources' ? 'Fuentes documentales' : 'Ficha del recurso'} wide busy={busy}>
+          {discard && <Notice title="¿Descartar los cambios sin guardar?" tone="warning" action={<><Button autoFocus onClick={() => setDiscard(false)}>Seguir editando</Button><Button variant="danger" onClick={() => { markDirty(false); setDiscard(false); setModal(null); }}>Descartar</Button></>}>La fuente original y las correcciones guardadas se conservan.</Notice>}
+          {modal?.type === 'edit' && <AssetForm key={selected.id} asset={selected} cabinets={catalog.cabinets} onSave={save} onDirty={markDirty} onBusy={setBusy} onCancel={close} />}
+          {modal?.type === 'detail' && <>
+            <dl className="detail-grid">{Object.entries({ Descripción: selected.name, Gabinete: selected.idf, Tipo: selected.kindLabel, Rack: selected.rack, Ubicación: selected.location, Modelo: selected.model, Serie: selected.serial, MAC: selected.mac, Puertos: selected.ports, 'IP documentada': selected.documented_ip, 'IP observada en API': selected.current_ip, Cotejo: selected.comparison, 'Última corrección': selected.corrected_at ? dateTime(selected.corrected_at) : 'Sin correcciones', Reubicación: selected.dataset === 'cctv' ? selected.relocation : 'No aplica', Destino: selected.destination, Fuente: selected.sourceText }).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value || 'No informado'}</dd></div>)}</dl>
+            {selected.issuesText && <Notice title="Observaciones de la fuente" tone="warning">{selected.issuesText}</Notice>}
+            {selected.documented && selected.corrected_at && <Notice title="Valores originales conservados">Ubicación: {selected.documented.location || 'no informada'}. Gabinete: {selected.documented.idf_id || 'sin asignar'}. Destino: {selected.documented.destination || 'no informado'}.</Notice>}
+            {(network?.assets[selected.id]?.observations || []).map((o, i) => <Notice key={i} title={`Observación de ${o.provider}`}>IP: {o.ip || 'no informada'} · Estado: {o.status} · Interfaz: {o.interface || 'no informada'} · {dateTime(o.observed_at)}</Notice>)}
+            {catalog.observations.filter(o => o.idf_id === selected.idf_id).length > 0 && <><h3>Observaciones históricas del gabinete</h3><ul>{catalog.observations.filter(o => o.idf_id === selected.idf_id).map((o, i) => <li key={i}>{o.text}</li>)}</ul></>}
+            <div className="form-actions">
+              {data.idfs.some(c => c.id === selected.idf_id) && <Button onClick={() => { setModal(null); openEditor('qr', data.idfs.find(c => c.id === selected.idf_id)); }}>Código QR del gabinete</Button>}
+              {canWrite && selected.dataset !== 'cctv_original' && <Button variant="primary" onClick={() => setModal({ type: 'edit', asset: selected })}>Corregir datos físicos</Button>}
+            </div>
+          </>}
+          {modal?.type === 'unlinked' && <Unlinked rows={network?.only_api || []} canExport={canExport} />}
+          {modal?.type === 'sources' && <Sources catalog={catalog} canExport={canExport && !demo} />}
+        </Dialog>
+      </>
+    )}
   </>;
 }
 

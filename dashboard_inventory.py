@@ -55,12 +55,14 @@ def catalog():
 
 
 def cabinets_with_documentary(local):
-    """Add missing cabinet choices without moving PACS or replacing local devices."""
+    """Add missing cabinet choices consolidating IDF 13 into PACS and without replacing local devices."""
     try:
         data, _ = source_catalog()
     except access.AccessError:
         return local
     known = {r['id'] for r in local}
+    if 'idf-pacs' in known or any(r.get('name') == 'PACS' for r in local):
+        known.add('idf-13')
     return [*local, *[{**c, 'zone': 'Ubicación documental', 'devices': [], 'incidents': []}
                      for c in data['cabinets'] if c['id'] not in known]]
 

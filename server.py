@@ -342,6 +342,80 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 user["devices"] = grouped.get(account, [])
             self._send_json({"success": users_status == 200, "data": {"users": users, "sources": {"users": {"status": users_status, "complete": users_complete, "count": len(users)}, "company_properties": {"status": devices_status, "complete": devices_complete, "count": len(devices), "associated": associated_devices, "unassociated": max(0, len(devices) - associated_devices)}, "fortigate": {"status": forti_status, "count": len(forti_by_mac), "matches": forti_matches} }}, "message": "Cotejo completo de cuentas, dispositivos y FortiGate en modo lectura."})
 
+        # 3c. Consulta de Access Points en tiempo real desde OmniVista
+        elif path == '/api/aps/omnivista':
+            try:
+                code, body, _ = _fetch_upstream(f"{OMNI_API_URL}/monitoring/devices", timeout=20.0)
+                if code != 200:
+                    self._send_json({"error": "No se pudo consultar el servicio de OmniVista.", "aps": [], "summary": {}}, 502)
+                    return
+                payload = json.loads(body.decode('utf-8'))
+                items = payload.get('data') if isinstance(payload, dict) else []
+                if not isinstance(items, list):
+                    items = []
+                aps = []
+                for row in items:
+                    if not isinstance(row, dict):
+                        continue
+                    others = row.get('others') or {}
+                    is_ap = row.get('deviceType') == 'HAP' or str(others.get('workMode', '')).upper() == 'AP'
+                    if not is_ap:
+                        continue
+                    serial_info = others.get('serialNumber') or []
+                    serial = '—'
+                    if isinstance(serial_info, list) and serial_info and isinstance(serial_info[0], dict):
+                        serial = serial_info[0].get('chassisSerialNumber') or '—'
+                    st = str(row.get('status') or 'Down').strip()
+                    is_online = st.lower() == 'up'
+                    clients = others.get('noOfClients', 0)
+                    try:
+                        clients = int(clients)
+                    except (ValueError, TypeError):
+                        clients = 0
+                    channels = others.get('channel') or []
+                    if not isinstance(channels, list):
+                        channels = [str(channels)] if channels else []
+                    ssids = others.get('ssids') or []
+                    if not isinstance(ssids, list):
+                        ssids = [str(ssids)] if ssids else []
+
+                    location_str = str(row.get('location') or 'No asignada').strip()
+                    idf_prefix = location_str.split('->')[0].strip() if '->' in location_str else location_str
+
+                    aps.append({
+                        "id": str(row.get("instanceid") or row.get("macAddress") or row.get("ipAddress") or len(aps)),
+                        "name": str(row.get("name") or row.get("friendlyName") or "AP"),
+                        "model": str(row.get("model") or "Alcatel AP"),
+                        "ip": str(row.get("ipAddress") or "—"),
+                        "mac": str(row.get("macAddress") or "—"),
+                        "serial": serial,
+                        "status": "online" if is_online else "offline",
+                        "status_raw": st,
+                        "location": location_str,
+                        "idf_tag": idf_prefix,
+                        "clients": clients,
+                        "channels": channels,
+                        "ssids": ssids,
+                        "version": str(row.get("version") or "—"),
+                        "last_seen": row.get("lastKnownUpAt"),
+                    })
+                total = len(aps)
+                online = sum(1 for a in aps if a['status'] == 'online')
+                offline = total - online
+                total_clients = sum(a['clients'] for a in aps)
+                self._send_json({
+                    "success": True,
+                    "aps": aps,
+                    "summary": {
+                        "total": total,
+                        "online": online,
+                        "offline": offline,
+                        "clients": total_clients,
+                    }
+                })
+            except Exception as e:
+                self._send_json({"error": f"Error al procesar los puntos de acceso: {str(e)}", "aps": [], "summary": {}}, 500)
+
         # 4. Catálogo general de dispositivos (Integrado en vivo con API Forti + Fallback)
         elif path.startswith('/api/devices'):
             devices_data = None

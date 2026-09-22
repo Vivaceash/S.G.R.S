@@ -22,7 +22,7 @@ try {
   await page.screenshot({ path: 'artifacts/dashboard.png', fullPage: true });
   assert.equal(apiCalls, 0, 'Demo must never call real APIs');
   report('Demostración aislada de APIs');
-  for (const [route, title, screenshot] of [['altas', 'Gestión de Altas de Red', 'altas'], ['inventario', 'Recursos Disponibles', 'inventario'], ['disponibilidad', 'Direcciones IP', 'direcciones-ip'], ['idf', 'Reportes e incidencias de IDF', 'reportes-idf'], ['bitacora', 'Bitácora de Registros', 'bitacora']]) {
+  for (const [route, title, screenshot] of [['altas', 'Gestión de Altas de Red', 'altas'], ['inventario', 'Recursos Disponibles', 'inventario'], ['disponibilidad', 'Disponibilidad IP', 'direcciones-ip'], ['idf', 'Reportes e incidencias de IDF', 'reportes-idf'], ['bitacora', 'Bitácora de Registros', 'bitacora']]) {
     await page.goto(`${base}/?demo=1#${route}`);
     await page.getByRole('heading', { name: title, exact: true }).waitFor();
     if (route === 'altas') assert.equal(await page.getByRole('button', { name: 'Nueva alta', exact: true }).count(), 0, 'Gestión de altas debe ser solo consulta');
@@ -32,6 +32,7 @@ try {
     report(`Render y accesibilidad: ${route}`, `${axe.violations.length} violations`);
   }
   await page.goto(`${base}/?demo=1#disponibilidad`);
+  await page.getByRole('button', { name: '☷ Lista', exact: true }).click();
   await page.getByRole('button', { name: 'Página siguiente' }).click();
   assert.match(page.url(), /ips.page=2/);
   await page.getByRole('searchbox', { name: 'Buscar registros' }).fill('sin-resultados-imposibles');

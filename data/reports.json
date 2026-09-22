@@ -40,8 +40,11 @@
         "temp": 21,
         "title": "Incidencia reportada en IDF 1",
         "description": "Prueba de verificacion",
-        "status": "open",
-        "tech": "Israel R."
+        "status": "resolved",
+        "tech": "Israel R.",
+        "resolved_at": "2026-09-21T22:46:20.089796+00:00",
+        "resolved_by": "5c37527afe39fcd77c9bf20d4a894564",
+        "origin_key": "FOL-IDF1-FMP0P"
       },
       {
         "id": "FOL-IDF1-758",
@@ -51,8 +54,11 @@
         "temp": 21,
         "title": "Incidencia reportada en IDF 1",
         "description": "Prueba",
-        "status": "open",
-        "tech": "Casillas."
+        "status": "resolved",
+        "tech": "Casillas.",
+        "resolved_at": "2026-09-21T22:39:50.506450+00:00",
+        "resolved_by": "5c37527afe39fcd77c9bf20d4a894564",
+        "origin_key": "FOL-IDF1-758"
       },
       {
         "id": "FOL-IDF1-610",
@@ -62,8 +68,11 @@
         "temp": 20,
         "title": "Incidencia reportada en IDF 1",
         "description": "No hay luz en un switch",
-        "status": "open",
-        "tech": "Jose"
+        "status": "resolved",
+        "tech": "Jose",
+        "resolved_at": "2026-09-21T22:39:47.700932+00:00",
+        "resolved_by": "5c37527afe39fcd77c9bf20d4a894564",
+        "origin_key": "FOL-IDF1-610"
       }
     ],
     "telemetry": {
@@ -82,8 +91,11 @@
         "temp": 21.5,
         "title": "Incidencia reportada en PACS",
         "description": "Chequeo rutinario PACS",
-        "status": "open",
-        "tech": "Israel R."
+        "status": "resolved",
+        "tech": "Israel R.",
+        "resolved_at": "2026-09-21T20:50:06.378145+00:00",
+        "resolved_by": "5c37527afe39fcd77c9bf20d4a894564",
+        "origin_key": "FOL-PACS-GJYCZ"
       }
     ],
     "telemetry": {
@@ -97,6 +109,53 @@
     "telemetry": {
       "temp": 20,
       "date": "08/09/2026 20:10",
+      "status": "normal"
+    }
+  },
+  "idf-9": {
+    "incidents": [
+      {
+        "id": "IDF-cfe4e553-a7c1-4b45-a037-dde6f532e3af",
+        "date": "2026-09-21T22:26:53.354562+00:00",
+        "severity": "medium",
+        "device": "Gabinete",
+        "temp": 21.0,
+        "title": "Visita con inconvenientes",
+        "description": "Beto no chambea",
+        "status": "open",
+        "tech": "Casillas",
+        "actor_id": "mobile:5d2d894167b3225371e18f76",
+        "evidence": "IDF-cfe4e553-a7c1-4b45-a037-dde6f532e3af.jpg"
+      }
+    ],
+    "telemetry": {
+      "date": "2026-09-21T22:26:53.354562+00:00",
+      "temp": 21.0,
+      "status": "normal"
+    }
+  },
+  "idf-10": {
+    "incidents": [
+      {
+        "id": "IDF-57ba75fb-2c22-4f36-a7dc-0555e70f60c8",
+        "date": "2026-09-21T22:35:10.118262+00:00",
+        "severity": "medium",
+        "device": "Gabinete",
+        "temp": 20.0,
+        "title": "Visita con inconvenientes",
+        "description": "Prueba",
+        "status": "resolved",
+        "tech": "Fer",
+        "actor_id": "mobile:ccb7cfdafddaa4f1710f2e32",
+        "evidence": "IDF-57ba75fb-2c22-4f36-a7dc-0555e70f60c8.jpg",
+        "resolved_at": "2026-09-21T22:35:58.720834+00:00",
+        "resolved_by": "5c37527afe39fcd77c9bf20d4a894564",
+        "origin_key": "IDF-57ba75fb-2c22-4f36-a7dc-0555e70f60c8"
+      }
+    ],
+    "telemetry": {
+      "date": "2026-09-21T22:35:10.118262+00:00",
+      "temp": 20.0,
       "status": "normal"
     }
   }
