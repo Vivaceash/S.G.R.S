@@ -11,7 +11,7 @@ import { TelemetryNav, TelemetryPage, useTelemetryCatalog } from './telemetry.js
 import { generateSvg } from '../qrcode.js';
 import { DocumentaryInventory } from './inventory.jsx';
 
-const emptyData = () => ({ segments: [], ips: [], devices: [], resources: [], requests: [], idfs: [], reports: {}, health: null, updatedAt: null });
+const emptyData = () => ({ segments: [], ips: [], devices: [], networkMedia: {}, resources: [], requests: [], idfs: [], reports: {}, health: null, updatedAt: null });
 const navItems = [
   ['resumen', 'Dashboard', Home], ['dispositivos', 'Dispositivos', Monitor], ['disponibilidad', 'IPs', Globe2], ['bitacora', 'Bitácora', FileText],
   ['idf', 'Registro IDF', Building2], ['aps', 'Access Points', Radio], ['cctv', 'CCTV', Camera],
@@ -55,12 +55,14 @@ function QrCard({ row, demo, toast, host, compact = false, size = 300 }) {
   const svg = generateSvg(value, { size, margin: 4, colorDark: '#222222', colorLight: '#ffffff' });
   return <div className={`qr-card ${compact ? 'qr-card-compact' : ''}`}>{!compact && <><p className="eyebrow">Registro de entrada</p><h3>{row.name}</h3><p>{row.zone}</p></>}<img width={size} height={size} src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`} alt={`Código QR para registrar una visita a ${row.name}`} /><div className="qr-url-row"><a className="qr-url" href={value}>{value}</a><Button icon={Copy} onClick={async () => { try { await navigator.clipboard.writeText(value); toast('Enlace copiado.'); } catch { toast('No se pudo copiar. Selecciona el enlace para copiarlo manualmente.'); } }}>Copiar</Button></div>{!compact && <><div className="flex justify-center gap-3"><Button icon={Printer} onClick={() => window.print()}>Imprimir</Button></div><p className="muted">El dispositivo que escanee debe poder acceder a esta dirección. Los enlaces localhost solo funcionan en este equipo.</p></>}</div>;
 }
-function DeviceDetail({ row, demo }) {
+function DeviceDetail({ row, demo, canReadTraffic = false }) {
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [traffic, setTraffic] = useState(null);
   const controller = useRef(null);
   useEffect(() => () => controller.current?.abort(), []);
   const load = async () => {
-    if (!can('traffic.read') || demo) return;
+    if (!canReadTraffic || demo || !row?.ip || row.ip === '—') return;
     controller.current?.abort(); const current = new AbortController(); controller.current = current;
     setLoading(true); setError('');
     const timer = setTimeout(() => current.abort(), 12000);
@@ -68,8 +70,8 @@ function DeviceDetail({ row, demo }) {
     catch (e) { if (controller.current === current) setError(e.name === 'AbortError' ? 'La consulta tardó demasiado. Puedes volver a intentar.' : e.message); }
     finally { clearTimeout(timer); if (controller.current === current) setLoading(false); }
   };
-  return <><dl className="detail-grid">{[['Dirección IP', row.ip], ['MAC', row.mac], ['Fabricante', row.vendor], ['Sistema operativo', row.os], ['Interfaz', row.interface], ['Estado', row.status]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || 'No informado'}</dd></div>)}</dl>
-    {can('traffic.read') && <>
+  return <><dl className="detail-grid">{[['Dirección IP', row?.ip], ['MAC', row?.mac], ['Fabricante', row?.vendor], ['Sistema operativo', row?.os], ['Interfaz', row?.interface], ['Estado', row?.status]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || 'No informado'}</dd></div>)}</dl>
+    {canReadTraffic && <>
       <Button icon={RefreshCw} busy={loading} disabled={demo || !row.ip || row.ip === '—'} onClick={load}>Consultar telemetría de tráfico</Button>
       {demo && <p className="muted">La telemetría requiere una conexión real con FortiGate.</p>}
       {error && <Notice title="No se pudo consultar el tráfico" tone="danger">{error}</Notice>}
@@ -180,7 +182,7 @@ export default function App() {
     const version = ++generation.current;
     setLoading(true);
     const timer = setTimeout(() => controller.abort(), 12000);
-    const endpoints = { idfs: '/api/idfs', ips: '/api/ips', devices: '/api/devices', reports: '/api/reports', health: '/api/health', segments: '/api/forti/network/dhcp-pools' };
+    const endpoints = { idfs: '/api/idfs', ips: '/api/ips', devices: '/api/devices', reports: '/api/reports', health: '/api/health', segments: '/api/forti/network/dhcp-pools', networkMedia: '/api/network-media' };
     const results = await Promise.allSettled(Object.values(endpoints).map(path => request(path, { signal: controller.signal })));
     clearTimeout(timer);
     if (version !== generation.current) return;
@@ -190,6 +192,7 @@ export default function App() {
       if (result.status === 'fulfilled') {
         const value = key === 'segments' ? result.value.data?.pools : result.value;
         if (['idfs', 'ips', 'devices', 'segments'].includes(key) && !Array.isArray(value)) failures[key] = 'El servicio devolvió un formato no reconocido.';
+        else if (key === 'networkMedia' && (!value || Array.isArray(value) || typeof value !== 'object')) failures[key] = 'El catálogo de medios devolvió un formato no reconocido.';
         else next[key] = value;
       } else failures[key] = result.reason.name === 'AbortError' ? 'Se agotó el tiempo de consulta. Vuelve a intentar.' : result.reason.message;
     });
@@ -302,9 +305,15 @@ export default function App() {
     });
     if (modal?.row === row) setModal(null); notify(demo ? 'Incidencia de ejemplo resuelta.' : 'Incidencia resuelta. El historial se conserva.');
   }
+  async function saveNetworkMedia(key, medium) {
+    if (!can('inventory.write')) throw new ApiError(403);
+    if (!demo) await mutate('/api/network-media', { key, medium });
+    setData(old => ({ ...old, networkMedia: { ...(old.networkMedia || {}), [key]: medium } }));
+    notify(demo ? 'Clasificación de ejemplo actualizada.' : 'Clasificación de red guardada.');
+  }
   const resolveDirect = async row => { try { await resolveReport(row); } catch (error) { notify(error.message || 'No se pudo resolver la incidencia.'); } };
   const records = reportsFromData(data.reports, data.idfs);
-  const shared = { data, demo, navigate, openEditor, loading, errors, refresh, canWrite: can('inventory.write'), canExport: can('inventory.export'), onResolve: resolveDirect };
+  const shared = { data, demo, navigate, openEditor, loading, errors, refresh, canWrite: can('inventory.write'), canExport: can('inventory.export'), onResolve: resolveDirect, saveNetworkMedia };
   let page;
   if (route.path.startsWith('consulta/')) page = can('traffic.read') ? <TelemetryPage catalog={catalog} moduleId={route.path.slice(9)} resourceId={route.params.get('recurso')} navigate={navigate} /> : <PageHeading eyebrow="Acceso restringido · 403" title="No tienes permiso para esta sección" description="Usa la navegación para consultar las secciones disponibles en tu cuenta." />;
   else if (route.path === 'resumen') page = <Overview {...shared} userId={user.id} errors={Object.values(errors)} />;
@@ -344,7 +353,7 @@ export default function App() {
       {modal && ['resource', 'stock', 'ip', 'request'].includes(modal.kind) && <><EditForm key={`${modal.kind}-${modal.row?.id || modal.row?.ip || 'new'}`} kind={modal.kind} row={modal.row} data={data} save={saveEditor} cancel={closeModal} onDirty={setModalDirty} />{modal.kind === 'ip' && modal.row.status !== 'available' && <div className="danger-zone"><Button variant="danger" disabled={modalDirty} onClick={() => setModal({ kind: 'release', row: modal.row })}>Liberar dirección IP</Button><small>Elimina la asignación del inventario local.</small></div>}</>}
       {modal?.kind === 'release' && <><p>Se quitará la asignación de <strong>{modal.row.hostname || 'este equipo'}</strong> y la dirección quedará disponible en el inventario local. Esto no desconecta al equipo ni cambia el firewall.</p>{releaseError && <Notice title="Liberación sin confirmar" tone="danger">{releaseError}</Notice>}<div className="form-actions"><Button autoFocus disabled={releaseBusy} onClick={() => setModal(null)}>Cancelar</Button><Button variant="danger" busy={releaseBusy} disabled={releaseUncertain} onClick={releaseIp}>Liberar dirección</Button></div></>}
       {modal?.kind === 'qr' && <QrCard row={modal.row} demo={demo} toast={notify} />}
-      {modal?.kind === 'device-detail' && <DeviceDetail row={modal.row} demo={demo} />}
+      {modal?.kind === 'device-detail' && <DeviceDetail row={modal.row} demo={demo} canReadTraffic={can('traffic.read')} />}
       {modal && ['request-detail', 'report-detail'].includes(modal.kind) && <dl className="detail-grid">{Object.entries(modal.kind === 'request-detail' ? { Folio: modal.row.id, Usuario: modal.row.name, Área: modal.row.area, Red: modal.row.network, Responsable: modal.row.actor, Fecha: dateTime(modal.row.date) } : { Folio: modal.row.id, IDF: modal.row.idf, Responsable: modal.row.actor, Actividad: modal.row.title, Descripción: modal.row.description, Temperatura: modal.row.temp == null ? '—' : `${modal.row.temp} °C`, Fecha: dateTime(modal.row.date) }).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>}
       {modal?.kind === 'services' && <><ServiceStatus health={data.health} demo={demo} /><p className="muted">Que un servicio responda no garantiza que los equipos de red estén operativos.</p><Button icon={RefreshCw} busy={loading} onClick={refresh}>Actualizar información</Button></>}
       {modal?.kind === 'report-detail' && (modal.row.evidence || modal.row.evidenceDemo) && <figure className="evidence-preview"><img src={demo ? modal.row.evidenceDemo : `/api/reports/evidence/${encodeURIComponent(modal.row.evidence)}?view=1`} alt={`Evidencia fotográfica del reporte ${modal.row.id}`} /><figcaption>Evidencia fotográfica adjunta</figcaption><a className="button button-secondary evidence-download" href={demo ? modal.row.evidenceDemo : `/api/reports/evidence/${encodeURIComponent(modal.row.evidence)}`} download="evidencia-idf"><Download size={18} />Descargar</a></figure>}

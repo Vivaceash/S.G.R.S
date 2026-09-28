@@ -27,7 +27,12 @@ export function Overview({ data, demo, navigate, loading, errors, userId }) {
   const { segments, ips, devices, resources } = data;
   const available = ips.filter(ip => ip.status === 'available').length;
   const online = devices.filter(d => d.status === 'online').length;
-  const warnings = segments.filter(s => ['warning', 'critical'].includes(s.status)).length;
+  const pressureSegments = segments.map(segment => {
+    const capacity = Number(segment.capacity);
+    const assigned = Number(segment.active_leases);
+    const fillPercent = capacity > 0 && Number.isFinite(assigned) ? assigned / capacity * 100 : Number(segment.utilization_percent) || 0;
+    return { ...segment, fillPercent };
+  }).filter(segment => Number.isFinite(segment.fillPercent)).sort((a, b) => b.fillPercent - a.fillPercent).slice(0, 3);
   const [all, setAll] = useState(false);
   const preferenceKey = `sgrs:principal-segments:${demo ? 'demo' : userId}`;
   const [chosen, setChosen] = useState(() => {
@@ -38,6 +43,29 @@ export function Overview({ data, demo, navigate, loading, errors, userId }) {
   const [preferenceError, setPreferenceError] = useState('');
   const principalKeys = chosen ?? segments.slice(0, 3).map(segmentKey);
   const visibleSegments = all ? segments : segments.filter(s => principalKeys.includes(segmentKey(s)));
+  const networkUsage = segments.map(segment => {
+    const connected = Number(segment.active_leases) || 0;
+    const capacity = Number(segment.capacity) || 0;
+    return {
+      segment,
+      name: segment.name || segment.interface || 'Red sin nombre',
+      connected,
+      capacity,
+      fillPercent: capacity > 0 ? connected / capacity * 100 : Number(segment.utilization_percent) || 0,
+      online: devices.filter(device => device.status === 'online' && deviceInSegment(device, segment)).length,
+    };
+  }).sort((a, b) => b.fillPercent - a.fillPercent || b.connected - a.connected || a.name.localeCompare(b.name, 'es-MX'));
+  const highestNetworkUsage = Math.max(1, ...networkUsage.map(item => item.connected));
+  const totalConnections = networkUsage.reduce((sum, item) => sum + item.connected, 0);
+  const usageColors = ['#7a1235', '#b61c49', '#df5472', '#d39128', '#178e64', '#4789c8'];
+  let accumulatedUsage = 0;
+  const usageSlices = networkUsage.slice(0, 6).map((item, index) => {
+    const start = totalConnections ? accumulatedUsage / totalConnections * 100 : 0;
+    accumulatedUsage += item.connected;
+    return { ...item, color: usageColors[index], start, end: totalConnections ? accumulatedUsage / totalConnections * 100 : 0 };
+  });
+  const remainingUsage = Math.max(0, totalConnections - usageSlices.reduce((sum, item) => sum + item.connected, 0));
+  const usageChart = totalConnections ? `conic-gradient(${[...usageSlices.map(item => `${item.color} ${item.start}% ${item.end}%`), remainingUsage ? `#e9e5e2 ${accumulatedUsage / totalConnections * 100}% 100%` : ''].filter(Boolean).join(', ')})` : '#e9e5e2';
   const editSegments = () => { setDraft(principalKeys); setPreferenceError(''); setEditing(true); };
   const saveSegments = () => {
     try { localStorage.setItem(preferenceKey, JSON.stringify(draft)); }
@@ -51,9 +79,8 @@ export function Overview({ data, demo, navigate, loading, errors, userId }) {
     <section className="overview-metrics" aria-label="Indicadores de infraestructura">
       <Metric icon={Network} label={demo ? 'Disponibilidad de red' : 'Direcciones disponibles'} value={demo ? '98.7%' : loading ? '—' : number(available)} caption={demo ? '+2.3% vs. mes anterior · Ejemplo' : 'Sin asignar en el inventario IP'} />
       <Metric icon={Monitor} tone="success" label="Dispositivos activos" value={loading ? '—' : number(online)} caption={`De ${number(devices.length)} equipos consultados`} />
-      <Metric icon={TriangleAlert} tone="warning" label="Alertas de capacidad" value={loading ? '—' : number(warnings)} caption="Segmentos que requieren atención" />
       <Metric icon={Users} label="Concesiones activas" value={loading ? '—' : number(segments.reduce((sum, s) => sum + (s.active_leases || 0), 0))} caption="Asignaciones reportadas por DHCP" />
-      <article className="network-state"><h3>Estado de los segmentos</h3><div className="flex items-center gap-5"><div className="donut" style={{ '--healthy': `${segments.length ? (segments.length - warnings) / segments.length * 100 : 0}%` }} role="img" aria-label={`${segments.length - warnings} de ${segments.length} segmentos sin alerta de capacidad`}><span>{number(segments.length)}<small>segmentos</small></span></div><div className="donut-legend"><span><i className="legend-success" />Operativos <b>{segments.length - warnings}</b></span><span><i className="legend-warning" />Con alerta <b>{warnings}</b></span><span><i className="legend-neutral" />Origen <b>{demo ? 'Demo' : 'DHCP'}</b></span></div></div></article>
+      <article className="network-pressure"><div className="network-pressure-header"><h3>Redes más cerca del límite</h3><small>uso de IPs</small></div>{pressureSegments.length ? <ol>{pressureSegments.map(segment => <li key={segmentKey(segment)}><span><strong>{segment.name || segment.interface || 'Red sin nombre'}</strong><small>{number(segment.active_leases)} / {number(segment.capacity)}</small></span><i><em style={{ width: `${Math.min(100, Math.max(0, segment.fillPercent))}%` }} /></i><b>{number(segment.fillPercent)}%</b></li>)}</ol> : <p className="muted">Sin datos de utilización por segmento.</p>}</article>
     </section>
     <section className="segment-section"><div className="section-heading"><Layers3 className="section-icon" size={31} aria-hidden="true" /><div><h2>Segmentos de Red y VLANs</h2><p>Capacidad y asignación de los principales segmentos de la infraestructura</p></div><div className="section-actions"><span>{number(segments.length)} segmentos</span><Button onClick={editSegments} icon={Plus} disabled={loading || !segments.length}>Elegir principales</Button><Button onClick={() => setAll(!all)} icon={ArrowRight}>{all ? 'Ver principales' : 'Ver todos'}</Button></div></div>
       {segments.length ? <><div className="segment-grid">{visibleSegments.map((segment, index) => <article className={`segment-card segment-${index % 3}`} key={`${segment.id}-${segment.interface}`}>
@@ -65,6 +92,17 @@ export function Overview({ data, demo, navigate, loading, errors, userId }) {
         <div className="segment-description"><Building2 size={21} aria-hidden="true" /><p>{segment.description || `Pool de direcciones de la interfaz ${segment.interface}. Consulta los equipos asociados a este segmento.`}</p></div>
         <Button variant="primary" className="w-full" icon={Server} onClick={() => { const url = new URL(location.href); url.searchParams.delete('equipos.page'); url.searchParams.delete('equipos.filter.status'); history.replaceState(null, '', url); navigate(`dispositivos?segmento=${encodeURIComponent(segmentKey(segment))}`); }}>Ver dispositivos <ArrowRight size={17} /></Button>
       </article>)}</div>{!visibleSegments.length && <Empty title="Sin segmentos principales" action={<Button icon={Plus} onClick={editSegments}>Elegir principales</Button>}>Agrega los segmentos que quieres ver en tu dashboard.</Empty>}</> : <div className="panel"><Empty title={loading ? 'Consultando segmentos de red' : 'Sin segmentos disponibles'}>{loading ? 'Espera mientras se consulta la capacidad DHCP.' : 'La conexión con el servicio DHCP no devolvió segmentos. Puedes revisar el inventario IP o actualizar la consulta.'}</Empty></div>}
+    </section>
+    <section className="network-usage panel" aria-labelledby="network-usage-title">
+      <div className="network-usage-heading"><div><p className="eyebrow">Conectividad por red</p><h2 id="network-usage-title">Usuarios conectados por red</h2><p>Distribución de las concesiones DHCP activas por segmento.</p></div><p className="network-usage-total"><strong>{number(totalConnections)}</strong><span>conexiones activas</span></p></div>
+      {networkUsage.length ? <div className="network-usage-content">
+        <div className="network-usage-chart" style={{ background: usageChart }} role="img" aria-label={`${number(totalConnections)} conexiones activas distribuidas en ${number(networkUsage.length)} redes`}><div><strong>{number(totalConnections)}</strong><span>conexiones</span></div></div>
+        <div className="network-usage-list" aria-label="Redes con más conexiones">
+          {usageSlices.map(item => <button type="button" className="network-usage-row" key={segmentKey(item.segment)} onClick={() => navigate(`dispositivos?segmento=${encodeURIComponent(segmentKey(item.segment))}`)} title={`Ver dispositivos de ${item.name}`}><span className="network-usage-name"><i style={{ background: item.color }} /><strong>{item.name}</strong><small>{item.segment.vlan || item.segment.interface || item.segment.subnet || 'Segmento de red'}</small></span><span className="network-usage-bar"><i><b style={{ width: `${Math.round(item.connected / highestNetworkUsage * 100)}%`, background: item.color }} /></i><strong>{number(item.connected)}<small>{item.segment.capacity ? ` / ${number(item.segment.capacity)}` : ''}</small></strong></span><span className="network-usage-online">{number(item.online)} <small>en línea</small></span></button>)}
+          {remainingUsage > 0 && <p className="network-usage-more">+ {number(networkUsage.length - usageSlices.length)} redes adicionales · {number(remainingUsage)} conexiones</p>}
+        </div>
+      </div> : <Empty title="Sin conexiones por red">El servicio DHCP aún no devolvió concesiones activas por segmento.</Empty>}
+      <p className="network-usage-note">Una concesión DHCP representa una conexión o dispositivo con dirección asignada; una persona puede usar más de un equipo.</p>
     </section>
     <Dialog open={editing} onClose={() => setEditing(false)} title="Elegir segmentos principales" wide>
       <p className="muted">Selecciona las tarjetas que quieres mostrar al abrir el dashboard. Esta preferencia se guarda para tu cuenta en este navegador.</p>
@@ -146,18 +184,48 @@ export function Addresses({ data, navigate, openEditor, loading, errors, refresh
     {view === 'matrix' ? <section className="ip-matrix" aria-label="Matriz de direcciones IP">{loading ? <div className="loading-state">Cargando direcciones IP…</div> : errors.ips ? <Notice title="No se pudieron cargar las direcciones" tone="warning" action={<Button onClick={refresh}>Reintentar</Button>}>{errors.ips}</Notice> : Object.entries(filteredBySegment).map(([segment, ips]) => <section key={segment} className="ip-segment"><div><h2>{segment}</h2><span>{ips.length} IPs</span></div><article>{ips.map(ip => <button key={ip.ip} type="button" className={`ip-cell ip-cell-${ip.status}`} onClick={() => openEditor('ip', ip)} title={`${ip.ip} · ${labelForStatus(ip.status)}${ip.hostname ? ` · ${ip.hostname}` : ''}`}><strong>{displayIp(ip.ip)}</strong><small><i />{labelForStatus(ip.status)}</small></button>)}</article></section>)}{!loading && !errors.ips && !filtered.length && <Empty title="Sin direcciones coincidentes">Modifica los filtros o busca otra dirección.</Empty>}</section> : <DataTable title="Direcciones IP" rows={rows} columns={columns} state={state} noun="direcciones" loading={loading} error={errors.ips} onRetry={refresh} />}
     <Note>Las asignaciones modifican el inventario local. No cambian reservas DHCP ni aplican configuraciones al firewall.</Note></>;
 }
-export function Devices({ data, navigate, openEditor, loading, errors, refresh, canExport, selectedSegment }) {
+export function Devices({ data, navigate, openEditor, loading, errors, refresh, canExport, selectedSegment, canWrite, saveNetworkMedia }) {
   const state = useListState('equipos');
+  const [mediaError, setMediaError] = useState('');
   const segment = data.segments.find(item => segmentKey(item) === selectedSegment);
   const eligible = data.devices.filter(device => device.status === 'online' || device.is_reserved === true);
   const devices = selectedSegment ? eligible.filter(device => deviceInSegment(device, segment)) : eligible;
+  const mediumFor = item => data.networkMedia?.[segmentKey(item)] || 'pending';
+  const mediumCounts = data.devices.filter(device => device.status === 'online').reduce((counts, device) => {
+    const matched = data.segments.find(item => deviceInSegment(device, item));
+    counts[matched ? mediumFor(matched) : 'pending'] += 1;
+    return counts;
+  }, { wifi: 0, wired: 0, pending: 0 });
+  const saveMedium = async (item, medium) => {
+    setMediaError('');
+    try { await saveNetworkMedia(segmentKey(item), medium); }
+    catch (error) { setMediaError(error.message || 'No se pudo guardar la clasificación.'); }
+  };
+  const rows = devices.map((device, index) => ({
+    ...device,
+    id: `${device.interface || ''}:${device.mac || device.ip}:${index}`,
+    type: device.type || 'Sin clasificar',
+    vendor: device.vendor || 'Sin fabricante',
+    interface: device.interface || 'Sin interfaz identificada',
+    mac: device.mac || '—',
+  }));
   const sizeChoice = ['25', '50', '100', 'all'].includes(state.pageSize) ? state.pageSize : '25';
-  const pageSize = sizeChoice === 'all' ? Math.max(1, devices.length) : Number(sizeChoice);
-  const columns = [{ key: 'name', label: 'Dispositivo', render: r => detailText(r.name, r.vendor) }, { key: 'ip', label: 'Dirección IP', render: r => <div className="cell-detail"><span className="ip-address">{r.ip_source === 'unconfirmed' ? 'Pendiente de confirmar' : r.ip}</span>{r.is_reserved && <small>IP reservada{r.reserved_ip && r.reserved_ip !== r.ip ? `: ${r.reserved_ip}` : ''}</small>}</div> }, { key: 'type', label: 'Tipo' }, { key: 'location', label: 'Ubicación / Interfaz' }, { key: 'status', label: 'Estado reportado', render: r => <Badge status={r.status} /> }, { key: 'activity', label: 'Última actividad' }, { key: 'actions', label: 'Acciones', sortable: false, render: r => <Button onClick={() => openEditor('device-detail', r)}>Ver detalle</Button> }];
+  const pageSize = sizeChoice === 'all' ? Math.max(1, rows.length) : Number(sizeChoice);
+  const columns = [
+    { key: 'name', label: 'Dispositivo', render: r => detailText(r.name, r.vendor) },
+    { key: 'ip', label: 'Dirección IP', render: r => <div className="cell-detail"><span className="ip-address">{r.ip_source === 'unconfirmed' ? 'Pendiente de confirmar' : r.ip}</span>{r.is_reserved && <small>IP reservada{r.reserved_ip && r.reserved_ip !== r.ip ? `: ${r.reserved_ip}` : ''}</small>}</div> },
+    { key: 'mac', label: 'Dirección MAC', render: r => <span className="font-mono">{r.mac}</span> },
+    { key: 'type', label: 'Tipo de dispositivo' },
+    { key: 'interface', label: 'Conectado desde', render: r => detailText(r.interface, r.location) },
+    { key: 'status', label: 'Estado reportado', render: r => <Badge status={r.status} /> },
+    { key: 'activity', label: 'Última actividad' },
+    { key: 'actions', label: 'Acciones', sortable: false, render: r => <Button onClick={() => openEditor('device-detail', r)}>Ver detalle</Button> },
+  ];
   return <><PageHeading eyebrow="Inventario de infraestructura" title="Dispositivos de Red" description="Equipos detectados y consulta de información técnica" updatedAt={data.updatedAt} />
     {selectedSegment && <Notice title={segment ? `Segmento: ${segment.name || segment.interface}` : 'Segmento no disponible'} action={<Button onClick={() => { state.setPage(1); navigate('dispositivos'); }}>Ver todos los segmentos</Button>}>{segment ? [segment.subnet, segment.default_gateway && `Gateway ${segment.default_gateway}`, segment.netmask && `Máscara ${segment.netmask}`].filter(Boolean).join(' · ') || segment.ip_ranges?.join(', ') : 'Actualiza la consulta para cargar este segmento.'}</Notice>}
-    <div className="toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar dispositivo, dirección IP o ubicación…" /><Select label="Estado" value={state.filters.status || ''} onChange={e => state.setFilter('status', e.target.value)}><option value="">Todos los estados</option><option value="online">En servicio</option><option value="offline">Reservados fuera de línea</option></Select><Select label="Dispositivos por página" value={sizeChoice} onChange={e => state.setPageSize(e.target.value)}><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="all">Todos</option></Select></div>
-    <DataTable title="Dispositivos de red" rows={devices.map((d, i) => ({ ...d, id: `${d.interface || ''}:${d.mac || d.ip}:${i}` }))} columns={columns} state={state} pageSize={pageSize} noun="dispositivos" exportable={canExport} loading={loading} error={errors.devices || (selectedSegment && errors.segments)} onRetry={refresh} />
+    <section className="network-medium-panel" aria-labelledby="network-medium-title"><div className="network-medium-heading"><div><p className="eyebrow">Medio de conexión</p><h2 id="network-medium-title">Comparación de dispositivos conectados</h2><p>La clasificación se define por cada red/VLAN; las redes sin registrar permanecen pendientes.</p></div></div><div className="network-medium-metrics"><article className="network-medium-card network-medium-wifi"><span>Wi‑Fi</span><strong>{number(mediumCounts.wifi)}</strong><small>dispositivos en línea</small></article><article className="network-medium-card network-medium-wired"><span>Cableado</span><strong>{number(mediumCounts.wired)}</strong><small>dispositivos en línea</small></article><article className="network-medium-card network-medium-pending"><span>Pendiente</span><strong>{number(mediumCounts.pending)}</strong><small>sin medio definido</small></article></div><details className="network-media-catalog"><summary>Clasificar redes y VLANs <span>{data.segments.length} redes</span></summary><p>Elige el medio real de cada red. Esta configuración se guarda y se aplica en la comparación superior.</p><div>{data.segments.map(item => <label key={segmentKey(item)}><span><strong>{item.name || item.interface || 'Red sin nombre'}</strong><small>{item.vlan || item.interface || item.subnet || 'Sin identificador'}</small></span><select value={mediumFor(item)} disabled={!canWrite} onChange={event => saveMedium(item, event.target.value)}><option value="pending">Pendiente de clasificar</option><option value="wifi">Wi‑Fi</option><option value="wired">Cableado</option></select></label>)}</div>{mediaError && <p className="network-media-error">{mediaError}</p>}{!canWrite && <p className="network-media-error">Tu perfil es de consulta; un administrador debe clasificar las redes.</p>}</details></section>
+    <div className="toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar nombre, IP, MAC, fabricante, tipo o interfaz…" /><Select label="Estado" value={state.filters.status || ''} onChange={e => state.setFilter('status', e.target.value)}><option value="">Todos los estados</option><option value="online">En servicio</option><option value="offline">Reservados fuera de línea</option></Select><Select label="Tipo de dispositivo" value={state.filters.type || ''} onChange={e => state.setFilter('type', e.target.value)}><option value="">Todos los tipos</option>{options(rows.map(r => r.type))}</Select><Select label="Fabricante" value={state.filters.vendor || ''} onChange={e => state.setFilter('vendor', e.target.value)}><option value="">Todos los fabricantes</option>{options(rows.map(r => r.vendor))}</Select><Select label="Origen / interfaz" value={state.filters.interface || ''} onChange={e => state.setFilter('interface', e.target.value)}><option value="">Todos los orígenes</option>{options(rows.map(r => r.interface))}</Select><Select label="Dispositivos por página" value={sizeChoice} onChange={e => state.setPageSize(e.target.value)}><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="all">Todos</option></Select></div>
+    <DataTable title="Dispositivos de red" rows={rows} columns={columns} state={state} pageSize={pageSize} noun="dispositivos" exportable={canExport} loading={loading} error={errors.devices || (selectedSegment && errors.segments)} onRetry={refresh} />
     <Note>Se muestran equipos en línea y equipos con reserva DHCP, aunque estén desconectados. El estado en línea proviene de FortiGate. Las IP se actualizan por MAC con DHCP y ARP; los equipos sin dirección confirmada permanecen visibles en su interfaz. Los registros históricos sin reserva se excluyen.</Note></>;
 }
 export function AuditLog({ data, records, navigate, openEditor, loading, errors, refresh, idfView = false, canWrite, canExport }) {

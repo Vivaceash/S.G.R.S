@@ -154,7 +154,7 @@ class AccessRoutes:
                 self._manage()
                 self._send_json({"connections": [connection(name, public=True) for name in ("forti", "omni")]})
                 return True
-            normal = {"/api/idfs", "/api/reports", "/api/ips", "/api/devices", "/api/devices/summary", "/api/health", "/api/ip", "/api/forti/network/dhcp-pools", "/api/altas/omnivista", "/api/aps/omnivista"}
+            normal = {"/api/idfs", "/api/reports", "/api/ips", "/api/devices", "/api/devices/summary", "/api/health", "/api/ip", "/api/forti/network/dhcp-pools", "/api/altas/omnivista", "/api/aps/omnivista", "/api/network-media"}
             if path in normal:
                 return False
             if path.startswith("/api/reports/evidence/"):
@@ -249,7 +249,7 @@ class AccessRoutes:
                     raise AccessError(403, "El rol viewer solo puede consultar los reportes.")
                 self.save_report(self._body())
                 return True
-            if path in ("/api/ips/update", "/api/idfs/device") and "inventory.write" in self.identity["capabilities"]:
+            if path in ("/api/ips/update", "/api/idfs/device", "/api/network-media") and "inventory.write" in self.identity["capabilities"]:
                 return False
             raise AccessError(403, "No tienes permiso para realizar esta operación.")
         except AccessError as exc:
