@@ -11,7 +11,7 @@ import { TelemetryNav, TelemetryPage, useTelemetryCatalog } from './telemetry.js
 import { generateSvg } from '../qrcode.js';
 import { DocumentaryInventory } from './inventory.jsx';
 
-const emptyData = () => ({ segments: [], ips: [], devices: [], networkMedia: {}, resources: [], requests: [], idfs: [], reports: {}, health: null, updatedAt: null });
+const emptyData = () => ({ segments: [], ips: [], devices: [], resources: [], requests: [], idfs: [], reports: {}, health: null, updatedAt: null });
 const navItems = [
   ['resumen', 'Dashboard', Home], ['dispositivos', 'Dispositivos', Monitor], ['disponibilidad', 'IPs', Globe2], ['bitacora', 'Bitácora', FileText],
   ['idf', 'Registro IDF', Building2], ['aps', 'Access Points', Radio], ['cctv', 'CCTV', Camera],
@@ -182,7 +182,7 @@ export default function App() {
     const version = ++generation.current;
     setLoading(true);
     const timer = setTimeout(() => controller.abort(), 12000);
-    const endpoints = { idfs: '/api/idfs', ips: '/api/ips', devices: '/api/devices', reports: '/api/reports', health: '/api/health', segments: '/api/forti/network/dhcp-pools', networkMedia: '/api/network-media' };
+    const endpoints = { idfs: '/api/idfs', ips: '/api/ips', devices: '/api/devices', reports: '/api/reports', health: '/api/health', segments: '/api/forti/network/dhcp-pools' };
     const results = await Promise.allSettled(Object.values(endpoints).map(path => request(path, { signal: controller.signal })));
     clearTimeout(timer);
     if (version !== generation.current) return;
@@ -192,7 +192,6 @@ export default function App() {
       if (result.status === 'fulfilled') {
         const value = key === 'segments' ? result.value.data?.pools : result.value;
         if (['idfs', 'ips', 'devices', 'segments'].includes(key) && !Array.isArray(value)) failures[key] = 'El servicio devolvió un formato no reconocido.';
-        else if (key === 'networkMedia' && (!value || Array.isArray(value) || typeof value !== 'object')) failures[key] = 'El catálogo de medios devolvió un formato no reconocido.';
         else next[key] = value;
       } else failures[key] = result.reason.name === 'AbortError' ? 'Se agotó el tiempo de consulta. Vuelve a intentar.' : result.reason.message;
     });
@@ -305,15 +304,9 @@ export default function App() {
     });
     if (modal?.row === row) setModal(null); notify(demo ? 'Incidencia de ejemplo resuelta.' : 'Incidencia resuelta. El historial se conserva.');
   }
-  async function saveNetworkMedia(key, medium) {
-    if (!can('inventory.write')) throw new ApiError(403);
-    if (!demo) await mutate('/api/network-media', { key, medium });
-    setData(old => ({ ...old, networkMedia: { ...(old.networkMedia || {}), [key]: medium } }));
-    notify(demo ? 'Clasificación de ejemplo actualizada.' : 'Clasificación de red guardada.');
-  }
   const resolveDirect = async row => { try { await resolveReport(row); } catch (error) { notify(error.message || 'No se pudo resolver la incidencia.'); } };
   const records = reportsFromData(data.reports, data.idfs);
-  const shared = { data, demo, navigate, openEditor, loading, errors, refresh, canWrite: can('inventory.write'), canExport: can('inventory.export'), onResolve: resolveDirect, saveNetworkMedia };
+  const shared = { data, demo, navigate, openEditor, loading, errors, refresh, canWrite: can('inventory.write'), canExport: can('inventory.export'), onResolve: resolveDirect };
   let page;
   if (route.path.startsWith('consulta/')) page = can('traffic.read') ? <TelemetryPage catalog={catalog} moduleId={route.path.slice(9)} resourceId={route.params.get('recurso')} navigate={navigate} /> : <PageHeading eyebrow="Acceso restringido · 403" title="No tienes permiso para esta sección" description="Usa la navegación para consultar las secciones disponibles en tu cuenta." />;
   else if (route.path === 'resumen') page = <Overview {...shared} userId={user.id} errors={Object.values(errors)} />;

@@ -35,7 +35,6 @@ REPORTS_FILE = os.path.join(DATA_DIR, "reports.json")
 IDFS_FILE = os.path.join(DATA_DIR, "idfs.json")
 IPS_FILE = os.path.join(DATA_DIR, "ips.json")
 DEVICES_FILE = os.path.join(DATA_DIR, "devices.json")
-NETWORK_MEDIA_FILE = os.path.join(DATA_DIR, "network_media.json")
 
 # Asegurar que el directorio de datos y archivos base existan
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -43,8 +42,7 @@ for fpath, default_val in [
     (REPORTS_FILE, {}),
     (IDFS_FILE, []),
     (IPS_FILE, []),
-    (DEVICES_FILE, []),
-    (NETWORK_MEDIA_FILE, {})
+    (DEVICES_FILE, [])
 ]:
     if not os.path.exists(fpath):
         with open(fpath, 'w', encoding='utf-8') as f:
@@ -221,16 +219,6 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                     with open(IPS_FILE, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                 self._send_json(data)
-            except Exception as e:
-                self._send_json({"error": str(e)}, 500)
-
-        # 3a. Catálogo explícito del medio de conexión por VLAN/interfaz.
-        elif path == '/api/network-media':
-            try:
-                with _file_lock:
-                    with open(NETWORK_MEDIA_FILE, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                self._send_json(data if isinstance(data, dict) else {})
             except Exception as e:
                 self._send_json({"error": str(e)}, 500)
 
@@ -584,27 +572,6 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                         json.dump(ips, f, indent=2, ensure_ascii=False)
 
                 self._send_json({"status": "success", "ip": target_ip})
-            except Exception as e:
-                self._send_json({"error": str(e)}, 500)
-
-        elif path == '/api/network-media':
-            try:
-                content_length = int(self.headers['Content-Length'])
-                payload = json.loads(self.rfile.read(content_length).decode('utf-8'))
-                key = str(payload.get('key') or '').strip()
-                medium = str(payload.get('medium') or '').strip().lower()
-                if not key or medium not in ('wifi', 'wired', 'pending'):
-                    self._send_json({"error": "Se requiere una red válida y un medio: wifi, wired o pending."}, 400)
-                    return
-                with _file_lock:
-                    with open(NETWORK_MEDIA_FILE, 'r', encoding='utf-8') as f:
-                        catalog = json.load(f)
-                    if not isinstance(catalog, dict):
-                        catalog = {}
-                    catalog[key] = medium
-                    with open(NETWORK_MEDIA_FILE, 'w', encoding='utf-8') as f:
-                        json.dump(catalog, f, indent=2, ensure_ascii=False)
-                self._send_json({"status": "success", "key": key, "medium": medium})
             except Exception as e:
                 self._send_json({"error": str(e)}, 500)
 
