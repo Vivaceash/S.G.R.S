@@ -15,6 +15,14 @@ import unicodedata
 import csv
 import io
 from urllib.parse import urlsplit, parse_qs
+
+# Carga segura de variables de entorno desde el archivo .env raíz
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+except ImportError:
+    pass
+
 from dashboard_access import connection, connection_headers, AccessError
 from dashboard_routes import AccessRoutes
 from dashboard_reports import ReportRoutes, report_key, tagged_reports

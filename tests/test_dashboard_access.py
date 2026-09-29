@@ -290,3 +290,34 @@ def test_login_and_session_return_allowed_pages(local_store):
     assert sess["allowed_pages"] == identity["allowed_pages"]
 
 
+def test_origins_supports_multiple_origins_and_ports(monkeypatch):
+    from dashboard_routes import AccessRoutes
+    routes = AccessRoutes()
+
+    monkeypatch.setenv("SGRS_LAN_ORIGIN", "http://192.168.38.250:3000,http://192.168.38.250")
+    origins = routes._origins()
+    assert "http://192.168.38.250:3000" in origins
+    assert "http://192.168.38.250" in origins
+    assert "http://192.168.38.250:3001" in origins
+
+    # Test space separated
+    monkeypatch.setenv("SGRS_LAN_ORIGIN", "http://192.168.38.250:3000 http://192.168.38.250")
+    origins_space = routes._origins()
+    assert "http://192.168.38.250:3000" in origins_space
+    assert "http://192.168.38.250" in origins_space
+
+
+def test_origins_and_boundary_with_wildcard(monkeypatch):
+    from dashboard_routes import AccessRoutes
+    routes = AccessRoutes()
+
+    monkeypatch.setenv("SGRS_LAN_ORIGIN", "*")
+    origins = routes._origins()
+    assert "*" in origins
+
+    # Test boundary allows any Host and Origin when wildcard is present
+    routes.headers = {"Host": "any-host.lan", "Origin": "http://any-host.lan"}
+    # Should not raise AccessError
+    routes._boundary(mutation=False)
+
+

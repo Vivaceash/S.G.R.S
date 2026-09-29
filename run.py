@@ -17,6 +17,14 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 ROOT_DIR = Path(__file__).resolve().parent
+
+# Carga segura de variables de entorno desde el archivo .env raíz
+try:
+    from dotenv import load_dotenv
+    load_dotenv(ROOT_DIR / ".env")
+except ImportError:
+    pass
+
 PID_FILE = ROOT_DIR / ".sgrs_pids.json"
 LOG_DIR = ROOT_DIR / "logs"
 MAIN_LOG = LOG_DIR / "sgrs.log"

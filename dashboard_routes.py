@@ -50,20 +50,43 @@ class AccessRoutes:
     def _origins(self):
         # Explicit deployments must set the public HTTPS origin and use a reverse proxy.
         configured = os.environ.get("SGRS_PUBLIC_ORIGIN", "").rstrip("/")
-        lan_origin = os.environ.get("SGRS_LAN_ORIGIN", "").rstrip("/")
+        lan_origin = os.environ.get("SGRS_LAN_ORIGIN", "").strip()
         local = {f"http://{host}:{port}" for host in ("localhost", "127.0.0.1")
                  for port in (3000, 3001, 3002, 5173, 4173)}
-        # El operador local conserva acceso por localhost; los teléfonos solo
-        # pueden entrar por la IP LAN concreta emitida en el código QR.
-        return local | ({configured} if configured else set()) | ({lan_origin} if lan_origin else set())
+        origins = set(local)
+        if configured:
+            origins.add(configured)
+        if lan_origin:
+            for item in re.split(r'[\s,]+', lan_origin):
+                clean = item.strip().rstrip("/")
+                if not clean:
+                    continue
+                if clean == "*":
+                    origins.add("*")
+                    continue
+                origins.add(clean)
+                parsed = urlsplit(clean)
+                if parsed.hostname:
+                    if parsed.port in (3000, 3001, 3002):
+                        origins.add(f"{parsed.scheme}://{parsed.hostname}")
+                        origins.add(f"{parsed.scheme}://{parsed.hostname}:3000")
+                        origins.add(f"{parsed.scheme}://{parsed.hostname}:3001")
+                        origins.add(f"{parsed.scheme}://{parsed.hostname}:3002")
+                    elif not parsed.port and parsed.scheme in ("http", "https"):
+                        origins.add(f"{clean}:3000")
+                        origins.add(f"{clean}:3001")
+                        origins.add(f"{clean}:3002")
+        return origins
 
     def _boundary(self, mutation=False):
         origins = self._origins()
-        if self.headers.get("Host") not in {urlsplit(origin).netloc for origin in origins}:
-            raise AccessError(403, "Origen no permitido. Configura SGRS_PUBLIC_ORIGIN para publicar el dashboard.")
-        origin = self.headers.get("Origin")
-        if (mutation and origin not in origins) or (origin and origin not in origins):
-            raise AccessError(403, "Esta solicitud debe realizarse desde el dashboard autorizado.")
+        if "*" not in origins:
+            allowed_hosts = {urlsplit(origin).netloc for origin in origins if origin != "*"}
+            if self.headers.get("Host") not in allowed_hosts:
+                raise AccessError(403, "Origen no permitido. Configura SGRS_PUBLIC_ORIGIN para publicar el dashboard.")
+            origin = self.headers.get("Origin")
+            if (mutation and origin not in origins) or (origin and origin not in origins):
+                raise AccessError(403, "Esta solicitud debe realizarse desde el dashboard autorizado.")
         if mutation:
             if self.headers.get("Transfer-Encoding"):
                 raise AccessError(400, "Formato de solicitud no admitido.")
