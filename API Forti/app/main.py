@@ -150,13 +150,36 @@ if settings.ALLOWED_HOSTS and "*" not in settings.ALLOWED_HOSTS:
 
 # 6. CORS Seguro (sin allow_credentials=True si el origen es '*')
 origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else [settings.CORS_ORIGINS]
+is_cors_wildcard = "*" in origins
+has_lan_origins = any(
+    isinstance(o, str) and (
+        o.startswith("http://192.168.")
+        or o.startswith("https://192.168.")
+        or o.startswith("http://10.")
+        or o.startswith("https://10.")
+        or o.startswith("http://172.")
+        or o.startswith("https://172.")
+        or "localhost" in o
+        or "127.0.0.1" in o
+    )
+    for o in origins
+)
+
+allow_all_cors = is_cors_wildcard or has_lan_origins
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
+    allow_methods=["*"] if allow_all_cors else ["GET", "POST", "OPTIONS"],
+    allow_headers=["*"] if allow_all_cors else [
+        "Authorization",
+        "Content-Type",
+        "X-API-Key",
+        "X-Request-ID",
+        "Accept",
+        "User-Agent",
+    ],
     expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
 )
 
@@ -212,11 +235,12 @@ async def ping():
 # -------------------------------------------------------------
 if settings.ENABLE_DOCS:
     @app.get("/scalar", include_in_schema=False)
-    async def scalar_html():
+    async def scalar_html(request: Request):
+        base_url = str(request.base_url).rstrip("/")
         return get_scalar_api_reference(
             openapi_url=app.openapi_url,
             title=f"{settings.APP_NAME} - Scalar Docs",
-            servers=[{"url": f"http://localhost:{settings.PORT}", "description": "Servidor Local (Puerto 8001)"}],
+            servers=[{"url": base_url, "description": f"Servidor API ({base_url})"}],
         )
 
     @app.get("/docs", include_in_schema=False)

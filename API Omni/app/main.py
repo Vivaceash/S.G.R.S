@@ -48,14 +48,38 @@ app = FastAPI(
 
 # Configuración de CORS segura
 cors_origins = settings.CORS_ORIGINS if settings.CORS_ORIGINS else ["http://localhost:5173"]
+if isinstance(cors_origins, str):
+    cors_origins = [cors_origins]
+is_cors_wildcard = "*" in cors_origins
+has_lan_origins = any(
+    isinstance(o, str) and (
+        o.startswith("http://192.168.")
+        or o.startswith("https://192.168.")
+        or o.startswith("http://10.")
+        or o.startswith("https://10.")
+        or o.startswith("http://172.")
+        or o.startswith("https://172.")
+        or "localhost" in o
+        or "127.0.0.1" in o
+    )
+    for o in cors_origins
+)
+allow_all_cors = is_cors_wildcard or has_lan_origins
 
 # Pila de Middlewares (Se añaden en orden inverso a su ejecución externa)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
+    allow_methods=["*"] if allow_all_cors else ["GET", "POST", "OPTIONS"],
+    allow_headers=["*"] if allow_all_cors else [
+        "Authorization",
+        "Content-Type",
+        "X-API-Key",
+        "X-Request-ID",
+        "Accept",
+        "User-Agent",
+    ],
     expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
 )
 app.add_middleware(
@@ -89,15 +113,17 @@ async def ping():
 
 # Integración de Documentación Interactiva Scalar (condicionada por configuración)
 @app.get("/docs", include_in_schema=False)
-async def scalar_docs():
+async def scalar_docs(request: Request):
     if not settings.ENABLE_DOCS:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="La documentación interactiva ha sido deshabilitada por configuración de seguridad."
         )
+    base_url = str(request.base_url).rstrip("/")
     return get_scalar_api_reference(
         openapi_url=app.openapi_url,
         title="OmniVista 2500 Query API - Scalar Reference",
+        servers=[{"url": base_url, "description": f"Servidor API ({base_url})"}],
         show_sidebar=True,
         default_open_all_tags=True,
         persist_auth=True,
