@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Activity, ArrowRight, Building2, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, FileText, Info, Layers3, Monitor, Network, Package, Plus, Router, Server, ShieldCheck, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { Activity, ArrowRight, ArrowUpDown, Building2, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Download, FileText, Info, Layers3, Monitor, Network, Package, Plus, Printer, Headset, Router, Server, ShieldCheck, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { Badge, Button, DataTable, Dialog, Empty, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, useListState } from './components.jsx';
-import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getSegmentDevices, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames } from './domain.mjs';
+import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getSegmentDevices, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel } from './domain.mjs';
 
 export function PageHeading({ eyebrow, title, description, updatedAt, children, headingId = 'page-title' }) {
   const hasActions = Boolean(children || updatedAt);
@@ -436,4 +436,575 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
       </> : <Empty title={segmentDevices.length ? 'Sin coincidencias' : 'Sin dispositivos en este segmento'} action={segmentDevices.length ? <Button onClick={() => { setQuery(''); setStatusFilter(''); }}>Limpiar filtros</Button> : undefined}>{segmentDevices.length ? 'No hay dispositivos que coincidan con los criterios de búsqueda.' : `No se detectaron dispositivos asociados ni reservas DHCP registradas para la red ${segment.name || segment.interface}.`}</Empty>}
     </div>
   </section>;
+}
+
+export function SupportDashboard({ data, navigate, openEditor, loading, errors, refresh }) {
+  const [networkQuery, setNetworkQuery] = useState('');
+  const [computerQuery, setComputerQuery] = useState('');
+  const [printerQuery, setPrinterQuery] = useState('');
+  const [computerSort, setComputerSort] = useState('standard');
+
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportComputers, setExportComputers] = useState(true);
+  const [exportPrinters, setExportPrinters] = useState(true);
+
+  const { segments = [], devices = [] } = data;
+
+  // Balance y resumen de saturación para Columna 1
+  const saturationSummary = segments.reduce((acc, s) => {
+    const status = getSaturationStatus(s);
+    if (status === 'critical') acc.critical++;
+    else if (status === 'warning') acc.warning++;
+    else acc.normal++;
+
+    const cap = Number(s.capacity) || 0;
+    const occ = Number(s.active_leases) || 0;
+    const free = s.available_ips != null
+      ? Number(s.available_ips)
+      : Math.max(0, cap - occ);
+
+    acc.totalIps += cap;
+    acc.occupiedIps += occ;
+    acc.availableIps += free;
+    return acc;
+  }, { critical: 0, warning: 0, normal: 0, totalIps: 0, occupiedIps: 0, availableIps: 0 });
+
+  // 1. Redes y estados
+  const filteredSegments = segments.filter(s => {
+    if (!networkQuery.trim()) return true;
+    const q = networkQuery.toLowerCase();
+    return (
+      (s.name && s.name.toLowerCase().includes(q)) ||
+      (s.interface && s.interface.toLowerCase().includes(q)) ||
+      (s.subnet && s.subnet.toLowerCase().includes(q)) ||
+      (s.default_gateway && s.default_gateway.toLowerCase().includes(q)) ||
+      (s.vlan && String(s.vlan).toLowerCase().includes(q))
+    );
+  });
+
+  // 2. Computadoras conectadas (online y tipo Computadora)
+  const isComputer = d => {
+    if (d.status !== 'online') return false;
+    const os = d.os || d.omnivista?.os || d.raw?.os_name || '';
+    const name = d.omnivista?.device_name || d.name || '';
+    const type = formatDeviceType(d.type, os, name, d.vendor);
+    return type === 'Computadora';
+  };
+  const computers = devices.filter(isComputer);
+  const filteredComputers = computers.filter(c => {
+    if (!computerQuery.trim()) return true;
+    const q = computerQuery.toLowerCase();
+    const ovName = (c.omnivista?.device_name || '').toLowerCase();
+    const ovLoc = (c.omnivista?.location || '').toLowerCase();
+    return (
+      (c.name && c.name.toLowerCase().includes(q)) ||
+      (c.ip && c.ip.toLowerCase().includes(q)) ||
+      (c.mac && c.mac.toLowerCase().includes(q)) ||
+      (c.vendor && c.vendor.toLowerCase().includes(q)) ||
+      (c.os && c.os.toLowerCase().includes(q)) ||
+      ovName.includes(q) ||
+      ovLoc.includes(q)
+    );
+  });
+
+  const sortedComputers = [...filteredComputers].sort((a, b) => {
+    if (computerSort === 'uptime') {
+      const aUptime = Number(a.uptime_seconds) || 0;
+      const bUptime = Number(b.uptime_seconds) || 0;
+      return bUptime - aUptime;
+    }
+    return 0;
+  });
+
+  // 3. Impresoras conectadas (online y tipo Impresora)
+  const isPrinter = d => {
+    if (d.status !== 'online') return false;
+    const os = d.os || d.omnivista?.os || d.raw?.os_name || '';
+    const name = d.omnivista?.device_name || d.name || '';
+    const type = formatDeviceType(d.type, os, name, d.vendor);
+    return type === 'Impresora';
+  };
+  const printers = devices.filter(isPrinter);
+  const filteredPrinters = printers.filter(p => {
+    if (!printerQuery.trim()) return true;
+    const q = printerQuery.toLowerCase();
+    const ovName = (p.omnivista?.device_name || '').toLowerCase();
+    const ovLoc = (p.omnivista?.location || '').toLowerCase();
+    return (
+      (p.name && p.name.toLowerCase().includes(q)) ||
+      (p.ip && p.ip.toLowerCase().includes(q)) ||
+      (p.mac && p.mac.toLowerCase().includes(q)) ||
+      (p.vendor && p.vendor.toLowerCase().includes(q)) ||
+      (p.model && p.model.toLowerCase().includes(q)) ||
+      ovName.includes(q) ||
+      ovLoc.includes(q)
+    );
+  });
+
+  const handleExportCsv = () => {
+    const rows = [
+      ...(exportComputers ? computers : []),
+      ...(exportPrinters ? printers : []),
+    ];
+    if (!rows.length) return;
+
+    const columns = [
+      {
+        key: 'device_type',
+        label: 'Tipo de Dispositivo',
+        value: dev => formatDeviceType(dev.type, dev.os || dev.omnivista?.os || dev.raw?.os_name, dev.omnivista?.device_name || dev.name, dev.vendor) || 'Dispositivo',
+      },
+      {
+        key: 'ip',
+        label: 'Dirección IP',
+        value: dev => dev.ip || '—',
+      },
+      {
+        key: 'mac',
+        label: 'Dirección MAC',
+        value: dev => dev.mac || '—',
+      },
+      {
+        key: 'serial',
+        label: 'Número de Serie / Service Tag',
+        value: dev => dev.serial || dev.raw?.serial || dev.omnivista?.serial || dev.raw?.serial_number || '—',
+      },
+      {
+        key: 'hostname',
+        label: 'Nombre de Equipo / Hostname',
+        value: dev => dev.hostname || dev.detected_device || dev.omnivista?.device_name || dev.name || '—',
+      },
+      {
+        key: 'user',
+        label: 'Usuario Detectado',
+        value: dev => dev.user || dev.omnivista?.account || '—',
+      },
+      {
+        key: 'os',
+        label: 'Sistema Operativo',
+        value: dev => dev.os || dev.omnivista?.os || dev.raw?.os_name || '—',
+      },
+      {
+        key: 'interface',
+        label: 'Interfaz',
+        value: dev => dev.interface || dev.vlan || '—',
+      },
+      {
+        key: 'vendor',
+        label: 'Fabricante / Hardware',
+        value: dev => dev.vendor || dev.brand || '—',
+      },
+      {
+        key: 'status',
+        label: 'Estado',
+        value: dev => statusNames[dev.status] || (dev.status === 'online' ? 'En línea' : dev.status || '—'),
+      },
+      {
+        key: 'uptime',
+        label: 'Tiempo Conectado (Uptime)',
+        value: dev => dev.uptime_seconds != null ? formatUptime(dev.uptime_seconds) : '—',
+      },
+      {
+        key: 'location',
+        label: 'Ubicación Física',
+        value: dev => dev.location || dev.omnivista?.location || formatLocation(dev.location, dev.vendor) || '—',
+      },
+      {
+        key: 'fortigate',
+        label: 'FortiGate de Procedencia',
+        value: dev => dev.fortigate || '—',
+      },
+    ];
+
+    let filename = 'listado-soporte-dispositivos';
+    if (exportComputers && !exportPrinters) filename = 'listado-soporte-computadoras';
+    else if (!exportComputers && exportPrinters) filename = 'listado-soporte-impresoras';
+
+    downloadCsv(filename, columns, rows);
+    setExportOpen(false);
+  };
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="Atención y diagnóstico técnico"
+        title="Dashboard de Soporte"
+        description="Monitoreo operativo de segmentos de red, computadoras e impresoras en servicio"
+        updatedAt={data.updatedAt}
+      >
+        <div className="support-heading-metrics">
+          <span className="network-tag">{number(segments.length)} redes</span>
+          <span className="network-tag text-success">{number(computers.length)} computadoras en línea</span>
+          <span className="network-tag text-info">{number(printers.length)} impresoras en línea</span>
+          <Button
+            icon={Download}
+            variant="primary"
+            className="support-export-action"
+            onClick={() => setExportOpen(true)}
+          >
+            Exportar listado CSV
+          </Button>
+          <Button icon={RefreshCw} busy={loading} onClick={refresh}>Actualizar</Button>
+        </div>
+      </PageHeading>
+
+      <section className="support-dashboard-grid" aria-label="Tablero de 3 columnas para soporte">
+        {/* Columna 1: Listado de redes y estados */}
+        <div className="support-column">
+          <div className="support-column-header">
+            <div className="support-column-title">
+              <Network size={20} className="text-brand" aria-hidden="true" />
+              <h3>Listado de redes y estados</h3>
+            </div>
+            <span className="support-column-badge">{number(filteredSegments.length)}</span>
+          </div>
+
+          {/* Panel resumen de saturación */}
+          <div className="support-saturation-panel" aria-label="Resumen de saturación de redes">
+            <div className="support-saturation-counts">
+              <span className="badge badge-danger" title="Redes saturadas / críticas con utilización >= 80%">
+                <span className="badge-dot" aria-hidden="true" />
+                <strong>{saturationSummary.critical}</strong> {saturationSummary.critical === 1 ? 'Saturada' : 'Saturadas'}
+              </span>
+              <span className="badge badge-warning" title="Redes en uso medio con utilización entre 50% y 79%">
+                <span className="badge-dot" aria-hidden="true" />
+                <strong>{saturationSummary.warning}</strong> Uso medio
+              </span>
+              <span className="badge badge-success" title="Redes disponibles con utilización < 50%">
+                <span className="badge-dot" aria-hidden="true" />
+                <strong>{saturationSummary.normal}</strong> {saturationSummary.normal === 1 ? 'Disponible' : 'Disponibles'}
+              </span>
+            </div>
+            <div className="support-saturation-balance">
+              <div className="support-balance-col">
+                <span className="support-balance-lbl">Total IPs</span>
+                <strong className="support-balance-num">{number(saturationSummary.totalIps)}</strong>
+              </div>
+              <div className="support-balance-col">
+                <span className="support-balance-lbl">IPs Ocupadas</span>
+                <strong className="support-balance-num text-danger">{number(saturationSummary.occupiedIps)}</strong>
+              </div>
+              <div className="support-balance-col">
+                <span className="support-balance-lbl">IPs Libres</span>
+                <strong className="support-balance-num text-success">{number(saturationSummary.availableIps)}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="support-column-search">
+            <SearchField
+              value={networkQuery}
+              onChange={setNetworkQuery}
+              placeholder="Buscar red, VLAN o gateway…"
+            />
+          </div>
+          <div className="support-column-body" tabIndex={0} aria-label="Lista de redes y segmentos">
+            {filteredSegments.length ? (
+              filteredSegments.map(segment => {
+                const satStatus = getSaturationStatus(segment);
+                const satLabel = getSaturationLabel(satStatus);
+                const meterTone = getUtilizationTone(segment.utilization_percent);
+                const meterColor = getUtilizationColor(segment.utilization_percent);
+                const freeIps = segment.available_ips ?? Math.max(0, (Number(segment.capacity) || 0) - (Number(segment.active_leases) || 0));
+
+                return (
+                  <article key={segmentKey(segment)} className="support-item-card support-network-card">
+                    <div className="support-card-top">
+                      <div className="support-card-name">
+                        <span className="segment-dot" />
+                        <strong>{segment.name || segment.interface}</strong>
+                      </div>
+                      <Badge status={satStatus}>{satLabel}</Badge>
+                    </div>
+                    <div className="support-network-subnet">
+                      <small>VLAN: {segment.vlan || segment.interface || '—'}</small>
+                      <span className="font-mono">{segment.subnet || segment.ip_ranges?.[0] || 'Rango no informado'}</span>
+                    </div>
+                    <div className="support-network-breakdown">
+                      <div className="support-breakdown-item">
+                        <span className="support-breakdown-label">IPs Ocupadas</span>
+                        <strong className="support-breakdown-val text-danger">{number(segment.active_leases || 0)}</strong>
+                      </div>
+                      <div className="support-breakdown-item">
+                        <span className="support-breakdown-label">IPs Libres</span>
+                        <strong className="support-breakdown-val text-success">{number(freeIps)}</strong>
+                      </div>
+                      <div className="support-breakdown-item">
+                        <span className="support-breakdown-label">Capacidad</span>
+                        <strong className="support-breakdown-val">{number(segment.capacity || 0)}</strong>
+                      </div>
+                    </div>
+                    <div className="support-network-meta">
+                      <span><Router size={14} aria-hidden="true" /> {segment.default_gateway || 'Sin gateway'}</span>
+                      <span className="support-network-meta-tag">{satLabel} ({number(segment.utilization_percent)}%)</span>
+                    </div>
+                    <div className={`capacity-meter capacity-meter-${meterTone}`} style={{ '--meter-fill': meterColor }}>
+                      <meter min="0" max="100" value={segment.utilization_percent || 0} aria-label={`Utilización de ${segment.name || segment.interface}`} />
+                      <div className="support-meter-footer">
+                        <small><span className={`meter-bullet meter-bullet-${meterTone}`} style={{ background: meterColor }} aria-hidden="true" />{number(segment.utilization_percent)}% utilizado</small>
+                        <small className={`support-sat-indicator sat-${satStatus}`}>{satLabel}</small>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })
+            ) : (
+              <div className="support-empty-state">
+                <p>No se encontraron redes coincidentes.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Columna 2: Computadoras conectadas */}
+        <div className="support-column">
+          <div className="support-column-header">
+            <div className="support-column-title">
+              <Monitor size={20} className="text-success" aria-hidden="true" />
+              <h3>Computadoras conectadas</h3>
+            </div>
+            <span className="support-column-badge badge-success">{number(filteredComputers.length)}</span>
+          </div>
+          <div className="support-column-search">
+            <SearchField
+              value={computerQuery}
+              onChange={setComputerQuery}
+              placeholder="Buscar computadora, IP, usuario…"
+            />
+            <div className="support-column-sort">
+              <ArrowUpDown size={14} className="text-muted" aria-hidden="true" />
+              <label htmlFor="computer-sort-select" className="support-sort-label">Ordenar:</label>
+              <select
+                id="computer-sort-select"
+                className="support-sort-select"
+                value={computerSort}
+                onChange={e => setComputerSort(e.target.value)}
+                aria-label="Criterio de ordenamiento de computadoras"
+              >
+                <option value="standard">En línea (estándar)</option>
+                <option value="uptime">Mayor tiempo conectadas (Top Uptime)</option>
+              </select>
+            </div>
+          </div>
+          <div className="support-column-body" tabIndex={0} aria-label="Lista de computadoras conectadas">
+            {sortedComputers.length ? (
+              sortedComputers.map((pc, idx) => {
+                const displayName = pc.omnivista?.device_name || pc.name || 'Computadora';
+                const loc = pc.omnivista?.location || formatLocation(pc.location, pc.vendor);
+                return (
+                  <article
+                    key={`${pc.mac || pc.ip || idx}`}
+                    className="support-item-card support-device-card"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openEditor?.('device-detail', pc)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openEditor?.('device-detail', pc);
+                      }
+                    }}
+                    title={`Ver detalle técnico de ${displayName}`}
+                  >
+                    <div className="support-card-top">
+                      <div className="support-card-name">
+                        <Monitor size={17} className="text-muted" aria-hidden="true" />
+                        <strong>{displayName}</strong>
+                        {pc.omnivista?.matched && (
+                          <span className="network-tag omni-tag" title="Cotejado con OmniVista 2500">OmniVista</span>
+                        )}
+                      </div>
+                      <Badge status={pc.status} />
+                    </div>
+                    <div className="support-device-addresses">
+                      <div className="support-device-ip-group">
+                        <span className="ip-address font-mono">{pc.ip || '—'}</span>
+                        {pc.mac && <span className="font-mono text-muted text-xs">{pc.mac}</span>}
+                      </div>
+                      {pc.uptime_seconds != null && (
+                        <span className="support-uptime-badge" title={`Tiempo continuo conectado: ${formatUptime(pc.uptime_seconds)}`}>
+                          <Clock size={12} aria-hidden="true" />
+                          <span>Conectado: {formatUptime(pc.uptime_seconds)}</span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="support-device-info">
+                      <span className="support-vendor">{pc.vendor || pc.os || 'Computadora'}</span>
+                      {loc && loc !== '—' && <span className="support-location text-location">{loc}</span>}
+                    </div>
+                  </article>
+                );
+              })
+            ) : (
+              <div className="support-empty-state">
+                <p>No se encontraron computadoras en línea coincidentes.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Columna 3: Impresoras conectadas */}
+        <div className="support-column">
+          <div className="support-column-header">
+            <div className="support-column-title">
+              <Printer size={20} className="text-info" aria-hidden="true" />
+              <h3>Impresoras conectadas</h3>
+            </div>
+            <span className="support-column-badge badge-info">{number(filteredPrinters.length)}</span>
+          </div>
+          <div className="support-column-search">
+            <SearchField
+              value={printerQuery}
+              onChange={setPrinterQuery}
+              placeholder="Buscar impresora, IP, modelo…"
+            />
+          </div>
+          <div className="support-column-body" tabIndex={0} aria-label="Lista de impresoras conectadas">
+            {filteredPrinters.length ? (
+              filteredPrinters.map((printer, idx) => {
+                const displayName = printer.omnivista?.device_name || printer.name || 'Impresora';
+                const loc = printer.omnivista?.location || formatLocation(printer.location, printer.vendor);
+                return (
+                  <article
+                    key={`${printer.mac || printer.ip || idx}`}
+                    className="support-item-card support-device-card"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openEditor?.('device-detail', printer)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openEditor?.('device-detail', printer);
+                      }
+                    }}
+                    title={`Ver detalle técnico de ${displayName}`}
+                  >
+                    <div className="support-card-top">
+                      <div className="support-card-name">
+                        <Printer size={17} className="text-muted" aria-hidden="true" />
+                        <strong>{displayName}</strong>
+                        {printer.omnivista?.matched && (
+                          <span className="network-tag omni-tag" title="Cotejado con OmniVista 2500">OmniVista</span>
+                        )}
+                      </div>
+                      <Badge status={printer.status} />
+                    </div>
+                    <div className="support-device-addresses">
+                      <span className="ip-address font-mono">{printer.ip || '—'}</span>
+                      {printer.mac && <span className="font-mono text-muted text-xs">{printer.mac}</span>}
+                    </div>
+                    <div className="support-device-info">
+                      <span className="support-vendor">{printer.vendor || printer.model || 'Impresora'}</span>
+                      {loc && loc !== '—' && <span className="support-location text-location">{loc}</span>}
+                    </div>
+                  </article>
+                );
+              })
+            ) : (
+              <div className="support-empty-state">
+                <p>No se encontraron impresoras en línea coincidentes.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Dialog interactivo para exportación CSV con checkboxes */}
+      <Dialog
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        title="Exportar listado de dispositivos (CSV)"
+        footer={
+          <div className="dialog-actions">
+            <Button onClick={() => setExportOpen(false)}>Cancelar</Button>
+            <Button
+              variant="primary"
+              icon={Download}
+              disabled={!exportComputers && !exportPrinters}
+              onClick={handleExportCsv}
+            >
+              Descargar archivo CSV
+            </Button>
+          </div>
+        }
+      >
+        <p className="dialog-description">
+          Descarga el reporte de inventario cotejado con FortiGate.
+        </p>
+
+        <div className="support-export-modal-body">
+          <div className="support-quick-selection">
+            <span className="support-quick-label">Selección rápida:</span>
+            <div className="support-quick-btn-group">
+              <button
+                type="button"
+                className={`support-quick-btn ${exportComputers && exportPrinters ? 'is-active' : ''}`}
+                onClick={() => { setExportComputers(true); setExportPrinters(true); }}
+              >
+                Ambos
+              </button>
+              <button
+                type="button"
+                className={`support-quick-btn ${exportComputers && !exportPrinters ? 'is-active' : ''}`}
+                onClick={() => { setExportComputers(true); setExportPrinters(false); }}
+              >
+                Solo computadoras
+              </button>
+              <button
+                type="button"
+                className={`support-quick-btn ${!exportComputers && exportPrinters ? 'is-active' : ''}`}
+                onClick={() => { setExportComputers(false); setExportPrinters(true); }}
+              >
+                Solo impresoras
+              </button>
+            </div>
+          </div>
+
+          <div className="support-checkbox-list">
+            <label className={`support-checkbox-card ${exportComputers ? 'is-checked' : ''}`}>
+              <input
+                type="checkbox"
+                checked={exportComputers}
+                onChange={e => setExportComputers(e.target.checked)}
+              />
+              <div className="support-checkbox-details">
+                <div className="support-checkbox-main">
+                  <Monitor size={18} className="text-success" aria-hidden="true" />
+                  <strong>Computadoras</strong>
+                </div>
+                <span className="support-checkbox-count">{number(computers.length)} equipos</span>
+              </div>
+            </label>
+
+            <label className={`support-checkbox-card ${exportPrinters ? 'is-checked' : ''}`}>
+              <input
+                type="checkbox"
+                checked={exportPrinters}
+                onChange={e => setExportPrinters(e.target.checked)}
+              />
+              <div className="support-checkbox-details">
+                <div className="support-checkbox-main">
+                  <Printer size={18} className="text-info" aria-hidden="true" />
+                  <strong>Impresoras</strong>
+                </div>
+                <span className="support-checkbox-count">{number(printers.length)} equipos</span>
+              </div>
+            </label>
+          </div>
+
+          {!exportComputers && !exportPrinters && (
+            <Notice tone="warning" title="Sin categorías seleccionadas">
+              Selecciona al menos una categoría para poder descargar el listado CSV.
+            </Notice>
+          )}
+
+          <div className="support-export-note">
+            <small className="text-muted">
+              Se exportarán las columnas cotejadas: Tipo de Dispositivo, IP, MAC, Número de Serie, Hostname, Usuario, SO, Interfaz, Fabricante, Estado, Uptime, Ubicación Física y FortiGate.
+            </small>
+          </div>
+        </div>
+      </Dialog>
+    </>
+  );
 }

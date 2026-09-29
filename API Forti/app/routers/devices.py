@@ -21,6 +21,7 @@ def _parse_device(
     current_time: Optional[float] = None,
     active_window_seconds: int = 3600,
     live_macs: Optional[Set[str]] = None,
+    fortigate_name: Optional[str] = None,
 ) -> DeviceItem:
     """
     Mapea un elemento crudo de FortiOS Device Query a nuestro modelo estructurado DeviceItem.
@@ -63,6 +64,10 @@ def _parse_device(
         is_online = True
 
     device_type = item.get("device_type") or item.get("hardware_type") or item.get("type")
+    user = item.get("user") or item.get("unauthenticated_user")
+    serial = item.get("serial") or item.get("serial_number") or item.get("hardware_serial")
+    detected_device = item.get("detected_device") or item.get("hostname")
+    fortigate = item.get("fortigate") or fortigate_name or item.get("vdom")
 
     return DeviceItem(
         mac=mac,
@@ -76,6 +81,10 @@ def _parse_device(
         is_online=is_online,
         last_seen=last_seen,
         device_type=device_type,
+        user=user,
+        serial=serial,
+        detected_device=detected_device,
+        fortigate=fortigate,
     )
 
 
@@ -167,6 +176,8 @@ async def list_connected_devices(
         latest_by_mac = {normalize_mac(d.get('mac')): d for d in latest_list if isinstance(d, dict) and d.get('mac')}
         raw_list = [{**d, **latest_by_mac.get(normalize_mac(d.get('mac')), {})} if isinstance(d, dict) else d for d in raw_list]
 
+    fortigate_name = raw_all.get("vdom") or vdom or "ISSSTE-TLAJOMULCOB"
+
     # Parsear todos los dispositivos reportados por FortiOS
     seen_macs: Set[str] = set()
     all_devices: List[DeviceItem] = []
@@ -177,6 +188,7 @@ async def list_connected_devices(
                 current_time=ref_time,
                 active_window_seconds=active_window,
                 live_macs=live_macs,
+                fortigate_name=fortigate_name,
             )
             clean_m = (dev.mac or "").lower().replace("-", ":")
             if clean_m:
@@ -193,6 +205,7 @@ async def list_connected_devices(
                     current_time=ref_time,
                     active_window_seconds=active_window,
                     live_macs=live_macs,
+                    fortigate_name=fortigate_name,
                 )
                 seen_macs.add(clean_m)
                 all_devices.append(dev)
@@ -339,9 +352,11 @@ async def get_device_by_mac_or_ip(
     ]
     ref_time = max(raw_last_seens) if raw_last_seens else time.time()
 
+    fortigate_name = raw_all.get("vdom") or vdom or "ISSSTE-TLAJOMULCOB"
+
     for dev_raw in raw_list:
         if isinstance(dev_raw, dict):
-            dev = _parse_device(dev_raw, current_time=ref_time, live_macs=live_macs)
+            dev = _parse_device(dev_raw, current_time=ref_time, live_macs=live_macs, fortigate_name=fortigate_name)
             dev_mac = (dev.mac or "").lower().replace("-", ":")
             dev_ip = (dev.ip or "").lower()
 
@@ -356,7 +371,7 @@ async def get_device_by_mac_or_ip(
     # Si no se encontró en raw_list, buscar en latest_list
     for dev_raw in latest_list:
         if isinstance(dev_raw, dict):
-            dev = _parse_device(dev_raw, current_time=ref_time, live_macs=live_macs)
+            dev = _parse_device(dev_raw, current_time=ref_time, live_macs=live_macs, fortigate_name=fortigate_name)
             dev_mac = (dev.mac or "").lower().replace("-", ":")
             dev_ip = (dev.ip or "").lower()
 

@@ -17,6 +17,10 @@ class DeviceItem(BaseModel):
     ip_source: Optional[str] = Field(None, description="Fuente del cotejo de IP; unconfirmed si aún no se pudo resolver")
     last_seen: Optional[Union[str, int, float]] = Field(None, description="Última vez visto o timestamp")
     device_type: Optional[str] = Field(None, description="Categoría de dispositivo (ej. Phone, Computer, IoT, Server)")
+    user: Optional[str] = Field(None, description="Usuario identificado o no autenticado asociado al dispositivo")
+    serial: Optional[str] = Field(None, description="Número de serie del hardware")
+    detected_device: Optional[str] = Field(None, description="Dispositivo detectado o nombre de host reportado")
+    fortigate: Optional[str] = Field(None, description="Nombre o VDOM del FortiGate de procedencia")
 
 
 class DeviceListSummary(BaseModel):

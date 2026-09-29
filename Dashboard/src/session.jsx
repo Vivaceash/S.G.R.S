@@ -2,17 +2,30 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { LogIn, ShieldCheck } from 'lucide-react';
 import { Button, Field, Loading, Notice, SecretInput } from './components.jsx';
 import { useForm } from './forms.jsx';
-import { request, setCsrfToken } from './domain.mjs';
+import { request, setCsrfToken, ROLE_PAGE_DEFAULTS, roleLabel, BASE_ROLE_CATALOG, getEffectiveRoles } from './domain.mjs';
 
 const SessionContext = createContext(null);
 export const useSession = () => useContext(SessionContext);
 const demoSession = {
-  user: { id: 'demo-admin', name: 'Administrador de ejemplo', username: 'admin.demo', role: 'admin', active: true },
-  capabilities: ['dashboard.read', 'inventory.read', 'idf.read', 'activity.read', 'inventory.write', 'inventory.export', 'idf.visits.write'],
-  roles: [
-    { id: 'viewer', title: 'Viewer', description: 'Consulta el dashboard, inventario y reportes. No puede registrar ni modificar datos.' },
-    { id: 'admin', title: 'Administrador', description: 'Administra la operación: inventario, visitas e incidencias de IDF.' },
+  user: {
+    id: 'demo-admin',
+    name: 'Administrador de ejemplo',
+    username: 'admin.demo',
+    role: 'super-admin',
+    active: true,
+    allowed_pages: ['resumen', 'dispositivos', 'disponibilidad', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
+  },
+  capabilities: [
+    'dashboard.read', 'inventory.read', 'idf.read', 'activity.read',
+    'inventory.write', 'inventory.export', 'idf.visits.write',
+    'users.manage', 'integrations.manage', 'traffic.read',
   ],
+  roles: [
+    { id: 'soporte', title: 'Soporte', description: 'Atención y diagnóstico técnico: consulta de dispositivos, fichas técnicas y DHCP.' },
+    { id: 'admin', title: 'admin', description: 'Administra la operación: inventario, visitas e incidencias de IDF y gestión de usuarios.' },
+    { id: 'super-admin', title: 'Admin', description: 'Gestiona cuentas, privilegios modulares, conexiones y consultas técnicas.' },
+  ],
+  allowed_pages: ['resumen', 'dispositivos', 'disponibilidad', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
 };
 
 function Login({ onLogin, onBootstrap, onDemo, setup, error, retry, expired }) {
@@ -81,10 +94,65 @@ export function SessionProvider({ children }) {
   const signIn = async values => { const result = await request('/api/auth/login', { body: values }); setCsrfToken(result.csrf); setIdentity(result); setExpired(false); setReady(true); setError(''); };
   const bootstrap = async values => { const result = await request('/api/auth/bootstrap', { body: values }); setCsrfToken(result.csrf); setIdentity(result); setSetup(false); setExpired(false); setReady(true); setError(''); };
   const signOut = async () => { if (!demo) await request('/api/auth/logout', { body: {} }); setCsrfToken(''); setIdentity(null); setExpired(false); };
-  const current = demo ? demoSession : identity;
-  return <SessionContext.Provider value={{ ...current, roles: current?.roles || [], demo, setDemo, signOut, can: name => Boolean(current?.capabilities?.includes(name)) }}>
+  const [demoRole, setDemoRole] = useState(() => new URLSearchParams(location.search).get('role') || 'super-admin');
+  const switchDemoRole = newRole => {
+    if (ROLE_PAGE_DEFAULTS[newRole]) {
+      setDemoRole(newRole);
+      const url = new URL(location.href);
+      url.searchParams.set('role', newRole);
+      history.replaceState(null, '', url);
+    }
+  };
+  const activeDemoRole = demoRole in ROLE_PAGE_DEFAULTS ? demoRole : 'super-admin';
+  const activeDemoPages = ROLE_PAGE_DEFAULTS[activeDemoRole];
+  const demoCapabilities = activeDemoRole === 'super-admin'
+    ? ['dashboard.read', 'inventory.read', 'idf.read', 'activity.read', 'inventory.write', 'inventory.export', 'idf.visits.write', 'users.manage', 'integrations.manage', 'traffic.read']
+    : activeDemoRole === 'admin'
+      ? ['dashboard.read', 'inventory.read', 'idf.read', 'activity.read', 'inventory.write', 'inventory.export', 'idf.visits.write']
+      : ['dashboard.read', 'inventory.read', 'idf.read', 'activity.read'];
+
+  const computedDemo = {
+    ...demoSession,
+    user: {
+      ...demoSession.user,
+      role: activeDemoRole,
+      allowed_pages: activeDemoPages,
+    },
+    capabilities: demoCapabilities,
+    allowed_pages: activeDemoPages,
+  };
+
+  const current = demo ? computedDemo : identity;
+  const userRole = current?.user?.role || 'viewer';
+  const allowedPages = current?.allowed_pages
+    || current?.user?.allowed_pages
+    || ROLE_PAGE_DEFAULTS[userRole]
+    || ROLE_PAGE_DEFAULTS.admin;
+
+  const canViewPage = pageId => {
+    if (!Array.isArray(allowedPages)) return false;
+    if (pageId === 'entrada') return allowedPages.includes('idf');
+    return allowedPages.includes(pageId);
+  };
+
+  const sessionRoles = getEffectiveRoles(current?.roles);
+
+  return <SessionContext.Provider value={{
+    ...current,
+    user: current?.user,
+    allowedPages,
+    allowed_pages: allowedPages,
+    canViewPage,
+    roles: sessionRoles,
+    demo,
+    setDemo,
+    demoRole: activeDemoRole,
+    switchDemoRole,
+    signOut,
+    can: name => Boolean(current?.capabilities?.includes(name)),
+  }}>
     {!ready ? <div className="login-page"><Loading /></div> : <>
-      {current && <div hidden={!demo && expired} inert={!demo && expired ? true : undefined} key={`${demo ? 'demo' : 'live'}-${current.user.id}-${current.user.role}-${current.user.version}`}>{children}</div>}
+      {current && <div hidden={!demo && expired} inert={!demo && expired ? true : undefined} key={`${demo ? `demo-${activeDemoRole}` : 'live'}-${current.user.id}-${current.user.role}-${current.user.version}`}>{children}</div>}
       {(!current || (!demo && expired)) && <Login onLogin={signIn} onBootstrap={bootstrap} onDemo={() => setDemo(true)} setup={setup} error={error} retry={() => setRevision(r => r+1)} expired={Boolean(current)} />}
     </>}
   </SessionContext.Provider>;

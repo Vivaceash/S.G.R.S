@@ -12,13 +12,16 @@ import ipaddress
 import re
 import ssl
 import unicodedata
-from urllib.parse import urlsplit
+import csv
+import io
+from urllib.parse import urlsplit, parse_qs
 from dashboard_access import connection, connection_headers, AccessError
 from dashboard_routes import AccessRoutes
 from dashboard_reports import ReportRoutes, report_key, tagged_reports
 from integration_health import upstream_healthy
 from dashboard_history import start_collector
 from dashboard_inventory import cabinets_with_documentary
+from dashboard_device_history import record_device_presence, normalize_mac, format_device_type
 
 # Lock global para proteger lecturas/escrituras concurrentes a archivos JSON
 _file_lock = threading.Lock()
@@ -533,6 +536,11 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                             activity = _format_activity(is_online, dev.get("last_seen"))
                             mapped_devices.append({
                                 "name": name,
+                                "hostname": dev.get("hostname") or name,
+                                "user": dev.get("user") or dev.get("unauthenticated_user") or (ov.get("account") if ov else "—"),
+                                "serial": dev.get("serial") or dev.get("serial_number") or dev.get("hardware_serial") or (ov.get("serialNumber") if ov else None) or (dev.get("hostname") if dev.get("hostname") and ("-" in str(dev.get("hostname")) or len(str(dev.get("hostname"))) >= 6) else "—"),
+                                "detected_device": dev.get("detected_device") or dev.get("hostname") or name,
+                                "fortigate": dev.get("fortigate") or "ISSSTE-TLAJOMULCOB",
                                 "ip": ip,
                                 "type": dev_type,
                                 "icon": icon,
@@ -549,6 +557,26 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                                 "omnivista": ov,
                                 "raw": dev,
                             })
+                        try:
+                            presence_map = record_device_presence(mapped_devices)
+                            for d in mapped_devices:
+                                clean_mac = normalize_mac(d.get("mac"))
+                                hist = presence_map.get(clean_mac)
+                                if hist:
+                                    d["uptime_seconds"] = hist.get("current_session_seconds", 0)
+                                    d["first_connected_at"] = hist.get("first_connected_at")
+                                    d["total_connected_seconds"] = hist.get("total_connected_seconds", 0)
+                                    if hist.get("serial") and hist.get("serial") != "—" and (not d.get("serial") or d.get("serial") == "—"):
+                                        d["serial"] = hist.get("serial")
+                                else:
+                                    d["uptime_seconds"] = 0
+                                    d["first_connected_at"] = None
+                                    d["total_connected_seconds"] = 0
+                        except Exception:
+                            for d in mapped_devices:
+                                d.setdefault("uptime_seconds", 0)
+                                d.setdefault("first_connected_at", None)
+                                d.setdefault("total_connected_seconds", 0)
                         devices_data = mapped_devices
             except Exception:
                 pass
@@ -557,7 +585,64 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 self._send_json({"error": "No se pudo comprobar la actividad y las reservas DHCP. Actualiza la consulta."}, 502)
                 return
 
-            if path.startswith('/api/devices/summary') and summary_info:
+            parsed_path = urlsplit(path)
+            clean_path = parsed_path.path
+            params = parse_qs(parsed_path.query)
+
+            # Soporte de filtrado por tipo (ej. Computadora, Impresora)
+            if params.get("type"):
+                target_type = params["type"][0].strip().lower()
+                devices_data = [d for d in devices_data if d.get("type", "").lower() == target_type or format_device_type(d).lower() == target_type]
+
+            # Soporte de filtrado por estado online
+            if params.get("online_only") in (["1"], ["true"], ["True"]) or params.get("status") == ["online"]:
+                devices_data = [d for d in devices_data if d.get("status") == "online"]
+
+            # Soporte de exportación CSV para listados (incluyendo computadoras e impresoras)
+            if clean_path == '/api/devices/export' or params.get("export") == ["csv"]:
+                out = io.StringIO()
+                out.write('\ufeff')
+                writer = csv.writer(out)
+                writer.writerow([
+                    "Dispositivo / Hostname",
+                    "IP",
+                    "MAC",
+                    "Número de Serie",
+                    "Usuario",
+                    "Sistema Operativo",
+                    "Interfaz",
+                    "Tipo",
+                    "Estado",
+                    "FortiGate",
+                    "Tiempo Conectado (s)",
+                    "Ubicación"
+                ])
+                for d in devices_data:
+                    writer.writerow([
+                        d.get("hostname") or d.get("detected_device") or d.get("name") or "—",
+                        d.get("ip") or "—",
+                        d.get("mac") or "—",
+                        d.get("serial") or "—",
+                        d.get("user") or "—",
+                        d.get("os") or "—",
+                        d.get("interface") or "—",
+                        d.get("type") or "—",
+                        d.get("status") or "—",
+                        d.get("fortigate") or "ISSSTE-TLAJOMULCOB",
+                        d.get("uptime_seconds", 0),
+                        d.get("location") or "—",
+                    ])
+                csv_bytes = out.getvalue().encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/csv; charset=utf-8')
+                fn_type = params.get("type", ["dispositivos"])[0].lower()
+                self.send_header('Content-Disposition', f'attachment; filename="{fn_type}.csv"')
+                self.send_header('Content-Length', str(len(csv_bytes)))
+                self.end_headers()
+                self.wfile.write(csv_bytes)
+                return
+
+            if clean_path.startswith('/api/devices/summary') and summary_info:
                 self._send_json(summary_info)
             else:
                 self._send_json(devices_data)
@@ -567,6 +652,51 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
             subpath = path[len('/api/traffic/ip/'):]
             target_url = f"{FORTI_API_URL}/traffic/ip/{subpath}"
             status_code, body, ctype = _fetch_upstream(target_url, timeout=12.0)
+            self._send_raw(body, status=status_code, content_type=ctype)
+
+        # 6a. Métricas completas de saturación de redes DHCP
+        elif path == '/api/forti/network/dhcp-pools' or path.startswith('/api/forti/network/dhcp-pools'):
+            subpath = path[len('/api/forti/'):]
+            target_url = f"{FORTI_API_URL}/{subpath}"
+            status_code, body, ctype = _fetch_upstream(target_url, timeout=12.0)
+            if status_code == 200:
+                try:
+                    payload = json.loads(body.decode('utf-8'))
+                    if isinstance(payload, dict):
+                        data = payload.get("data")
+                        pools = data.get("pools") if isinstance(data, dict) else (payload.get("pools") if isinstance(payload.get("pools"), list) else None)
+                        if isinstance(pools, list):
+                            critical_count = 0
+                            warning_count = 0
+                            for pool in pools:
+                                if isinstance(pool, dict):
+                                    cap = int(pool.get("capacity") or 0)
+                                    leases = int(pool.get("active_leases") or 0)
+                                    avail = max(0, cap - leases) if pool.get("available_ips") is None else int(pool.get("available_ips"))
+                                    util = float(pool.get("utilization_percent")) if pool.get("utilization_percent") is not None else (round((leases / cap * 100), 1) if cap > 0 else 0.0)
+                                    if util >= 80.0:
+                                        sat_status = "critical"
+                                        critical_count += 1
+                                    elif util >= 50.0:
+                                        sat_status = "warning"
+                                        warning_count += 1
+                                    else:
+                                        sat_status = "normal"
+                                    pool["capacity"] = cap
+                                    pool["active_leases"] = leases
+                                    pool["available_ips"] = avail
+                                    pool["utilization_percent"] = util
+                                    pool["saturation_status"] = sat_status
+                                    pool["status"] = sat_status
+                            if isinstance(data, dict):
+                                if "critical_pools_count" in data:
+                                    data["critical_pools_count"] = critical_count
+                                if "warning_pools_count" in data:
+                                    data["warning_pools_count"] = warning_count
+                            self._send_json(payload)
+                            return
+                except Exception:
+                    pass
             self._send_raw(body, status=status_code, content_type=ctype)
 
         # 6. Proxy para API Forti (Puerto 8001)

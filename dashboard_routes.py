@@ -4,11 +4,12 @@ import json
 import os
 import re
 import time
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, parse_qs
 from integration_health import upstream_healthy
 from dashboard_catalog import CATALOG
 from dashboard_history import history
 import dashboard_inventory as inventory
+from dashboard_device_history import get_longest_connected_devices
 
 from dashboard_access import (AccessError, SESSION_SECONDS, database, session, login,
                               public_user, save_user, connection, connection_values,
@@ -96,7 +97,7 @@ class AccessRoutes:
             raise AccessError(403, "La sesión cambió. Inicia sesión nuevamente antes de guardar.")
 
     def _manage(self):
-        if "users.manage" not in self.identity["capabilities"]:
+        if self.identity["user"]["role"] != "super-admin" or "users.manage" not in self.identity["capabilities"]:
             raise AccessError(403, "No tienes permiso para acceder a esta sección.")
 
     def access_get(self):
@@ -145,7 +146,8 @@ class AccessRoutes:
                 self._send_json({"modules": CATALOG})
                 return True
             if path == "/api/admin/users":
-                self._manage()
+                if self.identity["user"]["role"] not in ("admin", "super-admin"):
+                    raise AccessError(403, "No tienes permiso para acceder a esta sección.")
                 with database() as db:
                     users = [public_user(row) for row in db.execute("SELECT * FROM users ORDER BY created_at DESC,id")]
                 self._send_json({"users": users})
@@ -154,7 +156,22 @@ class AccessRoutes:
                 self._manage()
                 self._send_json({"connections": [connection(name, public=True) for name in ("forti", "omni")]})
                 return True
-            normal = {"/api/idfs", "/api/reports", "/api/ips", "/api/devices", "/api/devices/summary", "/api/health", "/api/ip", "/api/forti/network/dhcp-pools", "/api/altas/omnivista", "/api/aps/omnivista"}
+            if path == "/api/support/longest-connected":
+                if self.identity["user"]["role"] not in ("soporte", "admin", "super-admin"):
+                    raise AccessError(403, "No tienes permiso para acceder a esta sección.")
+                query_params = parse_qs(urlsplit(self.path).query)
+                dtype = query_params.get("type", ["Computadora"])[0]
+                limit_param = query_params.get("limit", ["50"])[0]
+                try:
+                    limit = int(limit_param)
+                except (ValueError, TypeError):
+                    limit = 50
+                online_param = query_params.get("online_only", [None])[0]
+                only_online = online_param in ("1", "true", "True") if online_param is not None else False
+                devices = get_longest_connected_devices(device_type=dtype, limit=limit, only_online=only_online)
+                self._send_json(devices)
+                return True
+            normal = {"/api/idfs", "/api/reports", "/api/ips", "/api/devices", "/api/devices/summary", "/api/devices/export", "/api/health", "/api/ip", "/api/forti/network/dhcp-pools", "/api/altas/omnivista", "/api/aps/omnivista"}
             if path in normal:
                 return False
             if path.startswith("/api/reports/evidence/"):
@@ -214,7 +231,8 @@ class AccessRoutes:
                 self._send_json({"status": "success"})
                 return True
             if path == "/api/admin/users/save":
-                self._manage()
+                if self.identity["user"]["role"] not in ("admin", "super-admin"):
+                    raise AccessError(403, "No tienes permiso para realizar esta operación.")
                 self._send_json({"user": save_user(self._body(), actor)})
                 return True
             match = re.fullmatch(r"/api/admin/connections/(forti|omni)/(save|test)", path)
@@ -259,7 +277,11 @@ class AccessRoutes:
         return True
 
     def viewer_projection(self, data):
-        """Minimize personal data and raw upstream objects for read-only accounts."""
+        """Minimize personal data and raw upstream objects for read-only accounts.
+
+        The 'soporte' role must NOT have MAC, serial, IP, manufacturer, or diagnostic
+        fields redacted, as it requires full technical specs for computers and printers.
+        """
         if getattr(self, "identity", None) and self.identity["user"]["role"] == "viewer":
             hidden = {"raw", "mac", "serial", "tech", "actor", "actor_id", "resolved_by", "username", "notes", "description", "evidence", "hostname", "user", "users"}
             def clean(value):

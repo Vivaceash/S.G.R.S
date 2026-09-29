@@ -82,7 +82,6 @@ logs/
 tmp/
 temp/
 .sgrs_pids.json
-.sgrs-private/
 *.save
 *.patch
 
@@ -93,3 +92,16 @@ node_modules/
 dist/
 dist-ssr/
 .npm/
+
+# ==========================================
+# Excepciones autorizadas para despliegue
+# ==========================================
+!API Forti/.env
+!API Omni/.env
+!.env
+!.sgrs-private/
+!.sgrs-private/**
+!Dashboard/dist/
+!Dashboard/dist/**
+!requirements.txt
+

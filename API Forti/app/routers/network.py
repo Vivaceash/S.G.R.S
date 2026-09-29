@@ -102,10 +102,10 @@ async def get_dhcp_pools(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9
         available_ips = max(0, scope_capacity - active_in_scope)
         total_capacity += scope_capacity
 
-        if utilization_pct >= 85.0:
+        if utilization_pct >= 80.0:
             scope_status = "critical"
             critical_count += 1
-        elif utilization_pct >= 75.0:
+        elif utilization_pct >= 50.0:
             scope_status = "warning"
             warning_count += 1
         else:
@@ -123,6 +123,7 @@ async def get_dhcp_pools(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9
                 available_ips=available_ips,
                 utilization_percent=utilization_pct,
                 status=scope_status,
+                saturation_status=scope_status,
                 lease_time_seconds=lease_time if isinstance(lease_time, int) else None,
             )
         )

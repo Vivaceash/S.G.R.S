@@ -41,7 +41,8 @@ class DhcpPoolScope(BaseModel):
     active_leases: int = Field(..., description="Cantidad de concesiones activas entregadas a clientes")
     available_ips: int = Field(..., description="Direcciones IP libres restantes en el pool")
     utilization_percent: float = Field(..., description="Porcentaje de saturación / uso del pool (0-100%)")
-    status: str = Field(..., description="Estado de saturación: 'normal' (<75%), 'warning' (75-85%), 'critical' (>85%)")
+    status: str = Field(..., description="Estado de saturación: 'normal' (<50%), 'warning' (50-80%), 'critical' (>=80%)")
+    saturation_status: Optional[str] = Field(None, description="Estado de saturación: 'normal' (<50%), 'warning' (50-80%), 'critical' (>=80%)")
     lease_time_seconds: Optional[int] = Field(None, description="Tiempo de concesión en segundos")
 
 

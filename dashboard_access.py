@@ -20,12 +20,47 @@ from http.cookies import SimpleCookie, CookieError
 from urllib.parse import urlsplit
 
 PRIVATE = Path(__file__).resolve().parent / ".sgrs-private"
-ROLES = ("viewer", "admin", "super-admin")
+ROLES = ("soporte", "viewer", "admin", "super-admin")
 READ = ["dashboard.read", "inventory.read", "idf.read", "activity.read"]
 OPERATE = ["inventory.write", "idf.visits.write", "inventory.export"]
 MANAGE = ["users.manage", "integrations.manage", "traffic.read"]
 SESSION_SECONDS = 8 * 3600
 IDLE_SECONDS = 30 * 60
+
+AVAILABLE_PAGES = (
+    "resumen", "dispositivos", "disponibilidad", "bitacora", "idf",
+    "aps", "cctv", "altas", "soporte", "usuarios", "conexiones"
+)
+
+ROLE_PAGE_DEFAULTS = {
+    "soporte": ["soporte"],
+    "admin": ["resumen", "dispositivos", "disponibilidad", "bitacora", "idf", "aps", "cctv", "altas", "usuarios"],
+    "super-admin": ["resumen", "dispositivos", "disponibilidad", "bitacora", "idf", "aps", "cctv", "altas", "soporte", "usuarios", "conexiones"],
+    "viewer": ["resumen", "dispositivos", "disponibilidad", "bitacora", "idf", "aps", "cctv", "altas"],
+}
+
+ROLE_CATALOG = {
+    "soporte": {
+        "id": "soporte",
+        "title": "Soporte",
+        "description": "Atención y diagnóstico técnico: consulta de dispositivos, fichas técnicas y DHCP.",
+    },
+    "viewer": {
+        "id": "viewer",
+        "title": "Viewer",
+        "description": "Consulta el dashboard, inventario y reportes. No puede registrar ni modificar datos.",
+    },
+    "admin": {
+        "id": "admin",
+        "title": "Administrador",
+        "description": "Administra la operación: inventario, visitas e incidencias de IDF y gestión de usuarios.",
+    },
+    "super-admin": {
+        "id": "super-admin",
+        "title": "Superusuario",
+        "description": "Gestiona cuentas, privilegios, conexiones y consultas técnicas reservadas.",
+    },
+}
 
 
 class AccessError(Exception):
@@ -35,24 +70,47 @@ class AccessError(Exception):
 
 
 def capabilities(role):
-    if role not in ROLES:
-        return []
-    return READ + (OPERATE if role in ROLES[1:] else []) + (MANAGE if role == ROLES[2] else [])
+    if role == "super-admin":
+        return READ + OPERATE + MANAGE
+    if role == "admin":
+        return READ + OPERATE
+    if role in ("viewer", "soporte"):
+        return READ
+    return []
 
 
 def visible_roles(role):
-    """Only the authenticated internal operator receives the full role catalog."""
-    catalog = [
-        {"id": "viewer", "title": "Viewer", "description": "Consulta el dashboard, inventario y reportes. No puede registrar ni modificar datos."},
-        {"id": "admin", "title": "Administrador", "description": "Administra la operación: inventario, visitas e incidencias de IDF."},
-        {"id": "super-admin", "title": "Superusuario", "description": "Gestiona cuentas, privilegios, conexiones y consultas técnicas reservadas."},
-    ]
-    return catalog if role == ROLES[2] else catalog[:2] if role in ROLES else []
+    """Return assignable roles according to hierarchy: super-admin sees all 3, admin sees soporte and admin."""
+    if role == "super-admin":
+        return [ROLE_CATALOG["soporte"], ROLE_CATALOG["admin"], ROLE_CATALOG["super-admin"]]
+    if role == "admin":
+        return [ROLE_CATALOG["soporte"], ROLE_CATALOG["admin"]]
+    return []
+
+
+def parse_allowed_pages(raw_pages, role):
+    if isinstance(raw_pages, str):
+        try:
+            pages = json.loads(raw_pages)
+        except Exception:
+            pages = []
+    elif isinstance(raw_pages, (list, tuple)):
+        pages = list(raw_pages)
+    else:
+        pages = []
+    valid = [p for p in pages if p in AVAILABLE_PAGES]
+    return valid if valid else list(ROLE_PAGE_DEFAULTS.get(role, []))
 
 
 def session_identity(row, csrf):
-    return {"user": public_user(row), "csrf": csrf,
-            "capabilities": capabilities(row["role"]), "roles": visible_roles(row["role"])}
+    user = public_user(row)
+    return {
+        "user": user,
+        "csrf": csrf,
+        "capabilities": capabilities(row["role"]),
+        "roles": visible_roles(row["role"]),
+        "allowed_pages": user["allowed_pages"],
+    }
 
 
 @contextmanager
@@ -71,7 +129,8 @@ def database(write=False):
             id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
             role TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1,
             password_hash TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,
-            created_at INTEGER NOT NULL);
+            created_at INTEGER NOT NULL,
+            allowed_pages TEXT NOT NULL DEFAULT '[]');
           CREATE TABLE IF NOT EXISTS sessions (
             token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, csrf TEXT NOT NULL,
             expires INTEGER NOT NULL, touched INTEGER NOT NULL);
@@ -88,7 +147,29 @@ def database(write=False):
           CREATE TABLE IF NOT EXISTS inventory_edits (
             asset_id TEXT PRIMARY KEY, version INTEGER NOT NULL,
             fields TEXT NOT NULL, updated_at TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS device_connection_history (
+            mac TEXT PRIMARY KEY,
+            ip TEXT NOT NULL,
+            hostname TEXT,
+            device_type TEXT NOT NULL DEFAULT 'Computadora',
+            vendor TEXT,
+            serial TEXT,
+            first_connected_at INTEGER NOT NULL,
+            last_seen_at INTEGER NOT NULL,
+            current_session_seconds INTEGER NOT NULL DEFAULT 0,
+            total_connected_seconds INTEGER NOT NULL DEFAULT 0,
+            is_online INTEGER NOT NULL DEFAULT 1,
+            updated_at INTEGER NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_device_history_type_streak
+          ON device_connection_history(device_type, is_online, current_session_seconds DESC);
         """)
+        cols = [r[1] for r in db.execute("PRAGMA table_info(users)").fetchall()]
+        if "allowed_pages" not in cols:
+            db.execute("ALTER TABLE users ADD COLUMN allowed_pages TEXT NOT NULL DEFAULT '[]'")
+        dh_cols = [r[1] for r in db.execute("PRAGMA table_info(device_connection_history)").fetchall()]
+        if "serial" not in dh_cols and dh_cols:
+            db.execute("ALTER TABLE device_connection_history ADD COLUMN serial TEXT")
         if write:
             db.execute("BEGIN IMMEDIATE")
         yield db
@@ -101,7 +182,10 @@ def database(write=False):
 
 
 def public_user(row):
-    return {k: row[k] for k in ("id", "username", "name", "role", "active", "version", "created_at")}
+    user = {k: row[k] for k in ("id", "username", "name", "role", "active", "version", "created_at")}
+    raw_pages = row.get("allowed_pages") if hasattr(row, "get") else (row["allowed_pages"] if "allowed_pages" in row.keys() else None)
+    user["allowed_pages"] = parse_allowed_pages(raw_pages, row["role"])
+    return user
 
 
 def audit(db, actor, action, target):
@@ -123,7 +207,7 @@ def verify_password(password, encoded):
             return False
         _, salt, expected = encoded.split("$")
         value = hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt), n=32768,
-                               r=8, p=1, maxmem=64*1024*1024)
+                                r=8, p=1, maxmem=64*1024*1024)
         return hmac.compare_digest(value.hex(), expected)
     except (ValueError, TypeError):
         return False
@@ -156,8 +240,15 @@ def save_user(body, actor=None, bootstrap=False):
             if db.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
                 raise AccessError(409, "Ya existe una cuenta. Usa Usuarios con un super-admin.")
             role = "super-admin"
+            allowed_pages = list(ROLE_PAGE_DEFAULTS["super-admin"])
         else:
-            require_manager(db, actor)
+            actor_row = db.execute("SELECT * FROM users WHERE id=? AND active=1", (actor,)).fetchone()
+            if not actor_row or actor_row["role"] not in ("admin", "super-admin"):
+                raise AccessError(403, "No tienes permiso para realizar esta operación.")
+            actor_role = actor_row["role"]
+            if actor_role == "admin" and role not in ("soporte", "admin"):
+                raise AccessError(403, "Los administradores solo pueden asignar roles de soporte o administrador.")
+
         active = body.get("active", True)
         if not isinstance(active, bool):
             raise AccessError(422, "El estado debe ser activo o suspendido.")
@@ -168,24 +259,51 @@ def save_user(body, actor=None, bootstrap=False):
                     raise AccessError(404, "No se encontró el usuario.")
                 if body.get("version") != old["version"]:
                     raise AccessError(409, "Otro administrador modificó este usuario. Cierra y vuelve a abrir su ficha.")
+                if not bootstrap:
+                    if actor_role == "admin":
+                        if old["role"] == "super-admin":
+                            raise AccessError(403, "Los administradores no pueden modificar una cuenta de super-admin.")
+                        old_raw = old.get("allowed_pages") if hasattr(old, "get") else (old["allowed_pages"] if "allowed_pages" in old.keys() else None)
+                        allowed_pages = parse_allowed_pages(old_raw, old["role"])
+                    elif actor_role == "super-admin":
+                        if "allowed_pages" in body:
+                            raw_pages = body["allowed_pages"]
+                            if not isinstance(raw_pages, list) or not all(isinstance(p, str) and p in AVAILABLE_PAGES for p in raw_pages):
+                                raise AccessError(422, "Lista de páginas permitidas no válida.")
+                            allowed_pages = list(dict.fromkeys(raw_pages))
+                        else:
+                            old_raw = old.get("allowed_pages") if hasattr(old, "get") else (old["allowed_pages"] if "allowed_pages" in old.keys() else None)
+                            allowed_pages = parse_allowed_pages(old_raw, role)
                 if user_id == actor and (role != old["role"] or not active):
                     raise AccessError(409, "No puedes cambiar tu propio rol ni suspender tu cuenta.")
                 if old["active"] and old["role"] == "super-admin" and (role != "super-admin" or not active):
                     count = db.execute("SELECT COUNT(*) FROM users WHERE role='super-admin' AND active=1").fetchone()[0]
                     if count <= 1:
                         raise AccessError(409, "Debe existir al menos un super-admin activo.")
-                db.execute("UPDATE users SET username=?,name=?,role=?,active=?,password_hash=?,version=version+1 WHERE id=?",
-                           (username, name, role, int(active), encoded or old["password_hash"], user_id))
-                if role != old["role"] or not active or encoded or username != old["username"]:
+                db.execute("UPDATE users SET username=?,name=?,role=?,active=?,password_hash=?,version=version+1,allowed_pages=? WHERE id=?",
+                           (username, name, role, int(active), encoded or old["password_hash"], json.dumps(allowed_pages), user_id))
+                old_pages_raw = old.get("allowed_pages") if hasattr(old, "get") else (old["allowed_pages"] if "allowed_pages" in old.keys() else None)
+                if role != old["role"] or not active or encoded or username != old["username"] or json.dumps(allowed_pages) != str(old_pages_raw):
                     db.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
             else:
                 if not encoded:
                     raise AccessError(422, "Define una contraseña para la cuenta nueva.")
                 if db.execute("SELECT COUNT(*) FROM users").fetchone()[0] >= 1000:
                     raise AccessError(409, "Esta instancia local admite hasta 1000 cuentas. Migra el directorio antes de ampliar el límite.")
+                if not bootstrap:
+                    if actor_role == "admin":
+                        allowed_pages = list(ROLE_PAGE_DEFAULTS.get(role, []))
+                    elif actor_role == "super-admin":
+                        if "allowed_pages" in body:
+                            raw_pages = body["allowed_pages"]
+                            if not isinstance(raw_pages, list) or not all(isinstance(p, str) and p in AVAILABLE_PAGES for p in raw_pages):
+                                raise AccessError(422, "Lista de páginas permitidas no válida.")
+                            allowed_pages = list(dict.fromkeys(raw_pages))
+                        else:
+                            allowed_pages = list(ROLE_PAGE_DEFAULTS.get(role, []))
                 user_id = secrets.token_hex(16)
-                db.execute("INSERT INTO users(id,username,name,role,active,password_hash,created_at) VALUES(?,?,?,?,?,?,?)",
-                           (user_id, username, name, role, int(active), encoded, int(time.time())))
+                db.execute("INSERT INTO users(id,username,name,role,active,password_hash,created_at,allowed_pages) VALUES(?,?,?,?,?,?,?,?)",
+                           (user_id, username, name, role, int(active), encoded, int(time.time()), json.dumps(allowed_pages)))
         except sqlite3.IntegrityError:
             raise AccessError(409, "Ese nombre de usuario ya está registrado.") from None
         audit(db, actor or "bootstrap-local", "user.updated" if body.get("id") else "user.created", user_id)
@@ -320,6 +438,16 @@ def connection_headers(value):
         token = base64.b64encode(f"{value['username']}:{secret}".encode()).decode()
         return {"Authorization": f"Basic {token}"}
     return {"X-API-Key": secret}
+
+
+# Device connection history tracking
+from dashboard_device_history import (
+    normalize_mac,
+    format_device_type,
+    is_device_online,
+    record_device_presence,
+    get_longest_connected_devices,
+)
 
 
 if __name__ == "__main__":

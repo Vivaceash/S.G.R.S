@@ -1,6 +1,45 @@
 export const LOCALE = 'es-MX';
 export const TIME_ZONE = 'America/Mexico_City';
-export const roleLabel = role => role === 'super-admin' ? 'Admin' : role === 'admin' ? 'admin' : role;
+export const roleLabel = role => role === 'super-admin' ? 'Admin' : role === 'admin' ? 'admin' : role === 'soporte' ? 'Soporte' : (role || '');
+
+export const AVAILABLE_PAGES = [
+  { id: 'resumen', label: 'Dashboard Operativo' },
+  { id: 'dispositivos', label: 'Dispositivos' },
+  { id: 'disponibilidad', label: 'Direcciones IP' },
+  { id: 'bitacora', label: 'Bitácora' },
+  { id: 'idf', label: 'Registro IDF' },
+  { id: 'aps', label: 'Access Points' },
+  { id: 'cctv', label: 'CCTV' },
+  { id: 'altas', label: 'Gestión de altas' },
+  { id: 'soporte', label: 'Dashboard de Soporte' },
+  { id: 'usuarios', label: 'Usuarios y privilegios' },
+  { id: 'conexiones', label: 'Conexiones API' },
+];
+
+export const BASE_ROLE_CATALOG = [
+  { id: 'soporte', title: 'Soporte', description: 'Atención y diagnóstico técnico: consulta de dispositivos, fichas técnicas y DHCP.' },
+  { id: 'admin', title: 'admin', description: 'Administra la operación: inventario, visitas e incidencias de IDF y gestión de usuarios.' },
+  { id: 'super-admin', title: 'Admin', description: 'Gestiona cuentas, privilegios modulares, conexiones y consultas técnicas.' },
+];
+
+export function getEffectiveRoles(roleInfo) {
+  const rawRoles = (Array.isArray(roleInfo) && roleInfo.length ? roleInfo : BASE_ROLE_CATALOG)
+    .filter(r => r && r.id && r.id !== 'viewer');
+  const hasSoporte = rawRoles.some(r => r.id === 'soporte');
+  const normalized = hasSoporte ? rawRoles : [BASE_ROLE_CATALOG[0], ...rawRoles];
+
+  return BASE_ROLE_CATALOG.map(base => {
+    const existing = normalized.find(r => r.id === base.id);
+    return existing ? { ...base, ...existing, title: base.title } : base;
+  });
+}
+
+export const ROLE_PAGE_DEFAULTS = {
+  soporte: ['soporte'],
+  admin: ['resumen', 'dispositivos', 'disponibilidad', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'usuarios'],
+  'super-admin': ['resumen', 'dispositivos', 'disponibilidad', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
+  viewer: ['resumen', 'dispositivos', 'disponibilidad', 'bitacora', 'idf', 'aps', 'cctv', 'altas'],
+};
 export const segmentKey = segment => JSON.stringify([segment.id ?? '', segment.interface ?? '']);
 const ipv4 = value => {
   const parts = String(value ?? '').trim().split('.');
@@ -124,6 +163,23 @@ export const dateTime = value => {
     dateStyle: 'medium', timeStyle: 'short', timeZone: TIME_ZONE,
   }).format(date);
 };
+export const formatUptime = seconds => {
+  if (seconds == null || Number.isNaN(Number(seconds))) return '—';
+  const sec = Math.max(0, Math.floor(Number(seconds)));
+  if (sec < 60) return '< 1m';
+  if (sec < 3600) {
+    const mins = Math.floor(sec / 60);
+    return `${mins}m`;
+  }
+  if (sec < 86400) {
+    const hours = Math.floor(sec / 3600);
+    const mins = Math.floor((sec % 3600) / 60);
+    return `${hours}h ${mins}m`;
+  }
+  const days = Math.floor(sec / 86400);
+  const hours = Math.floor((sec % 86400) / 3600);
+  return `${days}d ${hours}h`;
+};
 export const statusNames = {
   online: 'En servicio', offline: 'Fuera de línea', normal: 'Operativo', warning: 'Con alerta',
   critical: 'Crítico', available: 'Disponible', occupied: 'Asignada', reserved: 'Reservada',
@@ -150,6 +206,26 @@ export function getUtilizationColor(percent) {
     case 'orange': return '#ea580c';
     case 'red': return '#ae1234';
     default: return '#19BF3E';
+  }
+}
+
+export function getSaturationStatus(segmentOrPercent) {
+  if (typeof segmentOrPercent === 'object' && segmentOrPercent !== null) {
+    if (segmentOrPercent.saturation_status) return segmentOrPercent.saturation_status;
+    return getSaturationStatus(segmentOrPercent.utilization_percent);
+  }
+  const p = Number(segmentOrPercent) || 0;
+  if (p >= 80) return 'critical';
+  if (p >= 50) return 'warning';
+  return 'normal';
+}
+
+export function getSaturationLabel(status) {
+  switch (status) {
+    case 'critical': return 'Saturada';
+    case 'warning': return 'Uso medio';
+    case 'normal':
+    default: return 'Disponible';
   }
 }
 

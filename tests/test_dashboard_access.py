@@ -77,22 +77,25 @@ def test_fixed_capabilities_and_no_session_for_missing_cookie(local_store):
     assert access.session("") is None
 
 
-@pytest.mark.parametrize("role", ["viewer", "admin"])
-def test_business_sessions_do_not_disclose_internal_role(local_store, role):
+@pytest.mark.parametrize("role,expected_roles", [("viewer", []), ("soporte", []), ("admin", ["soporte", "admin"])])
+def test_business_sessions_do_not_disclose_internal_role(local_store, role, expected_roles):
     import json
-    access.save_user({"username": "business.local", "name": "Cuenta operativa", "role": role,
+    access.save_user({"username": f"business.{role}", "name": "Cuenta operativa", "role": role,
                       "password": "Ejemplo-local-2026"}, local_store["id"])
-    token, identity = access.login({"username": "business.local", "password": "Ejemplo-local-2026"}, "127.0.0.1")
+    token, identity = access.login({"username": f"business.{role}", "password": "Ejemplo-local-2026"}, "127.0.0.1")
     for payload in (identity, access.session(f"sgrs_session={token}")):
-        assert [item["id"] for item in payload["roles"]] == ["viewer", "admin"]
+        assert [item["id"] for item in payload["roles"]] == expected_roles
         assert "super" not in json.dumps(payload).lower()
         assert "traffic.read" not in payload["capabilities"]
         assert "users.manage" not in payload["capabilities"]
 
 
 def test_internal_catalog_retains_all_roles():
-    assert [r["id"] for r in access.visible_roles("super-admin")] == list(access.ROLES)
+    assert [r["id"] for r in access.visible_roles("super-admin")] == ["soporte", "admin", "super-admin"]
+    assert [r["id"] for r in access.visible_roles("admin")] == ["soporte", "admin"]
     assert access.visible_roles("unknown") == []
+    assert access.visible_roles("viewer") == []
+    assert access.visible_roles("soporte") == []
 
 
 @pytest.mark.parametrize("path", [
@@ -115,10 +118,21 @@ def test_unknown_or_authentication_proxy_paths_are_denied(path):
     assert not reserved_read_allowed(path)
 
 
-@pytest.mark.parametrize("role", ["viewer", "admin"])
-@pytest.mark.parametrize("path", [
-    "/api/admin/users", "/api/admin/connections", "/api/admin/catalog", "/api/admin/history", "/api/forti/firewall/policies",
-    "/api/traffic/ip/192.0.2.1", "/api/omni/employees",
+@pytest.mark.parametrize("role,path", [
+    ("viewer", "/api/admin/users"),
+    ("soporte", "/api/admin/users"),
+    ("viewer", "/api/admin/connections"),
+    ("admin", "/api/admin/connections"),
+    ("viewer", "/api/admin/catalog"),
+    ("admin", "/api/admin/catalog"),
+    ("viewer", "/api/admin/history"),
+    ("admin", "/api/admin/history"),
+    ("viewer", "/api/forti/firewall/policies"),
+    ("admin", "/api/forti/firewall/policies"),
+    ("viewer", "/api/traffic/ip/192.0.2.1"),
+    ("admin", "/api/traffic/ip/192.0.2.1"),
+    ("viewer", "/api/omni/employees"),
+    ("admin", "/api/omni/employees"),
 ])
 def test_business_read_denials_do_not_disclose_internal_role(role, path):
     import json
@@ -129,7 +143,7 @@ def test_business_read_denials_do_not_disclose_internal_role(role, path):
             pass
 
         def _authorize(self, mutation=False):
-            self.identity = {"user": {"role": role}, "capabilities": access.capabilities(role)}
+            self.identity = {"user": {"role": role, "id": "test-user"}, "capabilities": access.capabilities(role)}
 
         def _send_json(self, payload, status=200):
             self.response = (status, payload)
@@ -140,3 +154,139 @@ def test_business_read_denials_do_not_disclose_internal_role(role, path):
     code, payload = handler.response
     assert code == 403
     assert "super" not in json.dumps(payload).lower()
+
+
+def test_allowed_pages_defaults_and_customization(local_store):
+    soporte = access.save_user({"username": "soporte.user", "name": "Usuario Soporte", "role": "soporte",
+                                "password": "Ejemplo-local-2026"}, local_store["id"])
+    assert soporte["allowed_pages"] == ["soporte"]
+
+    admin = access.save_user({"username": "admin.user", "name": "Usuario Admin", "role": "admin",
+                              "password": "Ejemplo-local-2026"}, local_store["id"])
+    assert "soporte" not in admin["allowed_pages"]
+    assert "usuarios" in admin["allowed_pages"]
+
+    custom = access.save_user({"username": "custom.user", "name": "Usuario Custom", "role": "soporte",
+                               "allowed_pages": ["soporte", "resumen"], "password": "Ejemplo-local-2026"}, local_store["id"])
+    assert custom["allowed_pages"] == ["soporte", "resumen"]
+
+    with pytest.raises(access.AccessError) as error:
+        access.save_user({"username": "bad.pages", "name": "Bad Pages", "role": "soporte",
+                          "allowed_pages": ["invalid-page"], "password": "Ejemplo-local-2026"}, local_store["id"])
+    assert error.value.status == 422
+
+
+def test_admin_hierarchy_permissions(local_store):
+    admin = access.save_user({"username": "admin.hierarchy", "name": "Admin Jerarquia", "role": "admin",
+                              "password": "Ejemplo-local-2026"}, local_store["id"])
+
+    # Admin can create soporte
+    soporte = access.save_user({"username": "soporte.created", "name": "Soporte Creado", "role": "soporte",
+                                "password": "Ejemplo-local-2026", "allowed_pages": ["conexiones"]}, admin["id"])
+    assert soporte["role"] == "soporte"
+    # Admin cannot define allowed_pages, role defaults are applied
+    assert soporte["allowed_pages"] == ["soporte"]
+
+    # Admin can create another admin
+    admin2 = access.save_user({"username": "admin2.created", "name": "Admin 2", "role": "admin",
+                               "password": "Ejemplo-local-2026"}, admin["id"])
+    assert admin2["role"] == "admin"
+
+    # Admin cannot create super-admin
+    with pytest.raises(access.AccessError) as error:
+        access.save_user({"username": "super.bad", "name": "Super Bad", "role": "super-admin",
+                          "password": "Ejemplo-local-2026"}, admin["id"])
+    assert error.value.status == 403
+
+    # Admin cannot modify a super-admin
+    with pytest.raises(access.AccessError) as error:
+        access.save_user({**local_store, "name": "Hack Super"}, admin["id"])
+    assert error.value.status == 403
+
+
+def test_soporte_viewer_projection_preserves_technical_specs():
+    from dashboard_routes import AccessRoutes
+    handler = AccessRoutes()
+    test_data = {"mac": "00:11:22:33:44:55", "serial": "SN123456", "ip": "192.168.1.50", "brand": "HP"}
+
+    # For 'soporte', technical specs must be preserved
+    handler.identity = {"user": {"role": "soporte"}}
+    soporte_data = handler.viewer_projection(dict(test_data))
+    assert soporte_data["mac"] == "00:11:22:33:44:55"
+    assert soporte_data["serial"] == "SN123456"
+
+    # For 'viewer', mac and serial must be redacted
+    handler.identity = {"user": {"role": "viewer"}}
+    viewer_data = handler.viewer_projection(dict(test_data))
+    assert "mac" not in viewer_data
+    assert "serial" not in viewer_data
+
+
+def test_routes_access_control(local_store):
+    from dashboard_routes import AccessRoutes
+
+    class MockRoutes(AccessRoutes):
+        def _boundary(self, mutation=False):
+            pass
+
+        def _authorize(self, mutation=False):
+            pass
+
+        def _send_json(self, payload, status=200):
+            self.response = (status, payload)
+
+    # 1. Soporte can access normal paths
+    handler = MockRoutes()
+    handler.identity = {"user": {"id": "sup-1", "role": "soporte"}, "capabilities": access.capabilities("soporte"), "csrf": "csrf"}
+    for path in ("/api/devices", "/api/health", "/api/forti/network/dhcp-pools"):
+        handler.path = path
+        # access_get returns False for normal routes so server.py handles them
+        assert handler.access_get() is False
+
+    # 2. Both admin and super-admin can access /api/admin/users
+    admin = access.save_user({"username": "adm.route", "name": "Admin Route", "role": "admin",
+                              "password": "Ejemplo-local-2026"}, local_store["id"])
+    handler.identity = {"user": admin, "capabilities": access.capabilities("admin"), "csrf": "csrf"}
+    handler.path = "/api/admin/users"
+    assert handler.access_get() is True
+    status, payload = handler.response
+    assert status == 200
+    assert "users" in payload
+
+    # 3. Admin can save a soporte user via /api/admin/users/save
+    handler.path = "/api/admin/users/save"
+    handler._body = lambda: {"username": "sop.byadmin", "name": "Soporte By Admin", "role": "soporte",
+                             "password": "Ejemplo-local-2026"}
+    assert handler.access_post() is True
+    status, payload = handler.response
+    assert status == 200
+    assert payload["user"]["role"] == "soporte"
+
+    # 4. Admin CANNOT save or test connections
+    handler.path = "/api/admin/connections/forti/save"
+    handler._body = lambda: {"url": "https://127.0.0.1:8001/api/v1", "auth_mode": "api-key", "secret": "abc"}
+    assert handler.access_post() is True
+    status, payload = handler.response
+    assert status == 403
+
+    # 5. Soporte CANNOT access /api/admin/users
+    handler.identity = {"user": {"id": "sup-1", "role": "soporte"}, "capabilities": access.capabilities("soporte"), "csrf": "csrf"}
+    handler.path = "/api/admin/users"
+    assert handler.access_get() is True
+    status, payload = handler.response
+    assert status == 403
+
+
+def test_login_and_session_return_allowed_pages(local_store):
+    token, identity = access.login({"username": "root.local", "password": "Ejemplo-local-2026"}, "127.0.0.1")
+    assert "allowed_pages" in identity
+    assert "allowed_pages" in identity["user"]
+    assert "resumen" in identity["allowed_pages"]
+    assert "conexiones" in identity["allowed_pages"]
+
+    sess = access.session(f"sgrs_session={token}")
+    assert "allowed_pages" in sess
+    assert "allowed_pages" in sess["user"]
+    assert sess["allowed_pages"] == identity["allowed_pages"]
+
+

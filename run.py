@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import time
+import venv
 from pathlib import Path
 
 # Configurar salida estándar con UTF-8 para PowerShell / Bash
@@ -307,12 +308,105 @@ def stream_logs_to_output(pipe, prefix: str, log_file=None):
             pass
 
 
+def ensure_environment():
+    """Verifica y prepara el entorno para ejecución en servidor o local.
+
+    - Crea el entorno virtual .venv si no existe.
+    - Instala dependencias desde requirements.txt si faltan en el entorno virtual.
+    - Asegura permisos estrictos (0o700 / 0o600) en .sgrs-private y sus bases de datos en Linux/POSIX.
+    - Si Dashboard/dist no existe y npm está disponible, compila el frontend.
+    """
+    venv_dir = ROOT_DIR / ".venv"
+    py_venv = (
+        venv_dir
+        / ("Scripts" if sys.platform == "win32" else "bin")
+        / ("python.exe" if sys.platform == "win32" else "python")
+    )
+
+    # 1. Crear entorno virtual si no existe
+    if not py_venv.exists():
+        print(f"[SGRS] Creando entorno virtual en {venv_dir}...")
+        try:
+            venv.create(str(venv_dir), with_pip=True)
+        except Exception as err:
+            print(f"[SGRS] Aviso con venv.create ({err}), intentando vía subprocess...")
+            subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+        print("[SGRS] [OK] Entorno virtual creado exitosamente.")
+
+    py_exe = get_python_exe()
+
+    # 2. Comprobar dependencias clave
+    test_deps_code = "import fastapi, uvicorn, httpx, requests, pydantic_settings; print('DEPS_OK')"
+    check_deps = subprocess.run(
+        [py_exe, "-c", test_deps_code],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    if check_deps.returncode != 0:
+        req_file = ROOT_DIR / "requirements.txt"
+        if req_file.exists():
+            print("[SGRS] Dependencias de Python no detectadas en el entorno virtual. Instalando requirements.txt...")
+            subprocess.run([py_exe, "-m", "pip", "install", "-r", str(req_file)], check=True)
+            print("[SGRS] [OK] Dependencias instaladas exitosamente.")
+        else:
+            print("[SGRS] Aviso: requirements.txt no encontrado.")
+
+    # 3. Comprobar permisos seguros de .sgrs-private (Linux / POSIX)
+    private_dir = ROOT_DIR / ".sgrs-private"
+    if not private_dir.exists():
+        try:
+            private_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+
+    if private_dir.exists() and sys.platform != "win32":
+        try:
+            os.chmod(private_dir, 0o700)
+            for item in private_dir.rglob("*"):
+                if item.is_dir():
+                    os.chmod(item, 0o700)
+                elif item.is_file():
+                    os.chmod(item, 0o600)
+        except Exception as err:
+            print(f"[SGRS] Aviso al configurar permisos en .sgrs-private: {err}")
+
+    # 4. Comprobar Dashboard/dist
+    dash_dir = ROOT_DIR / "Dashboard"
+    dash_dist = dash_dir / "dist"
+    index_file = dash_dist / "index.html"
+
+    if not index_file.exists():
+        npm_bin = shutil.which("npm")
+        if sys.platform == "win32" and not npm_bin:
+            npm_win = r"C:\Program Files\nodejs\npm.cmd"
+            if os.path.exists(npm_win):
+                npm_bin = npm_win
+
+        if npm_bin:
+            print("[SGRS] Compilado de Dashboard no detectado. Compilando interfaz web frontend...")
+            try:
+                if not (dash_dir / "node_modules").exists():
+                    print("[SGRS] Instalando dependencias de frontend con npm...")
+                    subprocess.run([npm_bin, "install"], cwd=str(dash_dir), check=True)
+                print("[SGRS] Compilando assets del frontend (npm run build)...")
+                subprocess.run([npm_bin, "run", "build"], cwd=str(dash_dir), check=True)
+                print("[SGRS] [OK] Dashboard frontend compilado exitosamente.")
+            except Exception as err:
+                print(f"[SGRS] Aviso: No se pudo compilar el Dashboard automáticamente: {err}")
+        else:
+            print("[SGRS] Aviso: Dashboard/dist no encontrado y npm no está disponible.")
+
+
 def start_services(detached: bool = True):
     """Inicia todos los servicios (APIs + Dashboard).
 
     Si detached=True: se ejecutan en segundo plano totalmente desacoplados de la terminal.
     Si detached=False: se ejecutan en primer plano transmitiendo logs a la consola actual.
     """
+    ensure_environment()
+
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     py_exe = get_python_exe()
     npm_exe = get_npm_exe()
@@ -501,7 +595,15 @@ def start_services(detached: bool = True):
 def main():
     cmd = sys.argv[1].lower().strip("-") if len(sys.argv) > 1 else "start"
 
-    if cmd in ("stop", "down", "kill"):
+    if cmd in ("install", "setup", "init"):
+        print("=" * 72)
+        print("      S.G.R.S. - Sistema de Gestión de Redes y Seguridad")
+        print("             Configuración y Preparación del Entorno")
+        print("=" * 72)
+        ensure_environment()
+        print("\n[SGRS] [OK] El entorno está listo.")
+        print("       Inicia los servicios ejecutando: python run.py\n")
+    elif cmd in ("stop", "down", "kill"):
         stop_services()
     elif cmd in ("status", "ps"):
         status_services()
@@ -516,8 +618,9 @@ def main():
     elif cmd in ("start", "daemon", "d", "bg", "run"):
         start_services(detached=True)
     elif cmd in ("help", "h"):
-        print("Uso: python run.py [start|stop|status|logs|restart|--foreground]")
+        print("Uso: python run.py [start|stop|status|logs|restart|setup|--foreground]")
         print("  start          Inicia la plataforma en segundo plano (por defecto)")
+        print("  setup/install  Prepara el entorno virtual, dependencias y permisos")
         print("  stop           Detiene todos los servicios y libera los puertos")
         print("  status         Muestra el estado de salud de los servicios")
         print("  logs           Muestra los logs unificados en tiempo real")
