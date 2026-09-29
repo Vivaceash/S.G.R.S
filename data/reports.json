@@ -158,5 +158,26 @@
       "temp": 20.0,
       "status": "normal"
     }
+  },
+  "idf-5": {
+    "incidents": [
+      {
+        "id": "IDF-333b1b8f-bfb6-4830-84ae-6959d640398a",
+        "date": "2026-09-29T00:11:45.174652+00:00",
+        "severity": "medium",
+        "device": "Gabinete",
+        "temp": 21.0,
+        "title": "Reporte de incidencia",
+        "description": "Problema",
+        "status": "open",
+        "tech": "Luis Fernando Casillas Flores",
+        "actor_id": "5c37527afe39fcd77c9bf20d4a894564"
+      }
+    ],
+    "telemetry": {
+      "date": "2026-09-29T00:11:45.174652+00:00",
+      "temp": 21.0,
+      "status": "normal"
+    }
   }
 }

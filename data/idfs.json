@@ -17,7 +17,7 @@
         "partNo": "—",
         "mac": "—",
         "ports": "—",
-        "status": "online",
+        "status": "offline",
         "lastCheck": "En servicio"
       },
       {
@@ -26,7 +26,7 @@
         "icon": "⌘",
         "ru": "U42",
         "brandModel": "Alcatel OS6860N-P24Z",
-        "brand": "Alcatel",
+        "brand": "Alcatel OS6860N-P24Z",
         "model": "OS6860N-P24Z",
         "serial": "JSZ233200215",
         "partNo": "904300-90",
@@ -131,13 +131,13 @@
         "icon": "▦",
         "ru": "U29-28",
         "brandModel": "CommScope Systimax",
-        "brand": "CommScope",
+        "brand": "CommScope Systimax",
         "model": "Systimax",
         "serial": "—",
         "partNo": "—",
         "mac": "—",
         "ports": "48 puertos",
-        "status": "online",
+        "status": "offline",
         "lastCheck": "En servicio"
       },
       {
