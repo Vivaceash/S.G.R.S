@@ -49,10 +49,12 @@ class AccessRoutes:
     def _origins(self):
         # Explicit deployments must set the public HTTPS origin and use a reverse proxy.
         configured = os.environ.get("SGRS_PUBLIC_ORIGIN", "").rstrip("/")
-        if configured:
-            return {configured}
-        return {f"http://{host}:{port}" for host in ("localhost", "127.0.0.1")
-                for port in (3000, 3001, 3002, 5173, 4173)}
+        lan_origin = os.environ.get("SGRS_LAN_ORIGIN", "").rstrip("/")
+        local = {f"http://{host}:{port}" for host in ("localhost", "127.0.0.1")
+                 for port in (3000, 3001, 3002, 5173, 4173)}
+        # El operador local conserva acceso por localhost; los teléfonos solo
+        # pueden entrar por la IP LAN concreta emitida en el código QR.
+        return local | ({configured} if configured else set()) | ({lan_origin} if lan_origin else set())
 
     def _boundary(self, mutation=False):
         origins = self._origins()
@@ -109,6 +111,9 @@ class AccessRoutes:
                     setup = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
                 self._send_json({k: v for k, v in identity.items() if k != "token_hash"} if identity else {"user": None, "setup_required": setup})
                 return True
+            if path == "/api/mobile-report":
+                self.mobile_report_context(self.path)
+                return True
             self._authorize()
             if path == '/api/inventory/catalog':
                 result = inventory.catalog()
@@ -149,13 +154,13 @@ class AccessRoutes:
                 self._manage()
                 self._send_json({"connections": [connection(name, public=True) for name in ("forti", "omni")]})
                 return True
-            normal = {"/api/idfs", "/api/reports", "/api/ips", "/api/devices", "/api/devices/summary", "/api/health", "/api/ip", "/api/forti/network/dhcp-pools", "/api/altas/omnivista"}
+            normal = {"/api/idfs", "/api/reports", "/api/ips", "/api/devices", "/api/devices/summary", "/api/health", "/api/ip", "/api/forti/network/dhcp-pools", "/api/altas/omnivista", "/api/aps/omnivista"}
             if path in normal:
                 return False
             if path.startswith("/api/reports/evidence/"):
                 if self.identity["user"]["role"] == "viewer":
                     raise AccessError(403, "La evidencia requiere un perfil operativo.")
-                self.send_evidence(path.rsplit("/", 1)[-1])
+                self.send_evidence(path.rsplit("/", 1)[-1], inline=urlsplit(self.path).query == "view=1")
                 return True
             # Deny proxy authentication, arbitrary paths, encoded traversal and all non-GET operations.
             if self.identity["user"]["role"] == "super-admin" and reserved_read_allowed(path):
@@ -186,6 +191,9 @@ class AccessRoutes:
                 token, identity = login(body, self.client_address[0])
                 self._cookie(token)
                 self._send_json(identity)
+                return True
+            if path == "/api/mobile-report":
+                self.save_mobile_report(self._body(), self.client_address[0])
                 return True
             self._authorize(mutation=True)
             actor = self.identity["user"]["id"]

@@ -88,6 +88,26 @@ def get_dashboard_port() -> int:
         return 3001
 
 
+def local_network_ip() -> str:
+    """Obtiene la IPv4 usada para alcanzar la red institucional."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        try:
+            probe.connect(("10.255.255.255", 1))
+            return probe.getsockname()[0]
+        except OSError:
+            return "127.0.0.1"
+
+
+def dashboard_environment(env: dict, port: int) -> dict:
+    """Expone el dashboard en LAN y fija el único origen de red autorizado."""
+    result = {**env, "PORT": str(port), "DASHBOARD_PORT": str(port), "DASHBOARD_HOST": "0.0.0.0"}
+    # SGRS_PUBLIC_ORIGIN se reserva para despliegues HTTPS. Este origen HTTP
+    # solo habilita el acceso desde la misma red institucional para la planilla QR.
+    if not result.get("SGRS_LAN_ORIGIN"):
+        result["SGRS_LAN_ORIGIN"] = f"http://{local_network_ip()}:{port}"
+    return result
+
+
 def free_ports_if_busy(ports=None, silent: bool = False):
     """Comprueba los puertos de los servicios y libera los que estén bloqueados."""
     if ports is None:
@@ -335,7 +355,7 @@ def start_services(detached: bool = True):
 
         env_forti = {**env, "PORT": "8001"}
         env_omni = {**env, "PORT": "8000"}
-        env_dash = {**env, "PORT": str(dash_port), "DASHBOARD_PORT": str(dash_port)}
+        env_dash = dashboard_environment(env, dash_port)
 
         # Iniciar API Forti (Puerto 8001)
         proc_forti = subprocess.Popen([py_exe, "run.py"], cwd=str(forti_dir), **{**popen_kwargs, "env": env_forti})
@@ -417,7 +437,7 @@ def start_services(detached: bool = True):
 
     env_forti = {**env, "PORT": "8001"}
     env_omni = {**env, "PORT": "8000"}
-    env_dash = {**env, "PORT": str(dash_port), "DASHBOARD_PORT": str(dash_port)}
+    env_dash = dashboard_environment(env, dash_port)
 
     proc_forti = subprocess.Popen([py_exe, "run.py"], cwd=str(forti_dir), **{**popen_fg, "env": env_forti})
     proc_omni = subprocess.Popen([py_exe, "run.py"], cwd=str(omni_dir), **{**popen_fg, "env": env_omni})

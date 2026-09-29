@@ -11,59 +11,12 @@
     {
       "name": "Render y accesibilidad: inventario",
       "details": "0 violations"
-    },
-    {
-      "name": "Render y accesibilidad: disponibilidad",
-      "details": "0 violations"
-    },
-    {
-      "name": "Render y accesibilidad: idf",
-      "details": "0 violations"
-    },
-    {
-      "name": "Render y accesibilidad: bitacora",
-      "details": "0 violations"
-    },
-    {
-      "name": "Búsqueda, limpieza y paginación",
-      "details": "passed"
-    },
-    {
-      "name": "Edición de IP en demo sin escritura externa",
-      "details": "passed"
-    },
-    {
-      "name": "Validación accesible, guardia de borrador y creación de visita",
-      "details": "passed"
-    },
-    {
-      "name": "IDF de escritorio solo consulta, detalle, Escape y restauración de foco",
-      "details": "passed"
-    },
-    {
-      "name": "Demo operativa sin catálogo interno ni secciones reservadas ni llamadas API",
-      "details": "passed"
-    },
-    {
-      "name": "Móvil, menú accesible y preferencia de movimiento reducido",
-      "details": "passed"
-    },
-    {
-      "name": "API no disponible sin fallback de demostración",
-      "details": "passed"
-    },
-    {
-      "name": "403 preserva formulario; guardado confirmado; doble envío bloqueado; texto externo escapado",
-      "details": "passed"
-    },
-    {
-      "name": "Admin no accede a administración de usuarios por URL directa",
-      "details": "passed"
-    },
-    {
-      "name": "Sin errores JavaScript",
-      "details": "passed"
     }
   ],
-  "failures": []
+  "failures": [
+    {
+      "test": "runtime",
+      "message": "locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('heading', { name: 'Disponibilidad IP', exact: true }) to be visible\u001b[22m\n"
+    }
+  ]
 }

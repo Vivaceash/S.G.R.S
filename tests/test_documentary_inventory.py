@@ -199,7 +199,7 @@ def test_historical_catalog_is_immutable_and_pacs_is_not_merged(documentary_stor
     local = [{'id': 'idf-pacs', 'devices': [{'serial': 'keep'}]}]
     merged = inventory.cabinets_with_documentary(local)
     assert merged[0] == local[0]
-    assert {r['id'] for r in merged} == {'idf-pacs', 'idf-1', 'idf-13'}
+    assert {r['id'] for r in merged} == {'idf-pacs', 'idf-1'}
 
 
 def test_resolve_historical_report_retains_evidence_and_detects_stale_write(tmp_path):

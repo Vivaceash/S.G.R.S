@@ -51,5 +51,13 @@ export function createDemo() {
       status: 'Online'
     }
   }));
-  return { segments, resources, requests, ips, idfs, reports, devices, health: { forti: true, omni: true }, updatedAt: '2026-09-06T16:24:00Z' };
+  const demoAps = [
+    { id: 'ap-1', name: 'AP-1F:20', model: 'OAW-AP1321', ip: '192.168.5.27', mac: 'dc:08:56:d3:1f:20', serial: 'SSZ234101685', status: 'online', status_raw: 'Up', location: 'IDF-12 -> 2/1/6', idf_tag: 'IDF-12', clients: 8, channels: ['6(2.4G)', '48(5G All)'], ssids: ['Admin(2.4G)', 'Admin(5G)', 'Quetzalcoatl(2.4G)', 'Tonatiuh(5G)'], version: '4.0.7.7081', last_seen: 1790078751404 },
+    { id: 'ap-2', name: 'Pasillo Central', model: 'OAW-AP1321', ip: '192.168.5.60', mac: 'dc:08:56:d3:16:80', serial: 'SSZ234101616', status: 'online', status_raw: 'Up', location: 'IDF-11 -> 1/1/48', idf_tag: 'IDF-11', clients: 14, channels: ['1(2.4G)', '149(5G All)'], ssids: ['Admin(2.4G)', 'Admin(5G)', 'Quetzalcoatl(5G)', 'Tonatiuh(5G)'], version: '4.0.7.7081', last_seen: 1790078751268 },
+    { id: 'ap-3', name: 'AP-21:20', model: 'OAW-AP1321', ip: '192.168.5.113', mac: 'dc:08:56:d3:21:20', serial: 'SSZ234101701', status: 'online', status_raw: 'Up', location: 'IDF-4 -> 4/1/35', idf_tag: 'IDF-4', clients: 5, channels: ['1(2.4G)', '153(5G All)'], ssids: ['Admin(2.4G)', 'Tonatiuh(5G)'], version: '4.0.7.7081', last_seen: 1790078751681 },
+    { id: 'ap-4', name: 'AP-Urgencias-01', model: 'OAW-AP1321', ip: '192.168.5.115', mac: 'dc:08:56:d3:21:40', serial: 'SSZ234101705', status: 'online', status_raw: 'Up', location: 'IDF-1 -> 1/1/24', idf_tag: 'IDF-1', clients: 22, channels: ['11(2.4G)', '36(5G All)'], ssids: ['Admin(2.4G)', 'Quetzalcoatl(2.4G)', 'Tonatiuh(5G)'], version: '4.0.7.7081', last_seen: 1790078750000 },
+    { id: 'ap-5', name: 'AP-Consulta-Externa', model: 'OAW-AP1311', ip: '192.168.5.120', mac: 'dc:08:56:d3:22:10', serial: 'SSZ234101750', status: 'online', status_raw: 'Up', location: 'IDF-2 -> 2/1/10', idf_tag: 'IDF-2', clients: 19, channels: ['6(2.4G)', '157(5G All)'], ssids: ['Admin(2.4G)', 'Tonatiuh(5G)'], version: '4.0.7.7081', last_seen: 1790078740000 },
+    { id: 'ap-6', name: 'AP-Terapia-Intensiva', model: 'OAW-AP1321', ip: '192.168.5.132', mac: 'dc:08:56:d3:23:05', serial: 'SSZ234101802', status: 'offline', status_raw: 'Down', location: 'IDF-3 -> 1/1/15', idf_tag: 'IDF-3', clients: 0, channels: [], ssids: [], version: '4.0.7.7081', last_seen: 1790078000000 },
+  ];
+  return { segments, resources, requests, ips, idfs, reports, devices, aps: demoAps, health: { forti: true, omni: true }, updatedAt: '2026-09-06T16:24:00Z' };
 }
