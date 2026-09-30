@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, ArrowRight, ArrowUpDown, Building2, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Download, FileText, Info, Layers3, Monitor, Network, Package, Plus, Printer, Headset, Router, Server, ShieldCheck, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X } from 'lucide-react';
-import { Badge, Button, DataTable, Dialog, Empty, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, useListState } from './components.jsx';
-import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getSegmentDevices, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel } from './domain.mjs';
+import { Badge, Button, DataTable, Dialog, Empty, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, downloadExcel, useListState } from './components.jsx';
+import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getSegmentDevices, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, getSupportSegments, normalizeText } from './domain.mjs';
 
 export function PageHeading({ eyebrow, title, description, updatedAt, children, headingId = 'page-title' }) {
   const hasActions = Boolean(children || updatedAt);
@@ -450,8 +450,10 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
 
   const { segments = [], devices = [] } = data;
 
+  const supportSegments = useMemo(() => getSupportSegments(segments), [segments]);
+
   // Balance y resumen de saturación para Columna 1
-  const saturationSummary = segments.reduce((acc, s) => {
+  const saturationSummary = supportSegments.reduce((acc, s) => {
     const status = getSaturationStatus(s);
     if (status === 'critical') acc.critical++;
     else if (status === 'warning') acc.warning++;
@@ -470,15 +472,16 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
   }, { critical: 0, warning: 0, normal: 0, totalIps: 0, occupiedIps: 0, availableIps: 0 });
 
   // 1. Redes y estados
-  const filteredSegments = segments.filter(s => {
+  const filteredSegments = supportSegments.filter(s => {
     if (!networkQuery.trim()) return true;
-    const q = networkQuery.toLowerCase();
+    const q = normalizeText(networkQuery);
     return (
-      (s.name && s.name.toLowerCase().includes(q)) ||
-      (s.interface && s.interface.toLowerCase().includes(q)) ||
-      (s.subnet && s.subnet.toLowerCase().includes(q)) ||
-      (s.default_gateway && s.default_gateway.toLowerCase().includes(q)) ||
-      (s.vlan && String(s.vlan).toLowerCase().includes(q))
+      (s.name && normalizeText(s.name).includes(q)) ||
+      (s.interface && normalizeText(s.interface).includes(q)) ||
+      (s.subnet && normalizeText(s.subnet).includes(q)) ||
+      (s.default_gateway && normalizeText(s.default_gateway).includes(q)) ||
+      (s.vlan && normalizeText(s.vlan).includes(q)) ||
+      (s.description && normalizeText(s.description).includes(q))
     );
   });
 
@@ -493,15 +496,15 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
   const computers = devices.filter(isComputer);
   const filteredComputers = computers.filter(c => {
     if (!computerQuery.trim()) return true;
-    const q = computerQuery.toLowerCase();
-    const ovName = (c.omnivista?.device_name || '').toLowerCase();
-    const ovLoc = (c.omnivista?.location || '').toLowerCase();
+    const q = normalizeText(computerQuery);
+    const ovName = normalizeText(c.omnivista?.device_name || '');
+    const ovLoc = normalizeText(c.omnivista?.location || '');
     return (
-      (c.name && c.name.toLowerCase().includes(q)) ||
-      (c.ip && c.ip.toLowerCase().includes(q)) ||
-      (c.mac && c.mac.toLowerCase().includes(q)) ||
-      (c.vendor && c.vendor.toLowerCase().includes(q)) ||
-      (c.os && c.os.toLowerCase().includes(q)) ||
+      (c.name && normalizeText(c.name).includes(q)) ||
+      (c.ip && normalizeText(c.ip).includes(q)) ||
+      (c.mac && normalizeText(c.mac).includes(q)) ||
+      (c.vendor && normalizeText(c.vendor).includes(q)) ||
+      (c.os && normalizeText(c.os).includes(q)) ||
       ovName.includes(q) ||
       ovLoc.includes(q)
     );
@@ -527,102 +530,41 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
   const printers = devices.filter(isPrinter);
   const filteredPrinters = printers.filter(p => {
     if (!printerQuery.trim()) return true;
-    const q = printerQuery.toLowerCase();
-    const ovName = (p.omnivista?.device_name || '').toLowerCase();
-    const ovLoc = (p.omnivista?.location || '').toLowerCase();
+    const q = normalizeText(printerQuery);
+    const ovName = normalizeText(p.omnivista?.device_name || '');
+    const ovLoc = normalizeText(p.omnivista?.location || '');
     return (
-      (p.name && p.name.toLowerCase().includes(q)) ||
-      (p.ip && p.ip.toLowerCase().includes(q)) ||
-      (p.mac && p.mac.toLowerCase().includes(q)) ||
-      (p.vendor && p.vendor.toLowerCase().includes(q)) ||
-      (p.model && p.model.toLowerCase().includes(q)) ||
+      (p.name && normalizeText(p.name).includes(q)) ||
+      (p.ip && normalizeText(p.ip).includes(q)) ||
+      (p.mac && normalizeText(p.mac).includes(q)) ||
+      (p.vendor && normalizeText(p.vendor).includes(q)) ||
+      (p.model && normalizeText(p.model).includes(q)) ||
       ovName.includes(q) ||
       ovLoc.includes(q)
     );
   });
 
-  const handleExportCsv = () => {
-    const rows = [
-      ...(exportComputers ? computers : []),
-      ...(exportPrinters ? printers : []),
-    ];
-    if (!rows.length) return;
+  const handleExportExcel = () => {
+    if (!exportComputers && !exportPrinters) return;
 
-    const columns = [
-      {
-        key: 'device_type',
-        label: 'Tipo de Dispositivo',
-        value: dev => formatDeviceType(dev.type, dev.os || dev.omnivista?.os || dev.raw?.os_name, dev.omnivista?.device_name || dev.name, dev.vendor) || 'Dispositivo',
-      },
-      {
-        key: 'ip',
-        label: 'Dirección IP',
-        value: dev => dev.ip || '—',
-      },
-      {
-        key: 'mac',
-        label: 'Dirección MAC',
-        value: dev => dev.mac || '—',
-      },
-      {
-        key: 'serial',
-        label: 'Número de Serie / Service Tag',
-        value: dev => dev.serial || dev.raw?.serial || dev.omnivista?.serial || dev.raw?.serial_number || '—',
-      },
-      {
-        key: 'hostname',
-        label: 'Nombre de Equipo / Hostname',
-        value: dev => dev.hostname || dev.detected_device || dev.omnivista?.device_name || dev.name || '—',
-      },
-      {
-        key: 'user',
-        label: 'Usuario Detectado',
-        value: dev => dev.user || dev.omnivista?.account || '—',
-      },
-      {
-        key: 'os',
-        label: 'Sistema Operativo',
-        value: dev => dev.os || dev.omnivista?.os || dev.raw?.os_name || '—',
-      },
-      {
-        key: 'interface',
-        label: 'Interfaz',
-        value: dev => dev.interface || dev.vlan || '—',
-      },
-      {
-        key: 'vendor',
-        label: 'Fabricante / Hardware',
-        value: dev => dev.vendor || dev.brand || '—',
-      },
-      {
-        key: 'status',
-        label: 'Estado',
-        value: dev => statusNames[dev.status] || (dev.status === 'online' ? 'En línea' : dev.status || '—'),
-      },
-      {
-        key: 'uptime',
-        label: 'Tiempo Conectado (Uptime)',
-        value: dev => dev.uptime_seconds != null ? formatUptime(dev.uptime_seconds) : '—',
-      },
-      {
-        key: 'location',
-        label: 'Ubicación Física',
-        value: dev => dev.location || dev.omnivista?.location || formatLocation(dev.location, dev.vendor) || '—',
-      },
-      {
-        key: 'fortigate',
-        label: 'FortiGate de Procedencia',
-        value: dev => dev.fortigate || '—',
-      },
-    ];
+    const sheets = buildSupportSheets({
+      computers,
+      printers,
+      includeComputers: exportComputers,
+      includePrinters: exportPrinters,
+      columns: SUPPORT_EXPORT_COLUMNS,
+    });
+
+    if (!sheets.length) return;
 
     let filename = 'listado-soporte-dispositivos';
     if (exportComputers && !exportPrinters) filename = 'listado-soporte-computadoras';
     else if (!exportComputers && exportPrinters) filename = 'listado-soporte-impresoras';
 
-    downloadCsv(filename, columns, rows);
+    downloadExcel(filename, sheets);
     setExportOpen(false);
   };
+  const handleExportCsv = handleExportExcel;
 
   return (
     <>
@@ -633,7 +575,7 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
         updatedAt={data.updatedAt}
       >
         <div className="support-heading-metrics">
-          <span className="network-tag">{number(segments.length)} redes</span>
+          <span className="network-tag">{number(supportSegments.length)} redes</span>
           <span className="network-tag text-success">{number(computers.length)} computadoras en línea</span>
           <span className="network-tag text-info">{number(printers.length)} impresoras en línea</span>
           <Button
@@ -642,7 +584,7 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
             className="support-export-action"
             onClick={() => setExportOpen(true)}
           >
-            Exportar listado CSV
+            Exportar listado Excel
           </Button>
           <Button icon={RefreshCw} busy={loading} onClick={refresh}>Actualizar</Button>
         </div>
@@ -909,11 +851,11 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
         </div>
       </section>
 
-      {/* Dialog interactivo para exportación CSV con checkboxes */}
+      {/* Dialog interactivo para exportación Excel con hojas separadas */}
       <Dialog
         open={exportOpen}
         onClose={() => setExportOpen(false)}
-        title="Exportar listado de dispositivos (CSV)"
+        title="Exportar listado de dispositivos (Excel)"
         footer={
           <div className="dialog-actions">
             <Button onClick={() => setExportOpen(false)}>Cancelar</Button>
@@ -921,15 +863,15 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
               variant="primary"
               icon={Download}
               disabled={!exportComputers && !exportPrinters}
-              onClick={handleExportCsv}
+              onClick={handleExportExcel}
             >
-              Descargar archivo CSV
+              Descargar archivo Excel
             </Button>
           </div>
         }
       >
         <p className="dialog-description">
-          Descarga el reporte de inventario cotejado con FortiGate.
+          Descarga el reporte de inventario en formato Excel (.xls). Al seleccionar ambas opciones (&ldquo;Ambos&rdquo;), computadoras e impresoras se descargarán en un único archivo Excel separadas en hojas independientes (&ldquo;Computadoras&rdquo; e &ldquo;Impresoras&rdquo;).
         </p>
 
         <div className="support-export-modal-body">
@@ -994,13 +936,13 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
 
           {!exportComputers && !exportPrinters && (
             <Notice tone="warning" title="Sin categorías seleccionadas">
-              Selecciona al menos una categoría para poder descargar el listado CSV.
+              Selecciona al menos una categoría para poder descargar el listado Excel.
             </Notice>
           )}
 
           <div className="support-export-note">
             <small className="text-muted">
-              Se exportarán las columnas cotejadas: Tipo de Dispositivo, IP, MAC, Número de Serie, Hostname, Usuario, SO, Interfaz, Fabricante, Estado, Uptime, Ubicación Física y FortiGate.
+              El archivo contiene las 8 columnas requeridas: Tipo de Dispositivo, Dirección IP, Dirección MAC, Nombre de Equipo / Hostname, Interfaz, Tiempo Conectado, Ubicación y Piso.
             </small>
           </div>
         </div>

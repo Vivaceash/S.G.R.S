@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { Search, X, ChevronLeft, ChevronRight, ArrowDownUp, Download, Info, RefreshCw, LoaderCircle, Eye, EyeOff } from 'lucide-react';
-import { makeCsv, number, paginate, selectRows, statusNames, statusTone } from './domain.mjs';
+import { EXCEL_MIME_TYPE, makeCsv, makeExcelWorkbook, number, paginate, selectRows, statusNames, statusTone } from './domain.mjs';
 
 export function Button({ children, icon: Icon, variant = 'secondary', busy = false, className = '', ...props }) {
   return <button type="button" {...props} disabled={props.disabled || busy} aria-busy={busy || undefined} className={`button button-${variant} ${className}`}>
@@ -97,6 +97,12 @@ export function downloadCsv(name, columns, rows) {
   const url = URL.createObjectURL(new Blob([makeCsv(columns, rows)], { type: 'text/csv;charset=utf-8' }));
   const link = document.createElement('a');
   link.href = url; link.download = `${name}.csv`; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+export function downloadExcel(name, sheets) {
+  const url = URL.createObjectURL(new Blob([makeExcelWorkbook(sheets)], { type: EXCEL_MIME_TYPE }));
+  const link = document.createElement('a');
+  link.href = url; link.download = name.endsWith('.xls') ? name : `${name}.xls`; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 export function DataTable({ title, rows, columns, state, noun = 'registros', pageSize = 10, toolbar, exportable = false, loading = false, error, onRetry, emptyText, rowKey = 'id', onRowClick, rowClassName }) {

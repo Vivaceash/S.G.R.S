@@ -74,6 +74,50 @@ export function getSegmentDevices(devices, segment) {
   return devices.filter(device => deviceInSegment(device, segment));
 }
 
+export const SUPPORT_ALLOWED_NETWORKS = ['meztli', 'tona', 'tlalo', 'quetzal', 'ehecatl'];
+
+const SUPPORT_VLAN_MAP = {
+  '90': 'quetzal',
+  '91': 'tlalo',
+  '92': 'ehecatl',
+  '93': 'tona',
+  '94': 'meztli',
+};
+
+export function normalizeText(str) {
+  return String(str ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/quetzac/g, 'quetzalc');
+}
+
+export function isSupportSegment(segment) {
+  if (!segment || typeof segment !== 'object') return false;
+
+  let text = [
+    segment.name,
+    segment.interface,
+    segment.vlan,
+    segment.description,
+  ].map(normalizeText).join(' ');
+
+  const vlanStr = String(segment.vlan ?? '');
+  for (const [vlanNum, alias] of Object.entries(SUPPORT_VLAN_MAP)) {
+    if (new RegExp(`(?:^|\\bvlan[\\s-_]*|\\b)${vlanNum}\\b`, 'i').test(vlanStr) ||
+        new RegExp(`\\bvlan[\\s-_]*${vlanNum}\\b`, 'i').test(text)) {
+      text += ` ${alias}`;
+    }
+  }
+
+  return SUPPORT_ALLOWED_NETWORKS.some(pattern => text.includes(pattern));
+}
+
+export function getSupportSegments(segments) {
+  if (!Array.isArray(segments)) return [];
+  return segments.filter(isSupportSegment);
+}
+
 export function formatDeviceType(typeOrDevice, osOrName = '', nameOrVendor = '', vendorParam = '') {
   let type = '';
   let os = '';
@@ -238,6 +282,149 @@ export function csvCell(value) {
 export function makeCsv(columns, rows) {
   return '\uFEFF' + [columns.map(c => csvCell(c.label)).join(','), ...rows.map(row => columns.map(c => csvCell(c.value ? c.value(row) : row[c.key])).join(','))].join('\r\n');
 }
+
+export const EXCEL_MIME_TYPE = 'application/vnd.ms-excel;charset=utf-8';
+
+// Neutralizes spreadsheet formulas/leading controls and escapes XML special characters
+export function escapeXml(value) {
+  let text = String(value ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+  if (/^[\s]*[=+@-]/u.test(text) || /^[\t\r\n]/u.test(text)) {
+    text = `'${text}`;
+  }
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
+}
+
+export function sanitizeWorksheetName(name, fallback = 'Hoja') {
+  const clean = String(name || fallback)
+    .replace(/[:\\/?*[\]]/g, '')
+    .trim()
+    .slice(0, 31);
+  return clean || fallback;
+}
+
+export const SUPPORT_EXPORT_COLUMNS = [
+  {
+    key: 'device_type',
+    label: 'Tipo de Dispositivo',
+    value: dev => formatDeviceType(dev.type, dev.os || dev.omnivista?.os || dev.raw?.os_name, dev.hostname || dev.detected_device || dev.omnivista?.device_name || dev.name, dev.vendor) || 'Dispositivo',
+  },
+  {
+    key: 'ip',
+    label: 'Dirección IP',
+    value: dev => dev.ip || '—',
+  },
+  {
+    key: 'mac',
+    label: 'Dirección MAC',
+    value: dev => dev.mac || '—',
+  },
+  {
+    key: 'hostname',
+    label: 'Nombre de Equipo / Hostname',
+    value: dev => dev.hostname || dev.detected_device || dev.omnivista?.device_name || dev.name || '—',
+  },
+  {
+    key: 'interface',
+    label: 'Interfaz',
+    value: dev => dev.interface || dev.vlan || '—',
+  },
+  {
+    key: 'uptime',
+    label: 'Tiempo Conectado',
+    value: dev => dev.uptime_seconds != null ? formatUptime(dev.uptime_seconds) : (dev.uptime ? String(dev.uptime) : '—'),
+  },
+  {
+    key: 'location',
+    label: 'Ubicación',
+    value: () => '',
+  },
+  {
+    key: 'floor',
+    label: 'Piso',
+    value: () => '',
+  },
+];
+
+export function buildSupportSheets({ computers = [], printers = [], includeComputers = true, includePrinters = true, columns = SUPPORT_EXPORT_COLUMNS } = {}) {
+  const sheets = [];
+  if (includeComputers) {
+    sheets.push({
+      name: 'Computadoras',
+      columns,
+      rows: computers,
+    });
+  }
+  if (includePrinters) {
+    sheets.push({
+      name: 'Impresoras',
+      columns,
+      rows: printers,
+    });
+  }
+  return sheets;
+}
+
+export function makeExcelWorkbook(sheets) {
+  const sheetList = Array.isArray(sheets) ? sheets : (sheets && typeof sheets === 'object' ? [sheets] : []);
+  const validSheets = sheetList.filter(s => s && (Array.isArray(s.rows) || Array.isArray(s.columns)));
+
+  const worksheetsXml = (validSheets.length ? validSheets : [{ name: 'Datos', columns: SUPPORT_EXPORT_COLUMNS, rows: [] }]).map((sheet, index) => {
+    const sheetName = escapeXml(sanitizeWorksheetName(sheet.name || `Hoja${index + 1}`));
+    const columns = Array.isArray(sheet.columns) && sheet.columns.length ? sheet.columns : SUPPORT_EXPORT_COLUMNS;
+    const rows = Array.isArray(sheet.rows) ? sheet.rows : [];
+
+    const headerCells = columns.map(c => {
+      const label = c.label != null ? String(c.label) : (c.key != null ? String(c.key) : '');
+      return `<Cell ss:StyleID="Header"><Data ss:Type="String">${escapeXml(label)}</Data></Cell>`;
+    }).join('');
+
+    const headerRow = `    <Row ss:AutoFitHeight="0">\n      ${headerCells}\n    </Row>`;
+
+    const dataRows = rows.map(row => {
+      const cells = columns.map(c => {
+        const val = typeof c.value === 'function' ? c.value(row) : (row?.[c.key] ?? '');
+        const strVal = val == null ? '' : String(val);
+        return `<Cell><Data ss:Type="String">${escapeXml(strVal)}</Data></Cell>`;
+      }).join('');
+      return `    <Row ss:AutoFitHeight="0">\n      ${cells}\n    </Row>`;
+    });
+
+    const allRows = [headerRow, ...dataRows].join('\n');
+
+    return `  <Worksheet ss:Name="${sheetName}">\n    <Table>\n${allRows}\n    </Table>\n  </Worksheet>`;
+  }).join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>\n`
+    + `<?mso-application progid="Excel.Sheet"?>\n`
+    + `<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"\n`
+    + ` xmlns:o="urn:schemas-microsoft-com:office:office"\n`
+    + ` xmlns:x="urn:schemas-microsoft-com:office:excel"\n`
+    + ` xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"\n`
+    + ` xmlns:html="http://www.w3.org/TR/REC-html40">\n`
+    + `  <Styles>\n`
+    + `    <Style ss:ID="Default" ss:Name="Normal">\n`
+    + `      <Alignment ss:Vertical="Bottom"/>\n`
+    + `      <Borders/>\n`
+    + `      <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#000000"/>\n`
+    + `      <Interior/>\n`
+    + `      <NumberFormat/>\n`
+    + `      <Protection/>\n`
+    + `    </Style>\n`
+    + `    <Style ss:ID="Header">\n`
+    + `      <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#FFFFFF" ss:Bold="1"/>\n`
+    + `      <Interior ss:Color="#1E293B" ss:Pattern="Solid"/>\n`
+    + `      <Alignment ss:Vertical="Center" ss:Horizontal="Left"/>\n`
+    + `    </Style>\n`
+    + `  </Styles>\n`
+    + `${worksheetsXml}\n`
+    + `</Workbook>`;
+}
+
 export function selectRows(rows, query, filters = {}, sortKey = '', ascending = true) {
   const q = query.trim().toLocaleLowerCase(LOCALE);
   return rows.filter(row => Object.entries(filters).every(([key, value]) => !value || String(row[key] ?? '') === value))
