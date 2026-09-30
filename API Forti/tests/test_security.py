@@ -40,6 +40,24 @@ async def test_unauthenticated_request_rejected():
 
 
 @pytest.mark.anyio
+async def test_public_health_and_dhcp_pools_without_auth():
+    """Verifica que /api/v1/health y /api/v1/network/dhcp-pools no requieran autenticación"""
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        r_health = await client.get("/api/v1/health")
+        assert r_health.status_code == 200
+
+        r_pools = await client.get("/api/v1/network/dhcp-pools")
+        assert r_pools.status_code in (200, 503)
+        assert r_pools.status_code != 401
+        assert r_pools.status_code != 403
+
+        # Los demás endpoints de red deben seguir requiriendo autenticación
+        r_leases = await client.get("/api/v1/network/dhcp-leases")
+        assert r_leases.status_code == 401
+
+
+@pytest.mark.anyio
 async def test_invalid_api_key_rejected():
     """2. Rechazo de clave de API incorrecta (403)"""
     transport = httpx.ASGITransport(app=app)
@@ -288,6 +306,6 @@ async def test_jwt_is_not_accepted_when_2fa_is_disabled():
     token = create_jwt_session("TestOperator")
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/v1/health", headers={"Authorization": f"Bearer {token}"})
+        response = await client.get("/api/v1/devices", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 403
 

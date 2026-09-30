@@ -7,17 +7,21 @@ from app.schemas.common import ApiResponse
 from app.security import mask_sensitive_ip
 
 router = APIRouter(
-    prefix="/api/v1/system",
     tags=["Sistema y Diagnóstico"],
-    dependencies=[Depends(verify_api_key)],
 )
 
 
 @router.get(
-    "/health",
+    "/api/v1/system/health",
     response_model=ApiResponse[Dict[str, Any]],
     summary="Verificar Estado de Salud y Enlace",
-    description="Comprueba la conectividad con OmniVista 2500, latencia y disponibilidad del servicio. Requiere autenticación.",
+    description="Comprueba la conectividad con OmniVista 2500, latencia y disponibilidad del servicio.",
+)
+@router.get(
+    "/api/v1/health",
+    response_model=ApiResponse[Dict[str, Any]],
+    summary="Verificar Estado de Salud y Enlace (Alias /api/v1/health)",
+    description="Comprueba la conectividad con OmniVista 2500, latencia y disponibilidad del servicio.",
 )
 def health_check(
     service: OmniVistaService = Depends(get_ov_service)
@@ -37,10 +41,11 @@ def health_check(
 
 
 @router.get(
-    "/version",
+    "/api/v1/system/version",
     response_model=ApiResponse[Any],
     summary="Versión del NMS OmniVista 2500",
     description="Obtiene información detallada de versión del sistema OmniVista NMS. Requiere autenticación.",
+    dependencies=[Depends(verify_api_key)],
 )
 def get_system_version(
     service: OmniVistaService = Depends(get_ov_service)

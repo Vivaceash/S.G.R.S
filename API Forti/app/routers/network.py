@@ -16,7 +16,6 @@ from app.schemas.network import (
 router = APIRouter(
     prefix="/network",
     tags=["Red, DHCP e Interfaces"],
-    dependencies=[Depends(verify_api_key)],
 )
 
 
@@ -162,6 +161,7 @@ async def get_dhcp_pools(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9
     "/dhcp-leases",
     response_model=BaseResponse[List[DHCPLeaseItem]],
     summary="Listar concesiones DHCP activas",
+    dependencies=[Depends(verify_api_key)],
 )
 async def get_dhcp_leases(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar")):
     """
@@ -197,6 +197,7 @@ async def get_dhcp_leases(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-
     "/arp-table",
     response_model=BaseResponse[List[ARPEntry]],
     summary="Consultar tabla de vecinos ARP",
+    dependencies=[Depends(verify_api_key)],
 )
 async def get_arp_table(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar")):
     """
@@ -230,6 +231,7 @@ async def get_arp_table(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_
     "/interfaces",
     response_model=BaseResponse[List[InterfaceItem]],
     summary="Consultar estado de las interfaces de red",
+    dependencies=[Depends(verify_api_key)],
 )
 async def get_interfaces_status(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar")):
     """

@@ -107,13 +107,20 @@ def test_unauthorized_access_rejected():
     res_prop = client.get("/api/v1/company-properties")
     assert res_prop.status_code == 401
 
-    # Sistema / Salud profundo
-    res_health = client.get("/api/v1/system/health")
-    assert res_health.status_code == 401
-
     # Sistema / Versión
     res_ver = client.get("/api/v1/system/version")
     assert res_ver.status_code == 401
+
+
+def test_public_health_endpoints_without_auth():
+    """Verifica que /api/v1/health y /api/v1/system/health no requieran autenticación"""
+    res_h1 = client.get("/api/v1/health")
+    assert res_h1.status_code == 200
+    assert "data" in res_h1.json()
+
+    res_h2 = client.get("/api/v1/system/health")
+    assert res_h2.status_code == 200
+    assert "data" in res_h2.json()
 
 
 def test_invalid_api_key_rejected():
