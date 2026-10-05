@@ -294,8 +294,11 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 with _file_lock:
                     with open(IDFS_FILE, 'r', encoding='utf-8') as f:
                         data = json.load(f)
-                self._send_json([{**idf, 'incidents': [{**r, 'record_key': report_key(r)} for r in idf.get('incidents', [])]}
-                                 for idf in cabinets_with_documentary(data)])
+                self._send_json([{
+                    **idf,
+                    'mobile_token': self.mobile_token(idf.get('id')),
+                    'incidents': [{**r, 'record_key': report_key(r)} for r in idf.get('incidents', [])]
+                } for idf in cabinets_with_documentary(data)])
             except Exception as e:
                 self._send_json({"error": str(e)}, 500)
 
@@ -452,8 +455,11 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                     serial = '—'
                     if isinstance(serial_info, list) and serial_info and isinstance(serial_info[0], dict):
                         serial = serial_info[0].get('chassisSerialNumber') or '—'
-                    st = str(row.get('status') or 'Down').strip()
-                    is_online = st.lower() == 'up'
+                    # La pantalla nativa de OmniVista usa Down para disponibilidad.
+                    # Warning es una condición administrativa y no una caída de enlace.
+                    st = str(row.get('status') or 'Unknown').strip()
+                    normalized_status = st.casefold()
+                    ap_status = 'offline' if normalized_status == 'down' else 'online'
                     clients = others.get('noOfClients', 0)
                     try:
                         clients = int(clients)
@@ -476,7 +482,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                         "ip": str(row.get("ipAddress") or "—"),
                         "mac": str(row.get("macAddress") or "—"),
                         "serial": serial,
-                        "status": "online" if is_online else "offline",
+                        "status": ap_status,
                         "status_raw": st,
                         "location": location_str,
                         "idf_tag": idf_prefix,
@@ -488,7 +494,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                     })
                 total = len(aps)
                 online = sum(1 for a in aps if a['status'] == 'online')
-                offline = total - online
+                offline = sum(1 for a in aps if a['status'] == 'offline')
                 total_clients = sum(a['clients'] for a in aps)
                 self._send_json({
                     "success": True,
@@ -805,14 +811,27 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
 
         # 9. Detección de IP de red para QR
         elif path == '/api/ip':
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            try:
-                s.connect(('10.255.255.255', 1))
-                ip = s.getsockname()[0]
-            except Exception:
-                ip = '127.0.0.1'
-            finally:
-                s.close()
+            ip = '127.0.0.1'
+            for target in [('10.255.255.255', 1), ('8.8.8.8', 80), ('1.1.1.1', 80)]:
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s.connect(target)
+                    cand = s.getsockname()[0]
+                    s.close()
+                    if cand and not cand.startswith('127.'):
+                        ip = cand
+                        break
+                except Exception:
+                    pass
+            if ip == '127.0.0.1':
+                try:
+                    _, _, ips = socket.gethostbyname_ex(socket.gethostname())
+                    for cand in ips:
+                        if cand and not cand.startswith('127.') and not cand.startswith('169.254.'):
+                            ip = cand
+                            break
+                except Exception:
+                    pass
             active_port = getattr(self.server, "server_port", PORT)
             self._send_json({"ip": f"{ip}:{active_port}"})
 
@@ -962,7 +981,7 @@ if __name__ == "__main__":
     started = False
     for p in candidate_ports:
         try:
-            server = ThreadedHTTPServer((os.environ.get("DASHBOARD_HOST", "127.0.0.1"), p), Handler)
+            server = ThreadedHTTPServer((os.environ.get("DASHBOARD_HOST", "0.0.0.0"), p), Handler)
             PORT = p
             print("====================================================")
             print(f"  S.G.R.S Servidor Multi-hilo Activo en Puerto {PORT}")

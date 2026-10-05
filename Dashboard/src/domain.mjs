@@ -232,7 +232,7 @@ export const statusNames = {
 };
 export const statusTone = status => ['online', 'normal', 'available', 'approved', 'resolved'].includes(status) ? 'success'
   : ['warning', 'pending', 'low', 'in_progress'].includes(status) ? 'warning'
-    : ['critical', 'rejected', 'open'].includes(status) ? 'danger' : status === 'review' ? 'info' : 'neutral';
+    : ['offline', 'critical', 'rejected', 'open'].includes(status) ? 'danger' : status === 'review' ? 'info' : 'neutral';
 
 export function getUtilizationTone(percent) {
   const p = Number(percent) || 0;

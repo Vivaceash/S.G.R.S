@@ -91,16 +91,19 @@ def save_asset(body, actor):
         raise access.AccessError(404, 'El recurso ya no está en este catálogo. Actualiza la consulta.')
     if original['dataset'] == 'cctv_original':
         raise access.AccessError(403, 'El catálogo original se conserva como referencia histórica.')
-    allowed = {'name', 'idf_id', 'location', 'rack', 'ports', 'notes'}
+    # El estado de baja es una anotación local de inventario. Puede conservarse
+    # aunque una importación histórica use una etiqueta de dataset distinta.
+    allowed = {'name', 'idf_id', 'location', 'rack', 'ports', 'notes', 'decommissioned'}
     if original['dataset'] == 'cctv':
         allowed |= {'relocated', 'destination'}
     fields = body.get('fields')
     if not isinstance(fields, dict) or not fields or set(fields) - allowed:
+        print(f"[inventory] Rechazada actualización de {asset_id}: dataset={original.get('dataset')!r}, campos={sorted(fields) if isinstance(fields, dict) else type(fields).__name__}", flush=True)
         raise access.AccessError(422, 'Solo se pueden corregir los datos físicos del recurso.')
     for key, value in fields.items():
-        if key == 'relocated':
+        if key in {'relocated', 'decommissioned'}:
             if not isinstance(value, bool):
-                raise access.AccessError(422, 'Indica si la cámara fue reubicada.')
+                raise access.AccessError(422, 'Indica un estado válido para la cámara.')
         elif not isinstance(value, str) or len(value) > (1000 if key == 'notes' else 240):
             raise access.AccessError(422, 'Revisa la longitud y el formato de los campos.')
     fields = {k: v.strip() if isinstance(v, str) else v for k, v in fields.items()}
@@ -123,6 +126,56 @@ def save_asset(body, actor):
                    (asset_id, version + 1, json.dumps(saved, ensure_ascii=False), now))
         access.audit(db, actor, 'inventory.physical.update', asset_id)
     return {'asset': {**original, **saved, 'documented': original, 'version': f'{revision}:{version + 1}', 'corrected_at': now}}
+
+
+AP_MAP_FLOORS = {'planta-baja', 'piso-1', 'piso-2', 'piso-3'}
+
+
+def ap_map_positions():
+    with access.database() as db:
+        rows = [dict(row) for row in db.execute(
+            'SELECT ap_id,ap_mac,ap_serial,floor_id,x,y,label,updated_at,updated_by '
+            'FROM ap_map_positions ORDER BY floor_id, ap_id')]
+    return {'positions': rows, 'floors': sorted(AP_MAP_FLOORS)}
+
+
+def save_ap_map_position(body, actor):
+    if not isinstance(body, dict):
+        raise access.AccessError(422, 'La posición del punto de acceso no es válida.')
+    ap_id = str(body.get('ap_id') or '').strip()
+    floor_id = str(body.get('floor_id') or '').strip()
+    label = str(body.get('label') or '').strip()
+    if not ap_id or len(ap_id) > 240 or floor_id not in AP_MAP_FLOORS or len(label) > 240:
+        raise access.AccessError(422, 'Revisa el punto de acceso, el piso y la etiqueta.')
+    try:
+        x, y = float(body.get('x')), float(body.get('y'))
+    except (TypeError, ValueError):
+        raise access.AccessError(422, 'Indica una posición válida sobre el plano.') from None
+    if not 0 <= x <= 100 or not 0 <= y <= 100:
+        raise access.AccessError(422, 'La posición debe estar dentro del plano.')
+    ap_mac, ap_serial = mac(body.get('ap_mac')), serial(body.get('ap_serial'))
+    now = datetime.now(timezone.utc).isoformat()
+    position = {'ap_id': ap_id, 'ap_mac': ap_mac, 'ap_serial': ap_serial, 'floor_id': floor_id,
+                'x': round(x, 4), 'y': round(y, 4), 'label': label, 'updated_at': now, 'updated_by': actor}
+    with access.database(write=True) as db:
+        db.execute('INSERT INTO ap_map_positions(ap_id,ap_mac,ap_serial,floor_id,x,y,label,updated_at,updated_by) '
+                   'VALUES(:ap_id,:ap_mac,:ap_serial,:floor_id,:x,:y,:label,:updated_at,:updated_by) '
+                   'ON CONFLICT(ap_id) DO UPDATE SET ap_mac=excluded.ap_mac,ap_serial=excluded.ap_serial, '
+                   'floor_id=excluded.floor_id,x=excluded.x,y=excluded.y,label=excluded.label, '
+                   'updated_at=excluded.updated_at,updated_by=excluded.updated_by', position)
+        access.audit(db, actor, 'ap.map.position.saved', ap_id)
+    return {'position': position}
+
+
+def remove_ap_map_position(body, actor):
+    ap_id = str((body or {}).get('ap_id') or '').strip()
+    if not ap_id or len(ap_id) > 240:
+        raise access.AccessError(422, 'Indica el punto de acceso que se retirará del plano.')
+    with access.database(write=True) as db:
+        if db.execute('DELETE FROM ap_map_positions WHERE ap_id=?', (ap_id,)).rowcount == 0:
+            raise access.AccessError(404, 'Ese punto de acceso no tiene una posición guardada.')
+        access.audit(db, actor, 'ap.map.position.removed', ap_id)
+    return {'removed': ap_id}
 
 
 def network_records(provider, payload):
