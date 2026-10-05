@@ -1,16 +1,19 @@
 // Explicit, isolated design fixtures. Never used as an automatic fallback for an API failure.
 export function createDemo() {
   const segments = [
-    { id: 10, name: 'Quetzalcóatl', assigned: 142, connected: 118, average: 125, description: 'Segmento ejecutivo y administrativo · Recursos institucionales' },
-    { id: 20, name: 'Tonatiuh', assigned: 218, connected: 197, average: 204, description: 'Segmento clínico y médico · Sistemas de salud y expedientes' },
-    { id: 30, name: 'Ehécatl', assigned: 89, connected: 72, average: 78, description: 'Segmento operativo general · Recursos compartidos' },
+    { id: 10, name: 'Quetzalcóatl', vlan: 'VLAN 90', assigned: 142, connected: 118, average: 125, description: 'Segmento ejecutivo y administrativo · Recursos institucionales' },
+    { id: 20, name: 'Tonatiuh', vlan: 'VLAN 93', assigned: 218, connected: 197, average: 204, description: 'Segmento clínico y médico · Sistemas de salud y expedientes' },
+    { id: 30, name: 'Ehécatl', vlan: 'VLAN 92', assigned: 89, connected: 72, average: 78, description: 'Segmento operativo general · Recursos compartidos' },
+    { id: 40, name: 'Tláloc', vlan: 'VLAN 91', assigned: 165, connected: 140, average: 150, description: 'Segmento docente y académico · Aulas y laboratorios' },
+    { id: 50, name: 'Meztli', vlan: 'VLAN 94', assigned: 45, connected: 38, average: 40, description: 'Segmento de servicios y laboratorios · Investigación' },
+    { id: 60, name: 'CCTV y Seguridad', vlan: 'VLAN 80', assigned: 28, connected: 26, average: 27, description: 'Circuito cerrado de televisión y videovigilancia institucional' },
   ].map(s => {
     const pct = Math.round(s.assigned / 254 * 100);
     const satStatus = pct >= 80 ? 'critical' : pct >= 50 ? 'warning' : 'normal';
     return {
       ...s,
       interface: s.name,
-      vlan: `VLAN ${s.id}`,
+      vlan: s.vlan || `VLAN ${s.id}`,
       subnet: `192.168.${s.id}.0/24`,
       default_gateway: `192.168.${s.id}.1`,
       netmask: '255.255.255.0',

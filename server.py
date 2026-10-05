@@ -29,7 +29,7 @@ from dashboard_reports import ReportRoutes, report_key, tagged_reports
 from integration_health import upstream_healthy
 from dashboard_history import start_collector
 from dashboard_inventory import cabinets_with_documentary
-from dashboard_device_history import record_device_presence, normalize_mac, format_device_type
+from dashboard_device_history import record_device_presence, normalize_mac, format_device_type, format_uptime
 
 # Lock global para proteger lecturas/escrituras concurrentes a archivos JSON
 _file_lock = threading.Lock()
@@ -612,44 +612,113 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
             if params.get("online_only") in (["1"], ["true"], ["True"]) or params.get("status") == ["online"]:
                 devices_data = [d for d in devices_data if d.get("status") == "online"]
 
-            # Soporte de exportación CSV para listados (incluyendo computadoras e impresoras)
-            if clean_path == '/api/devices/export' or params.get("export") == ["csv"]:
+            # Soporte de exportación para listados (incluyendo computadoras e impresoras)
+            if clean_path == '/api/devices/export' or params.get("export") in (["csv"], ["excel"], ["xls"]):
+                fmt = params.get("format", [params.get("export", ["csv"])[0]])[0].lower()
+                fn_type = params.get("type", ["dispositivos"])[0].lower()
+
+                export_cols = [
+                    "Tipo de Dispositivo",
+                    "Dirección IP",
+                    "Dirección MAC",
+                    "Nombre de Equipo / Hostname",
+                    "Interfaz",
+                    "Tiempo Conectado",
+                    "Ubicación",
+                    "Piso"
+                ]
+
+                def _row_for_device(d):
+                    uptime_val = d.get("uptime_seconds")
+                    uptime_str = format_uptime(uptime_val) if uptime_val is not None else (d.get("uptime") or "—")
+                    return [
+                        format_device_type(d) or d.get("type") or "Desconocido",
+                        d.get("ip") or "—",
+                        d.get("mac") or "—",
+                        d.get("hostname") or d.get("detected_device") or d.get("name") or "—",
+                        d.get("interface") or d.get("vlan") or "—",
+                        uptime_str,
+                        "",
+                        ""
+                    ]
+
+                if fmt in ("excel", "xls"):
+                    def _xml_escape(val):
+                        s = str(val or "").replace("\x00", "")
+                        if re.match(r"^[\s]*[=+@-]", s) or re.match(r"^[\t\r\n]", s):
+                            s = f"'{s}"
+                        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&apos;")
+
+                    raw_type = params.get("type", [""])[0].strip().lower()
+                    sheets_data = []
+                    if raw_type == "computadora":
+                        sheets_data.append(("Computadoras", [_row_for_device(d) for d in devices_data]))
+                    elif raw_type == "impresora":
+                        sheets_data.append(("Impresoras", [_row_for_device(d) for d in devices_data]))
+                    else:
+                        comps = [_row_for_device(d) for d in devices_data if (format_device_type(d) == "Computadora" or d.get("type") == "Computadora")]
+                        prints = [_row_for_device(d) for d in devices_data if (format_device_type(d) == "Impresora" or d.get("type") == "Impresora")]
+                        if comps:
+                            sheets_data.append(("Computadoras", comps))
+                        if prints:
+                            sheets_data.append(("Impresoras", prints))
+                        if not sheets_data:
+                            sheets_data.append(("Dispositivos", [_row_for_device(d) for d in devices_data]))
+
+                    xml_parts = [
+                        '<?xml version="1.0" encoding="UTF-8"?>',
+                        '<?mso-application progid="Excel.Sheet"?>',
+                        '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"',
+                        ' xmlns:o="urn:schemas-microsoft-com:office:office"',
+                        ' xmlns:x="urn:schemas-microsoft-com:office:excel"',
+                        ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"',
+                        ' xmlns:html="http://www.w3.org/TR/REC-html40">',
+                        '  <Styles>',
+                        '    <Style ss:ID="Default" ss:Name="Normal">',
+                        '      <Alignment ss:Vertical="Bottom"/>',
+                        '      <Borders/>',
+                        '      <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#000000"/>',
+                        '      <Interior/>',
+                        '      <NumberFormat/>',
+                        '      <Protection/>',
+                        '    </Style>',
+                        '    <Style ss:ID="Header">',
+                        '      <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#FFFFFF" ss:Bold="1"/>',
+                        '      <Interior ss:Color="#1E293B" ss:Pattern="Solid"/>',
+                        '      <Alignment ss:Vertical="Center" ss:Horizontal="Left"/>',
+                        '    </Style>',
+                        '  </Styles>'
+                    ]
+                    for s_name, s_rows in sheets_data:
+                        xml_parts.append(f'  <Worksheet ss:Name="{_xml_escape(s_name)}">')
+                        xml_parts.append('    <Table>')
+                        hdr_cells = "".join(f'<Cell ss:StyleID="Header"><Data ss:Type="String">{_xml_escape(col)}</Data></Cell>' for col in export_cols)
+                        xml_parts.append(f'      <Row ss:AutoFitHeight="0">{hdr_cells}</Row>')
+                        for row in s_rows:
+                            r_cells = "".join(f'<Cell><Data ss:Type="String">{_xml_escape(c)}</Data></Cell>' for c in row)
+                            xml_parts.append(f'      <Row ss:AutoFitHeight="0">{r_cells}</Row>')
+                        xml_parts.append('    </Table>')
+                        xml_parts.append('  </Worksheet>')
+                    xml_parts.append('</Workbook>')
+                    excel_bytes = "\n".join(xml_parts).encode('utf-8')
+
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/vnd.ms-excel; charset=utf-8')
+                    self.send_header('Content-Disposition', f'attachment; filename="{fn_type}.xls"')
+                    self.send_header('Content-Length', str(len(excel_bytes)))
+                    self.end_headers()
+                    self.wfile.write(excel_bytes)
+                    return
+
                 out = io.StringIO()
                 out.write('\ufeff')
                 writer = csv.writer(out)
-                writer.writerow([
-                    "Dispositivo / Hostname",
-                    "IP",
-                    "MAC",
-                    "Número de Serie",
-                    "Usuario",
-                    "Sistema Operativo",
-                    "Interfaz",
-                    "Tipo",
-                    "Estado",
-                    "FortiGate",
-                    "Tiempo Conectado (s)",
-                    "Ubicación"
-                ])
+                writer.writerow(export_cols)
                 for d in devices_data:
-                    writer.writerow([
-                        d.get("hostname") or d.get("detected_device") or d.get("name") or "—",
-                        d.get("ip") or "—",
-                        d.get("mac") or "—",
-                        d.get("serial") or "—",
-                        d.get("user") or "—",
-                        d.get("os") or "—",
-                        d.get("interface") or "—",
-                        d.get("type") or "—",
-                        d.get("status") or "—",
-                        d.get("fortigate") or "ISSSTE-TLAJOMULCOB",
-                        d.get("uptime_seconds", 0),
-                        d.get("location") or "—",
-                    ])
+                    writer.writerow(_row_for_device(d))
                 csv_bytes = out.getvalue().encode('utf-8')
                 self.send_response(200)
                 self.send_header('Content-Type', 'text/csv; charset=utf-8')
-                fn_type = params.get("type", ["dispositivos"])[0].lower()
                 self.send_header('Content-Disposition', f'attachment; filename="{fn_type}.csv"')
                 self.send_header('Content-Length', str(len(csv_bytes)))
                 self.end_headers()

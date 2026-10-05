@@ -222,14 +222,35 @@ def test_server_api_devices_enriches_matched_fields_and_supports_filtering(tmp_p
     assert len(print_devs) == 1
     assert print_devs[0]["mac"] == "00:17:c8:12:34:56"
 
-    # 4. Test CSV export of printers
+    # 4. Test CSV export of printers with 8 standard columns
     h_export = DummyHandler("/api/devices/export?type=impresora")
     h_export.do_GET()
     assert h_export.headers_sent.get("Content-Type") == "text/csv; charset=utf-8"
     assert "impresora.csv" in h_export.headers_sent.get("Content-Disposition", "")
     csv_text = h_export.raw_output.decode("utf-8")
-    assert "Dispositivo / Hostname" in csv_text
+    assert "Tipo de Dispositivo" in csv_text
+    assert "Dirección IP" in csv_text
+    assert "Dirección MAC" in csv_text
+    assert "Nombre de Equipo / Hostname" in csv_text
+    assert "Interfaz" in csv_text
+    assert "Tiempo Conectado" in csv_text
+    assert "Ubicación" in csv_text
+    assert "Piso" in csv_text
     assert "IMP-URGENCIAS" in csv_text
+    # Verify eliminated old columns are not in CSV
+    assert "Número de Serie" not in csv_text
+    assert "Sistema Operativo" not in csv_text
+    assert "FortiGate" not in csv_text
+
+    # 5. Test Excel export of printers
+    h_excel = DummyHandler("/api/devices/export?type=impresora&format=excel")
+    h_excel.do_GET()
+    assert h_excel.headers_sent.get("Content-Type") == "application/vnd.ms-excel; charset=utf-8"
+    assert "impresora.xls" in h_excel.headers_sent.get("Content-Disposition", "")
+    excel_text = h_excel.raw_output.decode("utf-8")
+    assert '<?xml version="1.0" encoding="UTF-8"?>' in excel_text
+    assert 'Worksheet ss:Name="Impresoras"' in excel_text
+    assert 'Nombre de Equipo / Hostname' in excel_text
 
 
 def test_server_dhcp_pools_saturation_metrics(tmp_path, monkeypatch):

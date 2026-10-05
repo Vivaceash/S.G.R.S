@@ -95,6 +95,28 @@ def format_device_type(type_val="", os_val="", name_val="", vendor_val=""):
     return t
 
 
+def format_uptime(seconds):
+    """Format connection duration in seconds into human-readable duration (e.g. '< 1m', '45m', '5h 23m', '3d 14h')."""
+    if seconds is None:
+        return "—"
+    try:
+        sec = max(0, int(float(seconds)))
+    except (ValueError, TypeError):
+        return "—"
+    if sec < 60:
+        return "< 1m"
+    if sec < 3600:
+        mins = sec // 60
+        return f"{mins}m"
+    if sec < 86400:
+        hours = sec // 3600
+        mins = (sec % 3600) // 60
+        return f"{hours}h {mins}m"
+    days = sec // 86400
+    hours = (sec % 86400) // 3600
+    return f"{days}d {hours}h"
+
+
 def is_device_online(dev):
     """Determine whether a device is active/online from FortiGate or OmniVista metadata."""
     if not isinstance(dev, dict):

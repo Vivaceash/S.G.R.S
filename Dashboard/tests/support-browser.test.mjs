@@ -44,9 +44,25 @@ try {
   assert.ok(satBalanceText.includes('IPs Ocupadas'), 'Debe incluir IPs Ocupadas');
   assert.ok(satBalanceText.includes('IPs Libres'), 'Debe incluir IPs Libres');
 
-  // 3. Tarjetas de red con desglose
+  // 3. Tarjetas de red con desglose y verificación de 5 redes autorizadas
+  const headingNetTag = await page.locator('.support-heading-metrics .network-tag').first().textContent();
+  console.log('Heading network tag:', headingNetTag);
+  assert.equal(headingNetTag.trim(), '5 redes', 'La cabecera debe indicar exactamente 5 redes autorizadas');
+
+  const colBadge = await page.locator('.support-column-badge').first().textContent();
+  assert.equal(colBadge.trim(), '5', 'La insignia de columna 1 debe indicar 5 redes');
+
+  const networkCards = page.locator('.support-network-card');
+  assert.equal(await networkCards.count(), 5, 'Deben renderizarse exactamente las 5 redes de soporte autorizadas');
+
+  const networkColText = await page.locator('.support-column').first().textContent();
+  for (const name of ['Quetzalcóatl', 'Tonatiuh', 'Ehécatl', 'Tláloc', 'Meztli']) {
+    assert.ok(networkColText.includes(name), `Red ${name} debe estar visible en el panel de soporte`);
+  }
+  assert.equal(networkColText.includes('CCTV'), false, 'Red CCTV no debe renderizarse en el panel de soporte');
+
   const breakdownCount = await page.locator('.support-network-breakdown').count();
-  assert.ok(breakdownCount > 0, 'Las tarjetas de red deben incluir desglose explícito');
+  assert.equal(breakdownCount, 5, 'Las 5 tarjetas de red deben incluir desglose explícito');
 
   const firstBreakdownText = await page.locator('.support-network-breakdown').first().textContent();
   console.log('First network breakdown text:', firstBreakdownText);
@@ -54,17 +70,60 @@ try {
   assert.ok(firstBreakdownText.includes('IPs Libres'), 'Desglose debe mostrar IPs Libres');
   assert.ok(firstBreakdownText.includes('Capacidad'), 'Desglose debe mostrar Capacidad');
 
-  // 4. Botón y Diálogo de exportación CSV con checkboxes
+  // 3b. Búsqueda insensible a acentos y diacríticos en Columna 1 (BUG-01)
+  const networkSearchInput = page.locator('.support-column').first().locator('input[type="search"]');
+
+  // Buscar 'tlaloc' (sin acento)
+  await networkSearchInput.fill('tlaloc');
+  await page.waitForTimeout(100);
+  assert.equal(await networkCards.count(), 1, 'Buscar tlaloc sin acento debe encontrar exactamente 1 red');
+  assert.ok((await networkCards.first().textContent()).includes('Tláloc'), 'Debe mostrar la tarjeta de Tláloc');
+
+  // Buscar 'ehecatl' (sin acento)
+  await networkSearchInput.fill('ehecatl');
+  await page.waitForTimeout(100);
+  assert.equal(await networkCards.count(), 1, 'Buscar ehecatl sin acento debe encontrar exactamente 1 red');
+  assert.ok((await networkCards.first().textContent()).includes('Ehécatl'), 'Debe mostrar la tarjeta de Ehécatl');
+
+  // Buscar 'quetzal'
+  await networkSearchInput.fill('quetzal');
+  await page.waitForTimeout(100);
+  assert.equal(await networkCards.count(), 1, 'Buscar quetzal debe encontrar Quetzalcóatl');
+  assert.ok((await networkCards.first().textContent()).includes('Quetzalcóatl'), 'Debe mostrar la tarjeta de Quetzalcóatl');
+
+  // Buscar 'quetzalcoatl' (sin acento)
+  await networkSearchInput.fill('quetzalcoatl');
+  await page.waitForTimeout(100);
+  assert.equal(await networkCards.count(), 1, 'Buscar quetzalcoatl sin acento debe encontrar Quetzalcóatl');
+  assert.ok((await networkCards.first().textContent()).includes('Quetzalcóatl'), 'Debe mostrar la tarjeta de Quetzalcóatl');
+
+  // Buscar 'quetzacoatl' (variante fonética sin 'l')
+  await networkSearchInput.fill('quetzacoatl');
+  await page.waitForTimeout(100);
+  assert.equal(await networkCards.count(), 1, 'Buscar quetzacoatl debe encontrar Quetzalcóatl');
+  assert.ok((await networkCards.first().textContent()).includes('Quetzalcóatl'), 'Debe mostrar la tarjeta de Quetzalcóatl');
+
+  // Restablecer búsqueda
+  await networkSearchInput.fill('');
+  await page.waitForTimeout(100);
+  assert.equal(await networkCards.count(), 5, 'Limpiar búsqueda restablece las 5 redes');
+
+  // 4. Botón y Diálogo de exportación Excel con checkboxes
   const exportBtn = page.locator('.support-export-action');
-  assert.equal(await exportBtn.isVisible(), true, 'Botón de exportar CSV debe ser visible');
+  assert.equal(await exportBtn.isVisible(), true, 'Botón de exportar Excel debe ser visible');
+  const exportBtnText = await exportBtn.textContent();
+  assert.ok(exportBtnText.includes('Exportar listado Excel'), 'Texto de botón de exportar Excel correcto');
   await exportBtn.click();
   await page.waitForTimeout(400);
 
   const exportDialog = page.locator('dialog[open]');
-  assert.equal(await exportDialog.isVisible(), true, 'Diálogo de exportación CSV debe abrirse');
+  assert.equal(await exportDialog.isVisible(), true, 'Diálogo de exportación Excel debe abrirse');
 
   const dialogTitle = await exportDialog.locator('h2').textContent();
-  assert.ok(dialogTitle.includes('Exportar listado de dispositivos (CSV)'), 'Título de diálogo de exportación CSV correcto');
+  assert.ok(dialogTitle.includes('Exportar listado de dispositivos (Excel)'), 'Título de diálogo de exportación Excel correcto');
+
+  const downloadBtn = exportDialog.locator('button:has-text("Descargar archivo Excel")');
+  assert.equal(await downloadBtn.isVisible(), true, 'Botón de descarga Excel debe ser visible');
 
   const checkboxes = exportDialog.locator('input[type="checkbox"]');
   assert.equal(await checkboxes.count(), 2, 'Deben haber 2 checkboxes (computadoras e impresoras)');
