@@ -3,6 +3,7 @@ import hmac
 import json
 import os
 import re
+import socket
 import time
 from urllib.parse import urlsplit, parse_qs
 from integration_health import upstream_healthy
@@ -54,6 +55,28 @@ class AccessRoutes:
         local = {f"http://{host}:{port}" for host in ("localhost", "127.0.0.1")
                  for port in (3000, 3001, 3002, 5173, 4173)}
         origins = set(local)
+        # Auto-include host LAN interfaces (Wi-Fi, Ethernet) for QR code mobile access
+        try:
+            host_ips = set()
+            try:
+                _, _, ips = socket.gethostbyname_ex(socket.gethostname())
+                host_ips.update(ips)
+            except Exception:
+                pass
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("10.255.255.255", 1))
+                host_ips.add(s.getsockname()[0])
+                s.close()
+            except Exception:
+                pass
+            for ip in host_ips:
+                if ip and not ip.startswith("127.") and not ip.startswith("169.254."):
+                    origins.add(f"http://{ip}")
+                    for port in (3000, 3001, 3002, 5173, 4173):
+                        origins.add(f"http://{ip}:{port}")
+        except Exception:
+            pass
         if configured:
             origins.add(configured)
         if lan_origin:
@@ -82,9 +105,13 @@ class AccessRoutes:
         origins = self._origins()
         if "*" not in origins:
             allowed_hosts = {urlsplit(origin).netloc for origin in origins if origin != "*"}
-            if self.headers.get("Host") not in allowed_hosts:
+            req_host = self.headers.get("Host", "")
+            if req_host not in allowed_hosts and not any(req_host == h.split(":")[0] for h in allowed_hosts):
                 raise AccessError(403, "Origen no permitido. Configura SGRS_PUBLIC_ORIGIN para publicar el dashboard.")
             origin = self.headers.get("Origin")
+            if not origin and self.headers.get("Referer"):
+                ref = urlsplit(self.headers.get("Referer"))
+                origin = f"{ref.scheme}://{ref.netloc}"
             if (mutation and origin not in origins) or (origin and origin not in origins):
                 raise AccessError(403, "Esta solicitud debe realizarse desde el dashboard autorizado.")
         if mutation:
@@ -138,6 +165,8 @@ class AccessRoutes:
             if path == "/api/mobile-report":
                 self.mobile_report_context(self.path)
                 return True
+            if path == "/api/ip":
+                return False
             self._authorize()
             if path == '/api/inventory/catalog':
                 result = inventory.catalog()
@@ -148,6 +177,9 @@ class AccessRoutes:
                 return True
             if path == '/api/inventory/reconcile':
                 self._send_json(inventory.live_reconciliation(self.inventory_fetch))
+                return True
+            if path == '/api/aps/map':
+                self._send_json(inventory.ap_map_positions())
                 return True
             if path.startswith('/api/inventory/documents/'):
                 if 'inventory.export' not in self.identity['capabilities']:
@@ -246,6 +278,16 @@ class AccessRoutes:
                 if 'inventory.write' not in self.identity['capabilities']:
                     raise AccessError(403, 'No tienes permiso para modificar el inventario.')
                 self._send_json(inventory.save_asset(self._body(), actor))
+                return True
+            if path == '/api/aps/map/save':
+                if 'inventory.write' not in self.identity['capabilities']:
+                    raise AccessError(403, 'No tienes permiso para ubicar puntos de acceso en el plano.')
+                self._send_json(inventory.save_ap_map_position(self._body(), actor))
+                return True
+            if path == '/api/aps/map/remove':
+                if 'inventory.write' not in self.identity['capabilities']:
+                    raise AccessError(403, 'No tienes permiso para retirar puntos de acceso del plano.')
+                self._send_json(inventory.remove_ap_map_position(self._body(), actor))
                 return True
             if path == "/api/auth/logout":
                 with database(write=True) as db:

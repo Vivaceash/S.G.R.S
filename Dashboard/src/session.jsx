@@ -28,7 +28,7 @@ const demoSession = {
   allowed_pages: ['resumen', 'dispositivos', 'disponibilidad', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
 };
 
-function Login({ onLogin, onBootstrap, onDemo, setup, error, retry, expired }) {
+function Login({ onLogin, onBootstrap, setup, error, retry, expired }) {
   const f = useForm({ username: '', password: '' }, values => Object.fromEntries(['username', 'password'].filter(k => !values[k]).map(k => [k, 'Completa este campo.'])), onLogin, null, true);
   const setupForm = useForm({ username: '', name: '', password: '', password_confirmation: '' }, values => {
     const errors = Object.fromEntries(['username', 'name', 'password', 'password_confirmation'].filter(key => !String(values[key] || '').trim()).map(key => [key, 'Completa este campo.']));
@@ -52,7 +52,7 @@ function Login({ onLogin, onBootstrap, onDemo, setup, error, retry, expired }) {
       <Field label="Usuario" required error={f.errors.username}><input autoComplete="username" autoCapitalize="none" value={f.values.username} onChange={e => f.change('username', e.target.value)} maxLength={80} /></Field>
       <Field label="Contraseña" required error={f.errors.password}><SecretInput autoComplete="current-password" value={f.values.password} onChange={e => f.change('password', e.target.value)} maxLength={128} /></Field>
       <Button type="submit" variant="primary" className="w-full" busy={f.busy} icon={LogIn}>Iniciar sesión</Button>
-    </fieldset></form>}<div className="login-footer"><ShieldCheck size={19} /><span>Sesión personal · Acceso por privilegios</span></div><Button className="w-full" disabled={f.busy || setupForm.busy} onClick={onDemo}>Explorar el diseño sin conexión</Button>
+    </fieldset></form>}<div className="login-footer"><ShieldCheck size={19} /><span>Sesión personal · Acceso por privilegios</span></div>
   </section></main>;
 }
 
@@ -74,7 +74,7 @@ export function SessionProvider({ children }) {
       setCsrfToken(value.csrf); setSetup(Boolean(value.setup_required));
       if (value.user) { setIdentity(value); setExpired(false); }
       else { setExpired(true); window.dispatchEvent(new Event('sgrs-session-expired')); }
-    }).catch(() => { if (alive) setError('Inicia el servidor local del dashboard para acceder con una cuenta. También puedes explorar el diseño sin conexión.'); })
+    }).catch(() => { if (alive) setError('Inicia el servidor local del dashboard para acceder con una cuenta.'); })
       .finally(() => { clearTimeout(timeout); if (alive) setReady(true); });
     // Timeout must terminate the initial loading state too.
     return () => { alive = false; clearTimeout(timeout); controller.abort(); };
@@ -153,7 +153,7 @@ export function SessionProvider({ children }) {
   }}>
     {!ready ? <div className="login-page"><Loading /></div> : <>
       {current && <div hidden={!demo && expired} inert={!demo && expired ? true : undefined} key={`${demo ? `demo-${activeDemoRole}` : 'live'}-${current.user.id}-${current.user.role}-${current.user.version}`}>{children}</div>}
-      {(!current || (!demo && expired)) && <Login onLogin={signIn} onBootstrap={bootstrap} onDemo={() => setDemo(true)} setup={setup} error={error} retry={() => setRevision(r => r+1)} expired={Boolean(current)} />}
+      {(!current || (!demo && expired)) && <Login onLogin={signIn} onBootstrap={bootstrap} setup={setup} error={error} retry={() => setRevision(r => r+1)} expired={Boolean(current)} />}
     </>}
   </SessionContext.Provider>;
 }

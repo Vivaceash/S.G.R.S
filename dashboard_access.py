@@ -147,6 +147,10 @@ def database(write=False):
           CREATE TABLE IF NOT EXISTS inventory_edits (
             asset_id TEXT PRIMARY KEY, version INTEGER NOT NULL,
             fields TEXT NOT NULL, updated_at TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS ap_map_positions (
+            ap_id TEXT PRIMARY KEY, ap_mac TEXT NOT NULL DEFAULT '', ap_serial TEXT NOT NULL DEFAULT '',
+            floor_id TEXT NOT NULL, x REAL NOT NULL, y REAL NOT NULL, label TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL, updated_by TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS device_connection_history (
             mac TEXT PRIMARY KEY,
             ip TEXT NOT NULL,

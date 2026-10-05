@@ -110,7 +110,8 @@ function ServiceStatus({ health, demo }) {
   return <div className="service-list">{[['FortiGate', health?.forti], ['OmniVista', health?.omni]].map(([name, status]) => <div key={name}><span>{name}</span><Badge status={status === true ? 'normal' : status === false ? 'offline' : 'unknown'}>{demo ? 'Ejemplo' : status === true ? 'Servicio responde' : status === false ? 'Sin conexión' : 'Sin verificar'}</Badge></div>)}</div>;
 }
 function QrCard({ row, demo, toast, host, compact = false, size = 300 }) {
-  const base = host?.trim() || location.host;
+  const storedHost = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('sgrs_qr_host') : null;
+  const base = host?.trim() || storedHost || location.host;
   const url = new URL(/^https?:\/\//i.test(base) ? base : `${location.protocol}//${base}`);
   url.hash = `reporte?idf=${encodeURIComponent(row.id)}${row.mobile_token ? `&token=${encodeURIComponent(row.mobile_token)}` : ''}`;
   if (demo) url.searchParams.set('demo', '1');
@@ -280,7 +281,7 @@ function DeviceDetail({ row, demo, canReadTraffic = false }) {
 function IdfHub({ data, records, navigate, openEditor, canWrite, canEditInventory, notify, onResolve }) {
   const [selectedId, setSelectedId] = useState('');
   const [tab, setTab] = useState('inventory');
-  const [host, setHost] = useState(() => location.host);
+  const [host, setHost] = useState(() => (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('sgrs_qr_host')) || location.host);
   const [detectingHost, setDetectingHost] = useState(false);
   const selected = data.idfs.find(idf => idf.id === selectedId) || data.idfs[0];
   const selectedRecords = selected ? records.filter(record => record.idfId === selected.id) : [];
@@ -288,10 +289,24 @@ function IdfHub({ data, records, navigate, openEditor, canWrite, canEditInventor
   const choose = id => { setSelectedId(id); setTab('inventory'); };
   const detectHost = async () => {
     setDetectingHost(true);
-    try { const response = await fetch('/api/ip', { credentials: 'same-origin' }); const result = await response.json(); if (!response.ok || !result.ip || result.ip.startsWith('127.')) throw new Error('No se detectó una IP de red.'); setHost(result.ip); notify('IP de red detectada. El QR se actualizó para el teléfono.'); }
-    catch { notify('No se pudo detectar la IP de red. Configúrala manualmente antes de escanear.'); }
-    finally { setDetectingHost(false); }
+    try {
+      const response = await fetch('/api/ip', { credentials: 'same-origin' });
+      const result = await response.json();
+      if (!response.ok || !result.ip || result.ip.startsWith('127.')) throw new Error('No se detectó una IP de red.');
+      setHost(result.ip);
+      try { sessionStorage.setItem('sgrs_qr_host', result.ip); } catch {}
+      notify('IP de red detectada. El QR se actualizó para el teléfono.');
+    } catch {
+      notify('No se pudo detectar la IP de red. Configúrala manualmente antes de escanear.');
+    } finally {
+      setDetectingHost(false);
+    }
   };
+  useEffect(() => {
+    if (!sessionStorage.getItem('sgrs_qr_host') || /^(localhost|127(?:\.\d{1,3}){3})(?::|$)/i.test(host)) {
+      detectHost();
+    }
+  }, []);
   useEffect(() => {
     if (tab === 'qr' && /^(localhost|127(?:\.\d{1,3}){3})(?::|$)/i.test(host)) detectHost();
   }, [tab]);
@@ -313,7 +328,7 @@ function IdfHub({ data, records, navigate, openEditor, canWrite, canEditInventor
             <div className="qr-host-bar">
               <label htmlFor="qr-host">Dirección del servidor</label>
               <div className="qr-host-controls">
-                <input id="qr-host" value={host} onChange={e => setHost(e.target.value)} placeholder="192.168.1.25:3001" />
+                <input id="qr-host" value={host} onChange={e => { setHost(e.target.value); try { sessionStorage.setItem('sgrs_qr_host', e.target.value); } catch {} }} placeholder="192.168.1.25:3001" />
                 <Button onClick={detectHost} busy={detectingHost}>Detectar IP</Button>
               </div>
               <small>Asegúrate de que el teléfono esté conectado a la misma red Wi‑Fi institucional.</small>
@@ -469,10 +484,6 @@ export default function App() {
     const warn = e => { e.preventDefault(); e.returnValue = ''; };
     window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn);
   }, [dirty, modalDirty]);
-  const toggleMode = () => {
-    const apply = () => { const next = !demo; loadController.current?.abort(); generation.current++; setDemo(next); setData(next ? createDemo() : emptyData()); setErrors({}); setLoading(!next); setDirty(false); setPendingNavigation(null); setModal(null); const url = new URL(location.href); if (next) url.searchParams.set('demo', '1'); else url.searchParams.delete('demo'); history.replaceState(null, '', url); };
-    if (dirty) setPendingNavigation(() => apply); else apply();
-  };
   const openEditor = (kind, row) => { if (['ip', 'release', 'resource', 'stock', 'request'].includes(kind) && !can('inventory.write')) { notify('Tu rol permite consultar, pero no modificar esta información.'); return; } setModalDirty(false); setDiscardModal(false); setReleaseError(''); setReleaseUncertain(false); setModal({ kind, row }); };
   const closeModal = () => { if (mutationLock.current) return; if (modalDirty) setDiscardModal(true); else setModal(null); };
   async function mutate(path, body) {
@@ -622,7 +633,7 @@ export default function App() {
   return <>
     <a className="skip-link" href="#main-content" onClick={e => { e.preventDefault(); document.getElementById('main-content')?.focus(); }}>Ir al contenido</a>
     <header className="institutional-header">
-      <a href={`#${homeRoute}`} className="brand-link" onClick={e => { e.preventDefault(); navigate(homeRoute); }}><Brand /></a>
+      <a href={`#${homeRoute}`} className="mobile-brand-link" onClick={e => { e.preventDefault(); navigate(homeRoute); }}><Brand /></a>
       <div className="header-title">
         <strong>{activeModuleTitle}</strong>
         <span>Centro Operativo · Redes e Infraestructura</span>
@@ -646,8 +657,10 @@ export default function App() {
           </div>
         )}
       </div>
+      <IconButton icon={RefreshCw} label="Actualizar información" disabled={loading} className={`header-refresh ${loading ? 'refreshing' : ''}`} onClick={refresh} />
       <IconButton icon={Bell} label="Consultar estado de servicios" onClick={() => openEditor('services')} /><button className="account-button" type="button" onClick={() => openEditor('access')}><span className="avatar">{user.name.split(' ').map(n => n[0]).slice(0, 2).join('')}</span><span><strong>{user.name}</strong><small>{demo ? `Perfil de ejemplo (${roleLabel(user.role)})` : roleLabel(user.role)}</small></span><ChevronDown size={14} /></button><div className="mexico-wordmark">Servir a<br />México</div><IconButton icon={Menu} label="Abrir navegación" className="mobile-menu" aria-expanded={menu} onClick={() => setMenu(true)} /></header>
     <aside className="sidebar">
+      <a href={`#${homeRoute}`} className="sidebar-brand" onClick={e => { e.preventDefault(); navigate(homeRoute); }} aria-label="Ir al inicio"><Brand /></a>
       <Nav route={route.path} navigate={navigate} data={data} records={records} canViewPage={canViewPage} user={user} can={can} />
       {can('traffic.read') && (
         <div className="sidebar-admin">
@@ -668,7 +681,9 @@ export default function App() {
         </div>
       )}
     </aside>
-    <main className="main-content" id="main-content" tabIndex={-1}><div className={`mode-bar ${demo ? 'mode-demo' : ''}`}><span>{demo ? 'Vista de demostración · Datos ficticios · Cambios solo en esta sesión' : 'Consulta de servicios e inventario local'}</span><div><small className="mode-updated">Actualizado {dateTime(data.updatedAt)}</small><button type="button" onClick={toggleMode}>{demo ? 'Volver a datos del sistema' : 'Ver demostración del diseño'}</button><IconButton icon={RefreshCw} label="Actualizar información" disabled={loading} className={loading ? 'refreshing' : ''} onClick={refresh} /></div></div>
+    <main className="main-content" id="main-content" tabIndex={-1}>{route.path === 'resumen' && <div className="mode-bar">
+      <div className={`operation-status ${Object.keys(errors).length ? 'degraded' : ''}`}><span className="status-light" /><div><strong>{demo ? 'Escenario de demostración' : Object.keys(errors).length ? 'Información parcial' : loading ? 'Consultando servicios' : 'Consulta completada'}</strong><small>{demo ? 'Datos de ejemplo para revisar el diseño' : 'El estado físico requiere telemetría actualizada'}</small></div></div>
+    </div>}
       {Object.keys(errors).length > 0 && <Notice title="No se pudo actualizar toda la información" tone="warning" action={<Button onClick={refresh} busy={loading}>Reintentar</Button>}>Los datos conservados pueden estar desactualizados. Consultas pendientes: {Object.keys(errors).map(k => ({ idfs: 'IDFs', ips: 'direcciones IP', devices: 'dispositivos', reports: 'bitácora', health: 'servicios', segments: 'segmentos DHCP' })[k]).join(', ')}.</Notice>}
       {!can('inventory.write') && user.role !== 'soporte' && <Notice title="Perfil viewer · Solo consulta">Puedes revisar la información operativa. El registro y la edición requieren un perfil administrador.</Notice>}{page}
     </main>

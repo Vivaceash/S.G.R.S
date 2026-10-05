@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Activity, ArrowRight, ArrowUpDown, Building2, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Download, FileText, Info, Layers3, Monitor, Network, Package, Plus, Printer, Headset, Router, Server, ShieldCheck, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { Activity, ArrowRight, ArrowUpDown, Building2, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Download, FileText, Info, Layers3, Monitor, Network, Package, Plus, Printer, Headset, Router, Server, ShieldCheck, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { Badge, Button, DataTable, Dialog, Empty, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, useListState } from './components.jsx';
 import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getSegmentDevices, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel } from './domain.mjs';
 
 export function PageHeading({ eyebrow, title, description, updatedAt, children, headingId = 'page-title' }) {
-  const hasActions = Boolean(children || updatedAt);
+  const hasActions = Boolean(children);
   return <div className={`page-heading ${hasActions ? 'has-actions' : 'empty-heading'}`}>
     <div className="sr-only">
       {eyebrow && <p>{eyebrow}</p>}
@@ -13,7 +13,6 @@ export function PageHeading({ eyebrow, title, description, updatedAt, children, 
     </div>
     {hasActions && <div className="page-heading-actions">
       {children}
-      {updatedAt && <div className="update-stamp"><CalendarDays size={23} aria-hidden="true" /><div><span>Última consulta</span><strong>{dateTime(updatedAt)}</strong></div></div>}
     </div>}
   </div>;
 }
@@ -76,9 +75,7 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
     setChosen(draft); setAll(false); setEditing(false);
   };
   return <>
-    <PageHeading eyebrow="Centro operativo" title="Dashboard Operativo" description="Métricas generales y estado de la infraestructura de red" updatedAt={data.updatedAt}>
-      <div className={`operation-status ${errors.length ? 'degraded' : ''}`}><span className="status-light" /><div><strong>{demo ? 'Escenario de demostración' : errors.length ? 'Información parcial' : loading ? 'Consultando servicios' : 'Consulta completada'}</strong><small>{demo ? 'Datos de ejemplo para revisar el diseño' : 'El estado físico requiere telemetría actualizada'}</small></div></div>
-    </PageHeading>
+    <PageHeading eyebrow="Centro operativo" title="Dashboard Operativo" description="Métricas generales y estado de la infraestructura de red" updatedAt={data.updatedAt} />
     <section className="overview-metrics" aria-label="Indicadores de infraestructura">
       <Metric icon={Network} label={demo ? 'Disponibilidad de red' : 'Direcciones disponibles'} value={demo ? '98.7%' : loading ? '—' : number(available)} caption={demo ? '+2.3% vs. mes anterior · Ejemplo' : 'Sin asignar en el inventario IP'} />
       <Metric icon={Monitor} tone="success" label="Dispositivos activos" value={loading ? '—' : number(online)} caption={`De ${number(devices.length)} equipos consultados`} />
