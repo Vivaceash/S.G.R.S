@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = 'development'
     ENABLE_DOCS: bool = True
     API_KEYS: str = ''
+    INTEGRATION_KEYS: str = ''
     WRITE_KEYS: str = ''
     EXPORT_KEYS: str = ''
     DASHBOARD_KEY: str = ''
@@ -58,7 +59,7 @@ class Settings(BaseSettings):
         self.DATABASE = self.DATABASE.resolve()
         if self.ENABLE_2FA and (len(self.JWT_SECRET_KEY) < 32 or len(self.TOTP_SECRET_KEY) < 32):
             raise ValueError('2FA requiere secretos JWT y TOTP independientes de al menos 32 caracteres.')
-        groups = [self.keys(self.API_KEYS), self.keys(self.WRITE_KEYS), self.keys(self.EXPORT_KEYS), [self.DASHBOARD_KEY] if self.DASHBOARD_KEY else []]
+        groups = [self.keys(self.API_KEYS), self.keys(self.INTEGRATION_KEYS), self.keys(self.WRITE_KEYS), self.keys(self.EXPORT_KEYS), [self.DASHBOARD_KEY] if self.DASHBOARD_KEY else []]
         keys = [key for group in groups for key in group]
         if len(keys) != len(set(keys)):
             raise ValueError('Usa claves distintas para cada perfil.')

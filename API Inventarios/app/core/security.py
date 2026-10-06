@@ -23,6 +23,7 @@ def key_principal(token):
         return None
     for value, scopes, dashboard in (
         (settings.API_KEYS, {'read'}, False),
+        (settings.INTEGRATION_KEYS, {'integration'}, False),
         (settings.EXPORT_KEYS, {'read', 'export'}, False),
         (settings.WRITE_KEYS, {'read', 'write', 'export'}, False),
         (settings.DASHBOARD_KEY, {'read', 'write', 'export'}, True),
@@ -47,7 +48,7 @@ async def authenticate(request: Request, api_key=Security(header), credentials=S
     payload = decode_jwt_session(token) if settings.ENABLE_2FA else None
     if payload:
         # The subject is a bound key identity + account, never a client-supplied scope.
-        for raw in (settings.API_KEYS, settings.EXPORT_KEYS, settings.WRITE_KEYS):
+        for raw in (settings.API_KEYS, settings.INTEGRATION_KEYS, settings.EXPORT_KEYS, settings.WRITE_KEYS):
             for key in settings.keys(raw):
                 candidate = key_principal(key)
                 if payload['sub'].startswith(candidate.subject + ':'):

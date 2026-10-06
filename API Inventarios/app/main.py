@@ -13,7 +13,7 @@ from app.core.errors import InventoryError
 from app.clients.providers import Providers
 from app.services.reconciliation import Reconciler
 from app.middleware.security import SecurityHeadersMiddleware, RateLimitingMiddleware, RequestContextMiddleware, RequestSizeLimitMiddleware
-from app.routers import auth, cctv, catalogs
+from app.routers import auth, cctv, catalogs, integration
 from app.schemas.common import ErrorResponse
 
 
@@ -94,5 +94,5 @@ def docs_alias():
     return RedirectResponse('/docs')
 
 
-for router in (auth.router, cctv.router, catalogs.router):
+for router in (auth.router, cctv.router, catalogs.router, integration.router):
     app.include_router(router, prefix='/api/v1')

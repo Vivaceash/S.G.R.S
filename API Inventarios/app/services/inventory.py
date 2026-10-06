@@ -109,6 +109,21 @@ def select(data, filters):
     return sorted(rows, key=lambda r: (str(r.get(filters.get('sort', 'name'), '')).casefold(), r['id']), reverse=filters.get('descending', False))
 
 
+def integration_cameras(data, query='', idf_id=None):
+    """Return the deliberately small CCTV view approved for external modules."""
+    rows = [row for row in data['assets'] if row.get('dataset') == 'cctv']
+    if idf_id:
+        rows = [row for row in rows if row.get('idf_id') == idf_id]
+    if query:
+        needle = query.casefold()
+        rows = [row for row in rows if needle in ' '.join(
+            str(row.get(field, '')) for field in ('name', 'idf_id', 'location', 'model', 'destination')
+        ).casefold()]
+    fields = ('id', 'name', 'idf_id', 'location', 'model', 'decommissioned', 'relocated', 'destination', 'corrected_at')
+    return [{field: row.get(field, False if field in ('decommissioned', 'relocated') else '') for field in fields}
+            for row in sorted(rows, key=lambda row: (str(row.get('name', '')).casefold(), row['id']))]
+
+
 def summary(rows):
     return {'total': len(rows), 'active_inventory': sum(not a.get('decommissioned', False) for a in rows),
             'retired': sum(bool(a.get('decommissioned')) for a in rows), 'relocated': sum(bool(a.get('relocated')) for a in rows),

@@ -41,6 +41,9 @@ Una sustitución documental posterior requiere preparar el nuevo JSON con el imp
 ## Rutas principales
 
 - `GET /api/v1/cctv/catalog`, `/cameras`, `/cameras/{id}`, `/summary`, `/export`.
+- `GET /api/v1/cctv/integration/cameras` entrega a módulos externos, con una clave de
+  `INVENTARIOS_INTEGRATION_KEYS`, únicamente identificador, nombre, IDF, ubicación,
+  modelo y estado administrativo. No expone IP, MAC, serie, auditoría ni observaciones de red.
 - `PATCH /api/v1/cctv/cameras/{id}` para campos físicos/administrativos mediante versión optimista.
 - `/cameras/{id}/observations` y `/changes` para historial.
 - `POST /api/v1/reconciliation/jobs`; consulta el resultado en `GET /api/v1/reconciliation/jobs/{id}`.
@@ -49,6 +52,21 @@ Una sustitución documental posterior requiere preparar el nuevo JSON con el imp
 - `GET /health` es liveness público. La API no muestra inventario ni salud detallada de proveedores sin credencial.
 
 `192.168.99.x` ayuda a localizar dispositivos, pero VLAN y máscara vienen de la configuración consultada en FortiGate. El octeto de la IP no se interpreta como VLAN. Una relación obtenida por interfaz observada se distingue de una inferida por subred. Estado de inventario, observación de red y salud de video son dimensiones distintas.
+
+## Consumo por otro módulo
+
+La API se mantiene en `127.0.0.1:8002` por defecto. Para permitir consumidores de la red,
+publícala detrás de un proxy HTTPS interno y conserva la API en loopback. Crea una clave aleatoria
+exclusiva en `INVENTARIOS_INTEGRATION_KEYS`; no reutilices la del dashboard. Un consumidor autorizado
+puede solicitar, por ejemplo:
+
+```text
+GET https://api-sgrs.interno/api/v1/cctv/integration/cameras?idf_id=idf-1&limit=100
+X-API-Key: <clave-del-modulo>
+```
+
+Restringe el proxy y firewall a las IP de los módulos consumidores. La configuración de DNS,
+certificado y firewall se realiza en el servidor de producción y no se activa con este cambio de código.
 
 La interfaz completa con VLAN se consulta usando `GET /api/v1/network/interface-config` en API Forti. Devuelve una lista limitada y tipada de interfaces en el VDOM solicitado. Omite propiedades crudas de configuración.
 

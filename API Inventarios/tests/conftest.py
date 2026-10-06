@@ -18,6 +18,7 @@ from app.services.import_service import migrate
 def store(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, 'DATABASE', tmp_path / 'inventory.sqlite3')
     monkeypatch.setattr(settings, 'API_KEYS', 'read-test')
+    monkeypatch.setattr(settings, 'INTEGRATION_KEYS', 'integration-test')
     monkeypatch.setattr(settings, 'WRITE_KEYS', 'write-test')
     monkeypatch.setattr(settings, 'EXPORT_KEYS', 'export-test')
     monkeypatch.setattr(settings, 'DASHBOARD_KEY', 'dashboard-test')

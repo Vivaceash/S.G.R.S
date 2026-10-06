@@ -3,6 +3,7 @@ from app.core.config import settings
 
 READ = {'X-API-Key': 'read-test'}
 WRITE = {'X-API-Key': 'write-test'}
+INTEGRATION = {'X-API-Key': 'integration-test'}
 
 
 def test_scalar_and_openapi_are_independent(client, monkeypatch):
@@ -28,6 +29,18 @@ def test_auth_fields_pagination_and_export(client):
     assert client.get('/api/v1/cctv/export', headers=READ).status_code == 403
     assert client.get('/api/v1/cctv/export', headers={'Authorization': 'Bearer export-test'}).status_code == 200
     assert client.get('/api/v1/cctv/cameras?limit=501', headers=READ).status_code == 422
+
+
+def test_integration_route_is_read_only_and_limits_sensitive_fields(client):
+    url = '/api/v1/cctv/integration/cameras?idf_id=idf-1&limit=1'
+    assert client.get(url).status_code == 401
+    assert client.get(url, headers=READ).status_code == 403
+    response = client.get(url, headers=INTEGRATION)
+    assert response.status_code == 200
+    item = response.json()['data']['items'][0]
+    assert item['id'] == 'cam-1'
+    assert item['idf_id'] == 'idf-1'
+    assert {'mac', 'serial', 'documented_ip', 'network', 'source', 'documented'}.isdisjoint(item)
 
 
 def test_corrections_are_versioned_and_historical_read_only(client):

@@ -51,6 +51,27 @@ class CameraPage(BaseModel):
     revision: str
 
 
+class IntegrationCamera(BaseModel):
+    """Campos CCTV autorizados para módulos externos de solo lectura."""
+    id: str
+    name: str = ''
+    idf_id: str = ''
+    location: str = ''
+    model: str = ''
+    decommissioned: bool = False
+    relocated: bool = False
+    destination: str = ''
+    corrected_at: str | None = None
+
+
+class IntegrationCameraPage(BaseModel):
+    items: list[IntegrationCamera]
+    total: int
+    limit: int
+    offset: int
+    revision: str
+
+
 class Catalog(BaseModel):
     assets: list[Camera]
     cabinets: list[dict[str, Any]]
