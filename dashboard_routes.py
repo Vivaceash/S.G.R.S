@@ -1,5 +1,6 @@
 """Same-origin HTTP boundary for the local dashboard (used by server.Handler)."""
 import hmac
+import ipaddress
 import json
 import os
 import re
@@ -13,7 +14,7 @@ import dashboard_inventory as inventory
 from dashboard_device_history import get_longest_connected_devices
 
 from dashboard_access import (AccessError, SESSION_SECONDS, database, session, login,
-                              public_user, save_user, connection, connection_values,
+                              list_users, project_hidden_actors, save_user, connection, connection_values,
                               save_connection, audit)
 
 
@@ -48,6 +49,30 @@ def reserved_read_allowed(path):
 
 
 class AccessRoutes:
+    def _secure_transport(self):
+        # Only a proxy on this machine may attest TLS. Origin is client input,
+        # not evidence of encryption. The backend must remain on loopback.
+        public = os.environ.get("SGRS_PUBLIC_ORIGIN", "").rstrip("/")
+        return bool(public and urlsplit(public).scheme == "https"
+                    and ipaddress.ip_address(self.client_address[0]).is_loopback
+                    and self.headers.get("Host", "") == urlsplit(public).netloc
+                    and self.headers.get("X-Forwarded-Proto", "") == "https")
+
+    def _require_transport(self):
+        if urlsplit(self.path).path == "/api/mobile-report":
+            return  # Existing public QR flow; never accepts account credentials.
+        if self._secure_transport():
+            return
+        host = urlsplit("//" + self.headers.get("Host", "")).hostname
+        origin = urlsplit(self.headers.get("Origin", ""))
+        local = (not os.environ.get("SGRS_PUBLIC_ORIGIN")
+                 and ipaddress.ip_address(self.client_address[0]).is_loopback
+                 and host in ("localhost", "127.0.0.1", "::1")
+                 and (not self.headers.get("Origin") or
+                      (origin.scheme == "http" and origin.hostname in ("localhost", "127.0.0.1", "::1"))))
+        if not local:
+            raise AccessError(403, "Abre el dashboard mediante HTTPS para proteger las credenciales y la sesión.")
+
     def _origins(self):
         # Explicit deployments must set the public HTTPS origin and use a reverse proxy.
         configured = os.environ.get("SGRS_PUBLIC_ORIGIN", "").rstrip("/")
@@ -85,7 +110,6 @@ class AccessRoutes:
                 if not clean:
                     continue
                 if clean == "*":
-                    origins.add("*")
                     continue
                 origins.add(clean)
                 parsed = urlsplit(clean)
@@ -106,7 +130,7 @@ class AccessRoutes:
         if "*" not in origins:
             allowed_hosts = {urlsplit(origin).netloc for origin in origins if origin != "*"}
             req_host = self.headers.get("Host", "")
-            if req_host not in allowed_hosts and not any(req_host == h.split(":")[0] for h in allowed_hosts):
+            if req_host not in allowed_hosts:
                 raise AccessError(403, "Origen no permitido. Configura SGRS_PUBLIC_ORIGIN para publicar el dashboard.")
             origin = self.headers.get("Origin")
             if not origin and self.headers.get("Referer"):
@@ -114,6 +138,7 @@ class AccessRoutes:
                 origin = f"{ref.scheme}://{ref.netloc}"
             if (mutation and origin not in origins) or (origin and origin not in origins):
                 raise AccessError(403, "Esta solicitud debe realizarse desde el dashboard autorizado.")
+        self._require_transport()
         if mutation:
             if self.headers.get("Transfer-Encoding"):
                 raise AccessError(400, "Formato de solicitud no admitido.")
@@ -136,7 +161,7 @@ class AccessRoutes:
             raise AccessError(400, "La solicitud no contiene un objeto JSON válido.") from None
 
     def _cookie(self, token, clear=False):
-        secure = "; Secure" if os.environ.get("SGRS_PUBLIC_ORIGIN", "").startswith("https://") else ""
+        secure = "; Secure" if self._secure_transport() else ""
         self._session_cookie = f"sgrs_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={0 if clear else SESSION_SECONDS}{secure}"
 
     def _authorize(self, mutation=False):
@@ -160,13 +185,11 @@ class AccessRoutes:
                 identity = session(self.headers.get("Cookie"))
                 with database() as db:
                     setup = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
-                self._send_json({k: v for k, v in identity.items() if k != "token_hash"} if identity else {"user": None, "setup_required": setup})
+                self._send_json({k: v for k, v in identity.items() if k != "token_hash"} if identity else {"user": None, "setup_required": setup, "web_bootstrap_allowed": os.environ.get("SGRS_ALLOW_WEB_BOOTSTRAP") == "1" and self.client_address[0] in ("127.0.0.1", "::1")})
                 return True
             if path == "/api/mobile-report":
                 self.mobile_report_context(self.path)
                 return True
-            if path == "/api/ip":
-                return False
             self._authorize()
             if path == '/api/inventory/catalog':
                 result = inventory.catalog()
@@ -203,9 +226,7 @@ class AccessRoutes:
             if path == "/api/admin/users":
                 if self.identity["user"]["role"] not in ("admin", "super-admin"):
                     raise AccessError(403, "No tienes permiso para acceder a esta sección.")
-                with database() as db:
-                    users = [public_user(row) for row in db.execute("SELECT * FROM users ORDER BY created_at DESC,id")]
-                self._send_json({"users": users})
+                self._send_json({"users": list_users(self.identity["user"]["id"])})
                 return True
             if path == "/api/admin/connections":
                 self._manage()
@@ -254,6 +275,8 @@ class AccessRoutes:
                 self._send_json(identity)
                 return True
             if path == "/api/auth/bootstrap":
+                if os.environ.get("SGRS_ALLOW_WEB_BOOTSTRAP") != "1" or self.client_address[0] not in ("127.0.0.1", "::1"):
+                    raise AccessError(403, "La cuenta inicial debe crearse desde la consola del servidor.")
                 body = self._body()
                 if not all(isinstance(body.get(key), str) for key in ("username", "name", "password", "password_confirmation")):
                     raise AccessError(422, "Completa usuario, nombre y contraseña.")
@@ -347,7 +370,10 @@ class AccessRoutes:
         The 'soporte' role must NOT have MAC, serial, IP, manufacturer, or diagnostic
         fields redacted, as it requires full technical specs for computers and printers.
         """
-        if getattr(self, "identity", None) and self.identity["user"]["role"] == "viewer":
+        identity = getattr(self, "identity", None)
+        if identity and identity["user"]["role"] != "super-admin":
+            data = project_hidden_actors(data)
+        if identity and identity["user"]["role"] == "viewer":
             hidden = {"raw", "mac", "serial", "tech", "actor", "actor_id", "resolved_by", "username", "notes", "description", "evidence", "hostname", "user", "users"}
             def clean(value):
                 if isinstance(value, dict):

@@ -112,15 +112,13 @@ def test_unauthorized_access_rejected():
     assert res_ver.status_code == 401
 
 
-def test_public_health_endpoints_without_auth():
-    """Verifica que /api/v1/health y /api/v1/system/health no requieran autenticación"""
+def test_diagnostic_health_endpoints_require_auth():
+    """Solo /health de liveness es público; los diagnósticos de NMS requieren clave."""
     res_h1 = client.get("/api/v1/health")
-    assert res_h1.status_code == 200
-    assert "data" in res_h1.json()
+    assert res_h1.status_code == 401
 
     res_h2 = client.get("/api/v1/system/health")
-    assert res_h2.status_code == 200
-    assert "data" in res_h2.json()
+    assert res_h2.status_code == 401
 
 
 def test_invalid_api_key_rejected():
@@ -311,6 +309,7 @@ def test_2fa_setup_and_verify_flow(monkeypatch):
     monkeypatch.setattr(settings, "ENABLE_2FA", True)
     monkeypatch.setattr(settings, "ALLOW_2FA_ENROLLMENT", True)
     monkeypatch.setattr(settings, "JWT_SECRET_KEY", "omni-test-jwt-secret-with-at-least-32-bytes")
+    monkeypatch.setattr(settings, "TOTP_SECRET_KEY", "omni-test-dedicated-totp-master-key")
 
     # 1. Setup 2FA con clave de API
     res_setup = client.post(
@@ -385,4 +384,3 @@ def test_legacy_or_incomplete_jwt_is_rejected():
     signature = encode(hmac.new(settings.JWT_SECRET_KEY.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest())
 
     assert decode_jwt_session(f"{header}.{payload}.{signature}") is None
-

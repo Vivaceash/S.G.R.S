@@ -136,6 +136,12 @@ svg { flex-shrink: 0; }
 .operation-status.degraded { background: var(--warning-bg); }
 .operation-status.degraded strong, .operation-status.degraded small { color: var(--color-warning); }
 .degraded .status-light { background: var(--color-warning); border-color: #f8ddb5; }
+.mode-bar .operation-status { display: flex; }
+.mode-bar { flex-wrap: wrap; }
+.api-status-summary { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 600px) {
+  .overview-metrics .network-pressure { grid-column: 1 / -1; min-width: 0; }
+}
 .button { display: inline-flex; justify-content: center; align-items: center; gap: 9px; min-height: 43px; padding: 10px 17px; border: 1px solid #b47e8e; border-radius: var(--radius-control); font-size: 12px; line-height: 1.3; font-weight: 600; white-space: nowrap; }
 .button-secondary { color: var(--color-brand); background: var(--surface); }
 .button-secondary:hover:not(:disabled) { background: #f8edf0; border-color: var(--color-brand); }
@@ -1479,4 +1485,3 @@ td .button { min-height: 31px; font-size: 11px; padding: 6px 13px; border-radius
 @media (max-width: 600px) {
   .mobile-brand-link .brand-image { width: 170px; height: 51px; }
 }
-

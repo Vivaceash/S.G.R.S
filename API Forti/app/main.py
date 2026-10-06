@@ -4,6 +4,7 @@ import logging
 import time
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse
 from scalar_fastapi import get_scalar_api_reference
 from slowapi import _rate_limit_exceeded_handler
@@ -187,6 +188,12 @@ app.add_middleware(
 # -------------------------------------------------------------
 # Manejadores Globales de Excepciones
 # -------------------------------------------------------------
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # Pydantic's default response can echo the input, including API keys/tokens.
+    return JSONResponse(status_code=422, content={"success": False, "error": "InvalidRequest", "message": "Parámetros de solicitud no válidos."})
+
+
 @app.exception_handler(FortiOSBaseException)
 async def fortios_exception_handler(request: Request, exc: FortiOSBaseException):
     req_id = getattr(request.state, "request_id", "unknown")
@@ -197,7 +204,7 @@ async def fortios_exception_handler(request: Request, exc: FortiOSBaseException)
             "success": False,
             "error": exc.__class__.__name__,
             "message": exc.message,
-            "details": exc.details if settings.DEBUG else None,
+            "details": None,
         },
     )
 
@@ -205,14 +212,14 @@ async def fortios_exception_handler(request: Request, exc: FortiOSBaseException)
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     req_id = getattr(request.state, "request_id", "unknown")
-    logger.error(f"[{req_id}] Error no controlado en {request.url.path}: {exc}", exc_info=settings.DEBUG)
+    logger.error("[%s] Error no controlado: %s", req_id, type(exc).__name__)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "success": False,
             "error": "InternalServerError",
             "message": "Ha ocurrido un error interno en el servidor.",
-            "details": str(exc) if settings.DEBUG else None,
+            "details": None,
         },
     )
 

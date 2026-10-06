@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, ArrowRight, ArrowUpDown, Building2, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Download, FileText, Info, Layers3, Monitor, Network, Package, Plus, Printer, Headset, Router, Server, ShieldCheck, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { Badge, Button, DataTable, Dialog, Empty, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, downloadExcel, useListState } from './components.jsx';
-import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getSegmentDevices, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, getSupportSegments, normalizeText } from './domain.mjs';
+import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getOverviewSegmentDevices, isMeztliSegment, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, getSupportSegments, normalizeText } from './domain.mjs';
 
 export function PageHeading({ eyebrow, title, description, updatedAt, children, headingId = 'page-title' }) {
   const hasActions = Boolean(children || updatedAt);
@@ -55,7 +55,7 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
       connected,
       capacity,
       fillPercent: capacity > 0 ? connected / capacity * 100 : Number(segment.utilization_percent) || 0,
-      online: devices.filter(device => device.status === 'online' && deviceInSegment(device, segment)).length,
+      online: getOverviewSegmentDevices(devices, segment).filter(device => device.status === 'online').length,
     };
   }).sort((a, b) => b.fillPercent - a.fillPercent || b.connected - a.connected || a.name.localeCompare(b.name, 'es-MX'));
   const highestNetworkUsage = Math.max(1, ...networkUsage.map(item => item.connected));
@@ -94,7 +94,7 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
         <div className="segment-card-heading"><h3><span className="segment-dot" />{segment.name || segment.interface}</h3><Badge status={segment.status} /></div>
         <div className="segment-address"><small>{segment.vlan || segment.interface}</small><strong>{segment.subnet || segment.ip_ranges?.[0] || 'Rango no informado'}</strong></div>
         <dl className="segment-details"><div><dt><Router size={16} />Gateway</dt><dd className="font-mono">{segment.default_gateway || '—'}</dd></div><div><dt><Network size={16} />Máscara</dt><dd className="font-mono">{segment.netmask || '—'}</dd></div><div><dt><FileText size={16} />IPs asignadas</dt><dd><strong>{number(segment.active_leases)} / {number(segment.capacity)}</strong></dd></div></dl>
-        <dl className="segment-details segment-secondary"><div><dt><Monitor size={16} />{'Dispositivos en línea'}</dt><dd className="text-success"><strong>{number(devices.filter(device => device.status === 'online' && deviceInSegment(device, segment)).length)}</strong></dd></div><div><dt><Clock3 size={16} />{demo ? 'Promedio diario' : 'Duración de concesión'}</dt><dd>{demo ? number(segment.average) : segment.lease_time_seconds ? `${number(segment.lease_time_seconds)} s` : 'No informada'}</dd></div></dl>
+        <dl className="segment-details segment-secondary"><div><dt><Monitor size={16} />{isMeztliSegment(segment) ? 'Concesiones DHCP' : 'Dispositivos en línea'}</dt><dd className="text-success"><strong>{isMeztliSegment(segment) ? number(segment.active_leases) : number(getOverviewSegmentDevices(devices, segment).filter(device => device.status === 'online').length)}</strong></dd></div><div><dt><Clock3 size={16} />{demo ? 'Promedio diario' : 'Duración de concesión'}</dt><dd>{demo ? number(segment.average) : segment.lease_time_seconds ? `${number(segment.lease_time_seconds)} s` : 'No informada'}</dd></div></dl>
         <div className={`capacity-meter capacity-meter-${meterTone}`} style={{ '--meter-fill': meterColor }}><meter min="0" max="100" value={segment.utilization_percent || 0} className={`meter-${meterTone}`} style={{ '--meter-fill': meterColor }} aria-label={`Utilización de ${segment.interface}`} /><small><span className={`meter-bullet meter-bullet-${meterTone}`} style={{ background: meterColor }} aria-hidden="true" />{number(segment.utilization_percent)}% utilizado</small></div>
         <div className="segment-description"><Building2 size={21} aria-hidden="true" /><p>{segment.description || `Pool de direcciones de la interfaz ${segment.interface}. Consulta los equipos asociados a este segmento.`}</p></div>
         <Button variant={isSelected ? 'secondary' : 'primary'} className={`w-full ${isSelected ? 'is-selected' : ''}`} icon={Server} aria-expanded={isSelected} onClick={() => { const key = segmentKey(segment); if (activeSegmentKey === key) { setActiveSegmentKey(null); } else { setActiveSegmentKey(key); setTimeout(() => { devicesPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 60); } }}>{isSelected ? 'Ocultar dispositivos' : 'Ver dispositivos'} {isSelected ? <ChevronDown size={17} /> : <ArrowRight size={17} />}</Button>
@@ -304,7 +304,7 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
   const [pageSizeChoice, setPageSizeChoice] = useState('25');
   const [currentPage, setCurrentPage] = useState(1);
 
-  const segmentDevices = getSegmentDevices(devices, segment);
+  const segmentDevices = getOverviewSegmentDevices(devices, segment);
   const onlineCount = segmentDevices.filter(d => d.status === 'online').length;
   const omniMatchedCount = segmentDevices.filter(d => d.omnivista?.matched).length;
 
@@ -352,7 +352,7 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
           <span>Red: <strong>{segment.subnet || segment.ip_ranges?.[0] || 'Rango no informado'}</strong></span>
           {segment.default_gateway && <span>Gateway: <strong>{segment.default_gateway}</strong></span>}
           <Badge status={segment.status} />
-          <span className="network-tag">{number(segmentDevices.length)} dispositivos ({number(onlineCount)} en línea)</span>
+          <span className="network-tag">{isMeztliSegment(segment) ? `${number(segmentDevices.length)} clientes DHCP` : `${number(segmentDevices.length)} dispositivos (${number(onlineCount)} en línea)`}</span>
           {omniMatchedCount > 0 && <span className="network-tag omni-badge">{number(omniMatchedCount)} cotejados en OmniVista</span>}
         </div>
       </div>

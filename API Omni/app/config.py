@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     OV_USERNAME: str = "admin.red"
     OV_PASSWORD: str = ""
     OV_API_KEY: str = ""
-    OV_VERIFY_SSL: bool = False
+    OV_VERIFY_SSL: bool = True
     OV_CA_BUNDLE: Optional[str] = None
 
     # Configuración de Seguridad y Autenticación del Backend
@@ -99,6 +99,8 @@ class Settings(BaseSettings):
             raise ValueError(
                 "ENABLE_2FA requiere un JWT_SECRET_KEY aleatorio de al menos 32 bytes."
             )
+        if self.ENABLE_2FA and not self.TOTP_SECRET_KEY:
+            raise ValueError("ENABLE_2FA requiere configurar un TOTP_SECRET_KEY propio y aleatorio.")
 
         if environment not in {"development", "test"}:
             if self.DEBUG:
@@ -111,6 +113,8 @@ class Settings(BaseSettings):
                 raise ValueError("JWT_SECRET_KEY debe reemplazarse fuera de development/test.")
             if self.ALLOW_2FA_ENROLLMENT:
                 raise ValueError("El enrolamiento 2FA debe permanecer cerrado fuera de development/test.")
+            if self.ENABLE_2FA and (not self.TOTP_SECRET_KEY or len(self.TOTP_SECRET_KEY.encode("utf-8")) < 32):
+                raise ValueError("TOTP_SECRET_KEY debe contener al menos 32 bytes aleatorios.")
             if not self.OV_VERIFY_SSL and not self.OV_CA_BUNDLE:
                 raise ValueError("La validación TLS de OmniVista es obligatoria fuera de development/test.")
             if self.OV_PROTOCOL.lower() != "https":

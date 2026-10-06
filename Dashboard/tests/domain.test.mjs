@@ -39,7 +39,7 @@ test('Bitácora fusiona formatos históricos sin duplicar incidentes de un mismo
 
 test('roleLabel asigna etiquetas precisas para soporte, admin y super-admin', () => {
   assert.equal(roleLabel('super-admin'), 'Admin');
-  assert.equal(roleLabel('admin'), 'admin');
+  assert.equal(roleLabel('admin'), 'Administrador');
   assert.equal(roleLabel('soporte'), 'Soporte');
   assert.equal(roleLabel('viewer'), 'viewer');
 });
@@ -110,9 +110,9 @@ test('BASE_ROLE_CATALOG y getEffectiveRoles normalizan roles institucionales y e
 
   // 2. Si roleInfo viene vacío o nulo
   const fromEmpty = getEffectiveRoles([]);
-  assert.deepEqual(fromEmpty.map(r => r.id), ['soporte', 'admin', 'super-admin']);
+  assert.deepEqual(fromEmpty, []);
   const fromNull = getEffectiveRoles(null);
-  assert.deepEqual(fromNull.map(r => r.id), ['soporte', 'admin', 'super-admin']);
+  assert.deepEqual(fromNull, []);
 
   // 3. Si roleInfo contenía 'viewer' y le faltaba 'soporte' (sesión antigua en caché)
   const legacyRoles = [
@@ -122,8 +122,8 @@ test('BASE_ROLE_CATALOG y getEffectiveRoles normalizan roles institucionales y e
   ];
   const normalizedLegacy = getEffectiveRoles(legacyRoles);
   assert.ok(!normalizedLegacy.some(r => r.id === 'viewer'), 'viewer nunca debe estar en roles normalizados');
-  assert.ok(normalizedLegacy.some(r => r.id === 'soporte'), 'soporte siempre debe estar garantizado');
-  assert.deepEqual(normalizedLegacy.map(r => r.id), ['soporte', 'admin', 'super-admin']);
+  assert.ok(!normalizedLegacy.some(r => r.id === 'soporte'), 'no se deben inventar roles ausentes');
+  assert.deepEqual(normalizedLegacy.map(r => r.id), ['admin', 'super-admin']);
 
   // 4. Roles seleccionables en UserForm según jerarquía del actor
   const isSuperAdminAllowed = ['soporte', 'admin', 'super-admin'];
@@ -131,14 +131,13 @@ test('BASE_ROLE_CATALOG y getEffectiveRoles normalizan roles institucionales y e
 
   // Para super-admin:
   const superSelectable = normalizedLegacy.filter(r => isSuperAdminAllowed.includes(r.id));
-  assert.deepEqual(superSelectable.map(r => r.id), ['soporte', 'admin', 'super-admin']);
-  assert.equal(roleLabel(superSelectable[0].id), 'Soporte');
+  assert.deepEqual(superSelectable.map(r => r.id), ['admin', 'super-admin']);
+  assert.equal(roleLabel(superSelectable[0].id), 'Administrador');
 
   // Para admin (crear usuario):
   const adminSelectable = normalizedLegacy.filter(r => isAdminAllowed.includes(r.id));
-  assert.deepEqual(adminSelectable.map(r => r.id), ['soporte', 'admin']);
-  assert.equal(adminSelectable[0].id, 'soporte', 'El primer rol seleccionable debe ser soporte');
-  assert.equal(roleLabel(adminSelectable[0].id), 'Soporte');
+  assert.deepEqual(adminSelectable.map(r => r.id), ['admin']);
+  assert.equal(roleLabel(adminSelectable[0].id), 'Administrador');
   assert.ok(!adminSelectable.some(r => r.id === 'super-admin'), 'Admin no puede seleccionar super-admin');
   assert.ok(!adminSelectable.some(r => r.id === 'viewer'), 'Admin no puede seleccionar viewer');
 });
@@ -606,6 +605,5 @@ test('normalizeText normaliza diacríticos, mayúsculas y variantes fonéticas p
   assert.equal(normalizeText(null), '');
   assert.equal(normalizeText(undefined), '');
 });
-
 
 

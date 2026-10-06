@@ -14,6 +14,7 @@ import ssl
 import unicodedata
 import csv
 import io
+from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
 
 # Carga segura de variables de entorno desde el archivo .env raíz
@@ -30,6 +31,7 @@ from integration_health import upstream_healthy
 from dashboard_history import start_collector
 from dashboard_inventory import cabinets_with_documentary
 from dashboard_device_history import record_device_presence, normalize_mac, format_device_type, format_uptime
+from dashboard_security import sanitize_upstream
 
 # Lock global para proteger lecturas/escrituras concurrentes a archivos JSON
 _file_lock = threading.Lock()
@@ -101,8 +103,8 @@ def _configured_request(config, suffix, timeout=4.0):
             return response.status, b'{"error":"La API no acepto la consulta."}', "application/json"
         if "json" not in response.getheader("Content-Type", "").lower():
             raise ValueError("Expected JSON")
-        json.loads(payload)
-        return response.status, payload, "application/json; charset=utf-8"
+        cleaned = sanitize_upstream(json.loads(payload), (config.get("secret", ""), *connection_headers(config).values()))
+        return response.status, json.dumps(cleaned, ensure_ascii=False).encode(), "application/json; charset=utf-8"
     except Exception:
         return 502, b'{"error":"Servicio API no disponible. Revisa la configuracion de conexion."}', "application/json"
     finally:
@@ -233,6 +235,32 @@ def ensure_omni_cache_warm(max_wait=1.5):
 
 
 class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
+    def send_head(self):
+        # GET and HEAD share this boundary; never follow symlinks outside the build.
+        candidate = Path(self.translate_path(self.path))
+        root = Path(DIRECTORY).resolve()
+        try:
+            relative = candidate.resolve().relative_to(root)
+        except ValueError:
+            self.send_error(404, "Archivo no encontrado")
+            return None
+        if any(part.startswith('.') for part in relative.parts) or candidate.suffix.lower() in {'.map', '.env', '.sqlite3', '.key', '.pem', '.py'}:
+            self.send_error(404, "Archivo no encontrado")
+            return None
+        if candidate.is_dir() and not (candidate / 'index.html').is_file():
+            self.send_error(404, "Archivo no encontrado")
+            return None
+        if candidate.is_dir() and not (candidate / 'index.html').resolve().is_relative_to(root):
+            self.send_error(404, "Archivo no encontrado")
+            return None
+        return super().send_head()
+
+    def do_HEAD(self):
+        if urlsplit(self.path).path.startswith('/api/'):
+            self.send_error(405, "Método no permitido")
+            return
+        super().do_HEAD()
+
     def inventory_fetch(self, provider, endpoint):
         return _configured_request(connection(provider), endpoint, timeout=6)
 
@@ -247,10 +275,16 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
             self.send_header('Pragma', 'no-cache')
             self.send_header('Expires', '0')
             self.send_header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'")
-        
+        else:
+            # Revalidate the entry point after builds: its hashed assets change.
+            if urlsplit(path).path.endswith(('/', '.html')):
+                self.send_header('Cache-Control', 'no-cache, must-revalidate')
+            self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+        if os.environ.get('SGRS_PUBLIC_ORIGIN', '').startswith('https://'):
+            self.send_header('Strict-Transport-Security', 'max-age=31536000')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('X-Frame-Options', 'DENY')
-        self.send_header('Referrer-Policy', 'same-origin')
+        self.send_header('Referrer-Policy', 'no-referrer')
         if getattr(self, '_session_cookie', None):
             self.send_header('Set-Cookie', self._session_cookie)
             self._session_cookie = None
@@ -268,7 +302,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body_bytes)
 
     def _send_json(self, data, status=200):
-        if status == 200 and self.path not in ('/api/auth/session', '/api/auth/login'):
+        if status == 200 and urlsplit(self.path).path not in ('/api/auth/session', '/api/auth/login', '/api/auth/bootstrap', '/api/admin/users', '/api/admin/users/save'):
             data = self.viewer_projection(data)
         body = json.dumps(data, ensure_ascii=False).encode('utf-8')
         self._send_raw(body, status=status, content_type='application/json; charset=utf-8')
@@ -286,7 +320,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                         data = json.load(f)
                 self._send_json(tagged_reports(data))
             except Exception as e:
-                self._send_json({"error": str(e)}, 500)
+                self._send_json({"error": "No se pudo completar la operación."}, 500)
 
         # 2. Catálogo completo de IDFs y Racks
         elif path == '/api/idfs':
@@ -296,11 +330,11 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                         data = json.load(f)
                 self._send_json([{
                     **idf,
-                    'mobile_token': self.mobile_token(idf.get('id')),
+                    **({'mobile_token': self.mobile_token(idf.get('id'))} if 'idf.visits.write' in self.identity['capabilities'] else {}),
                     'incidents': [{**r, 'record_key': report_key(r)} for r in idf.get('incidents', [])]
                 } for idf in cabinets_with_documentary(data)])
             except Exception as e:
-                self._send_json({"error": str(e)}, 500)
+                self._send_json({"error": "No se pudo completar la operación."}, 500)
 
         # 3. Pool de Direccionamiento IP (IPAM)
         elif path == '/api/ips':
@@ -310,7 +344,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                         data = json.load(f)
                 self._send_json(data)
             except Exception as e:
-                self._send_json({"error": str(e)}, 500)
+                self._send_json({"error": "No se pudo completar la operación."}, 500)
 
         # 3b. Consulta segura de cuentas y terminales OmniVista para Gestión de Altas.
         # La página es sólo lectura: se exponen campos explícitos, nunca credenciales,
@@ -507,7 +541,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                     }
                 })
             except Exception as e:
-                self._send_json({"error": f"Error al procesar los puntos de acceso: {str(e)}", "aps": [], "summary": {}}, 500)
+                self._send_json({"error": "No se pudieron procesar los puntos de acceso.", "aps": [], "summary": {}}, 500)
 
         # 4. Catálogo general de dispositivos (Integrado en vivo con API Forti + Fallback)
         elif path.startswith('/api/devices'):
@@ -749,6 +783,18 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                         data = payload.get("data")
                         pools = data.get("pools") if isinstance(data, dict) else (payload.get("pools") if isinstance(payload.get("pools"), list) else None)
                         if isinstance(pools, list):
+                            meztli_pools = [pool for pool in pools if isinstance(pool, dict) and 'meztli' in str(pool.get('interface', '')).lower()]
+                            if meztli_pools:
+                                # Use the actual DHCP clients, not ARP neighbors or
+                                # historical Device Detection, for this dashboard card.
+                                clients = None
+                                lease_code, lease_body, _ = _fetch_upstream(f"{FORTI_API_URL}/network/dhcp-leases", timeout=12.0)
+                                if lease_code == 200:
+                                    lease_payload = json.loads(lease_body.decode('utf-8'))
+                                    if isinstance(lease_payload, dict) and lease_payload.get('success') is not False and isinstance(lease_payload.get('data'), list):
+                                        clients = lease_payload['data']
+                                for pool in meztli_pools:
+                                    pool['dhcp_clients'] = None if clients is None else [client for client in clients if isinstance(client, dict) and client.get('interface') == pool.get('interface')]
                             critical_count = 0
                             warning_count = 0
                             for pool in pools:
@@ -886,7 +932,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
 
                 self._send_json({"status": "success", "ip": target_ip})
             except Exception as e:
-                self._send_json({"error": str(e)}, 500)
+                self._send_json({"error": "No se pudo completar la operación."}, 500)
 
         # 3. Agregar, actualizar o sincronizar dispositivos en un IDF
         elif path == '/api/idfs/device':
@@ -927,16 +973,16 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
 
                 self._send_json({"status": "success", "idf_id": idf_id})
             except Exception as e:
-                self._send_json({"error": str(e)}, 500)
+                self._send_json({"error": "No se pudo completar la operación."}, 500)
 
         else:
             self.send_response(404)
             self.end_headers()
 
     def log_message(self, format, *args):
-        # Evitar bloquear I/O en logs ruidosos
+        # QR capabilities and other query values must not be written to access logs.
         try:
-            super().log_message(format, *args)
+            super().log_message('%s %s', getattr(self, 'command', '-'), urlsplit(getattr(self, 'path', '')).path)
         except Exception:
             pass
 
@@ -969,6 +1015,12 @@ if __name__ == "__main__":
         parsed_origin = urlsplit(public_origin)
         if parsed_origin.scheme != "https" or not parsed_origin.hostname or parsed_origin.username or parsed_origin.password or parsed_origin.path not in ("", "/") or parsed_origin.query or parsed_origin.fragment:
             raise SystemExit("SGRS_PUBLIC_ORIGIN debe ser un origen HTTPS, sin ruta ni credenciales.")
+    bind_host = os.environ.get("DASHBOARD_HOST", "127.0.0.1")
+    lan_origin = os.environ.get("SGRS_LAN_ORIGIN", "").strip()
+    if public_origin and bind_host not in ("127.0.0.1", "localhost", "::1"):
+        raise SystemExit("Con SGRS_PUBLIC_ORIGIN el gateway debe escuchar en loopback; el proxy HTTPS publica el servicio.")
+    if bind_host not in ("127.0.0.1", "localhost", "::1") and not public_origin.startswith("https://") and not lan_origin:
+        raise SystemExit("Para publicar el dashboard fuera de este equipo configura un proxy HTTPS mediante SGRS_PUBLIC_ORIGIN o un origen LAN en SGRS_LAN_ORIGIN.")
     if not os.path.isfile(os.path.join(DIRECTORY, "index.html")):
         raise SystemExit("Falta compilar el dashboard: ejecuta npm ci y npm run build en Dashboard/.")
     preferred_port = int(os.environ.get("DASHBOARD_PORT") or os.environ.get("PORT", 3000))
@@ -981,7 +1033,7 @@ if __name__ == "__main__":
     started = False
     for p in candidate_ports:
         try:
-            server = ThreadedHTTPServer((os.environ.get("DASHBOARD_HOST", "0.0.0.0"), p), Handler)
+            server = ThreadedHTTPServer((bind_host, p), Handler)
             PORT = p
             print("====================================================")
             print(f"  S.G.R.S Servidor Multi-hilo Activo en Puerto {PORT}")

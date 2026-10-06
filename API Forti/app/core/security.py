@@ -42,12 +42,12 @@ def generate_totp_secret() -> str:
 
 
 def get_totp_secret_for_account(api_key: str, account_name: str = "NOC-Operator") -> str:
-    """Genera o recupera de forma determinista el secreto TOTP para una cuenta y clave dada."""
-    if settings.TOTP_SECRET_KEY:
-        return settings.TOTP_SECRET_KEY
-    seed = f"{api_key}:{account_name}:{settings.JWT_SECRET_KEY}".encode("utf-8")
-    h = hashlib.sha256(seed).digest()
-    return base64.b32encode(h[:20]).decode("utf-8").replace("=", "")
+    """Returns an explicitly provisioned independent TOTP secret."""
+    if not settings.TOTP_SECRET_KEY:
+        raise ValueError("TOTP_SECRET_KEY is not provisioned")
+    digest = hmac.new(settings.TOTP_SECRET_KEY.encode("utf-8"),
+                       f"sgrs-totp:v1:{account_name}".encode("utf-8"), hashlib.sha256).digest()[:20]
+    return base64.b32encode(digest).decode("ascii").rstrip("=")
 
 
 

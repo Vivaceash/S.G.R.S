@@ -28,7 +28,7 @@ def test_bootstrap_is_one_time_and_has_no_plaintext_password(local_store):
     assert not access.verify_password("incorrecta", hashed)
 
 
-def test_ordinary_admin_cannot_create_users(local_store):
+def test_ordinary_admin_cannot_create_viewer_or_escalate_roles(local_store):
     admin = access.save_user({"username": "admin.local", "name": "Operador local", "role": "admin", "password": "Ejemplo-local-2026"}, local_store["id"])
     with pytest.raises(access.AccessError) as error:
         access.save_user({"username": "viewer.local", "name": "Consulta local", "role": "viewer", "password": "Ejemplo-local-2026"}, admin["id"])
@@ -44,13 +44,39 @@ def test_role_change_revokes_session(local_store):
     assert access.session(f"sgrs_session={token}") is None
 
 
-def test_own_role_change_and_stale_writes_are_denied(local_store):
+def test_last_root_role_change_and_stale_writes_are_denied(local_store):
     with pytest.raises(access.AccessError) as error:
-        access.save_user({**local_store, "active": True, "role": "viewer"}, local_store["id"])
+        access.save_user({**local_store, "active": True, "role": "viewer", "confirmed": True}, local_store["id"])
     assert error.value.status == 409
+    assert "al menos un super-admin" in str(error.value)
     with pytest.raises(access.AccessError) as error:
         access.save_user({**local_store, "active": True, "version": 0}, local_store["id"])
     assert error.value.status == 409
+
+
+def test_self_role_change_requires_confirmation_and_revokes_session(local_store):
+    access.save_user({"username": "backup.root", "name": "Responsable alterno", "role": "super-admin", "password": "Ejemplo-local-2026"}, local_store["id"])
+    token, _ = access.login({"username": "root.local", "password": "Ejemplo-local-2026"}, "127.0.0.1")
+    body = {**local_store, "active": True, "role": "admin"}
+    with pytest.raises(access.AccessError) as error:
+        access.save_user(body, local_store["id"])
+    assert error.value.status == 409
+    assert "Confirma" in str(error.value)
+    saved = access.save_user({**body, "confirmed": True}, local_store["id"])
+    assert saved["role"] == "admin"
+    assert access.session(f"sgrs_session={token}") is None
+    _, identity = access.login({"username": "root.local", "password": "Ejemplo-local-2026"}, "127.0.0.1")
+    assert "integrations.manage" not in identity["capabilities"]
+    with pytest.raises(access.AccessError):
+        access.save_user({**saved, "active": True, "role": "super-admin", "confirmed": True}, saved["id"])
+
+
+def test_self_suspension_stays_denied_with_another_root(local_store):
+    access.save_user({"username": "backup.root", "name": "Responsable alterno", "role": "super-admin", "password": "Ejemplo-local-2026"}, local_store["id"])
+    with pytest.raises(access.AccessError) as error:
+        access.save_user({**local_store, "active": False, "confirmed": True}, local_store["id"])
+    assert error.value.status == 409
+    assert "suspender tu propia" in str(error.value)
 
 
 def test_connection_never_returns_secret_and_rejects_secret_reuse_at_new_url(local_store):
@@ -96,6 +122,17 @@ def test_internal_catalog_retains_all_roles():
     assert access.visible_roles("unknown") == []
     assert access.visible_roles("viewer") == []
     assert access.visible_roles("soporte") == []
+
+
+def test_legacy_root_empty_pages_restore_navigation_without_elevating_operators(local_store):
+    with access.database(write=True) as db:
+        db.execute("UPDATE users SET allowed_pages='[]' WHERE id=?", (local_store["id"],))
+    token, identity = access.login({"username": "root.local", "password": "Ejemplo-local-2026"}, "127.0.0.1")
+    assert identity["allowed_pages"] == access.ROLE_PAGE_DEFAULTS["super-admin"]
+    assert access.session(f"sgrs_session={token}")["allowed_pages"] == identity["allowed_pages"]
+    for role in ("admin", "soporte", "viewer"):
+        assert access.parse_allowed_pages("[]", role) == []
+    assert access.parse_allowed_pages('["resumen"]', "super-admin") == ["resumen"]
 
 
 @pytest.mark.parametrize("path", [
@@ -184,8 +221,11 @@ def test_admin_hierarchy_permissions(local_store):
     soporte = access.save_user({"username": "soporte.created", "name": "Soporte Creado", "role": "soporte",
                                 "password": "Ejemplo-local-2026", "allowed_pages": ["conexiones"]}, admin["id"])
     assert soporte["role"] == "soporte"
-    # Admin cannot define allowed_pages, role defaults are applied
-    assert soporte["allowed_pages"] == ["soporte"]
+    # An admin cannot define allowed_pages or read the assigned page list.
+    assert "allowed_pages" not in soporte
+    with access.database() as db:
+        stored_pages = db.execute("SELECT allowed_pages FROM users WHERE id=?", (soporte["id"],)).fetchone()[0]
+    assert stored_pages == '["soporte"]'
 
     # Admin can create another admin
     admin2 = access.save_user({"username": "admin2.created", "name": "Admin 2", "role": "admin",
@@ -204,7 +244,57 @@ def test_admin_hierarchy_permissions(local_store):
     assert error.value.status == 403
 
 
-def test_soporte_viewer_projection_preserves_technical_specs():
+def test_hidden_users_and_super_admin_projection(local_store):
+    admin = access.save_user({"username": "admin.hidden", "name": "Admin Operativo", "role": "admin",
+                              "password": "Ejemplo-local-2026"}, local_store["id"])
+    super_user = access.save_user({"username": "root.visible", "name": "Admin Interno", "role": "super-admin",
+                                   "password": "Ejemplo-local-2026"}, local_store["id"])
+    hidden = access.save_user({"username": "cuenta.oculta", "name": "Cuenta Reservada", "role": "soporte",
+                               "password": "Ejemplo-local-2026", "is_hidden": True}, local_store["id"])
+
+    ordinary = access.list_users(admin["id"])
+    projected = next(user for user in ordinary if user["id"] == super_user["id"])
+    assert projected["role"] == "admin"
+    assert "allowed_pages" not in projected and "is_hidden" not in projected
+    assert hidden["id"] not in {user["id"] for user in ordinary}
+
+    with pytest.raises(access.AccessError) as error:
+        access.save_user({**{key: value for key, value in hidden.items() if key not in ("is_hidden", "active")}, "active": True}, admin["id"])
+    assert error.value.status == 404
+    with pytest.raises(access.AccessError) as error:
+        access.save_user({"username": "hidden.by.admin", "name": "Intento", "role": "soporte",
+                          "password": "Ejemplo-local-2026", "is_hidden": True}, admin["id"])
+    assert error.value.status == 403
+
+    assert hidden["is_hidden"] is True
+    visible_again = access.save_user({**hidden, "is_hidden": False, "active": True}, local_store["id"])
+    assert visible_again["is_hidden"] is False
+    assert any(user["id"] == hidden["id"] for user in access.list_users(admin["id"]))
+
+
+def test_hidden_account_attribution_is_redacted(local_store):
+    from dashboard_access import project_hidden_actors
+    hidden = access.save_user({"username": "private.actor", "name": "Nombre Reservado", "role": "admin",
+                               "password": "Ejemplo-local-2026", "is_hidden": True}, local_store["id"])
+    response = project_hidden_actors({"tech": "Nombre Reservado", "actor_id": hidden["id"],
+                                      "incident": {"resolved_by": hidden["id"]}})
+    assert response["tech"] == "Cuenta reservada"
+    assert "actor_id" not in response
+    assert "resolved_by" not in response["incident"]
+
+
+def test_upstream_credential_fields_are_never_forwarded():
+    from dashboard_security import sanitize_upstream
+    response = sanitize_upstream({
+        "user": {"userPassword": "secret-value", "apiKey": "key-value", "sessionId": "session-value"},
+        "accessToken": "bearer-value", "label": "visible",
+    }, ("integration-secret",))
+    assert response["user"] == {"userPassword": "******", "apiKey": "******", "sessionId": "******"}
+    assert response["accessToken"] == "******"
+    assert response["label"] == "visible"
+
+
+def test_soporte_viewer_projection_preserves_technical_specs(local_store):
     from dashboard_routes import AccessRoutes
     handler = AccessRoutes()
     test_data = {"mac": "00:11:22:33:44:55", "serial": "SN123456", "ip": "192.168.1.50", "brand": "HP"}
@@ -237,6 +327,8 @@ def test_routes_access_control(local_store):
 
     # 1. Soporte can access normal paths
     handler = MockRoutes()
+    handler.headers = {"Origin": "http://localhost:3000"}
+    handler.client_address = ("127.0.0.1", 1234)
     handler.identity = {"user": {"id": "sup-1", "role": "soporte"}, "capabilities": access.capabilities("soporte"), "csrf": "csrf"}
     for path in ("/api/devices", "/api/health", "/api/forti/network/dhcp-pools"):
         handler.path = path
@@ -252,6 +344,10 @@ def test_routes_access_control(local_store):
     status, payload = handler.response
     assert status == 200
     assert "users" in payload
+    projected_root = next(row for row in payload["users"] if row["id"] == local_store["id"])
+    assert projected_root["role"] == "admin"
+    assert "allowed_pages" not in projected_root and "is_hidden" not in projected_root
+    assert not any("password" in key.lower() or "hash" in key.lower() for row in payload["users"] for key in row)
 
     # 3. Admin can save a soporte user via /api/admin/users/save
     handler.path = "/api/admin/users/save"
@@ -307,17 +403,15 @@ def test_origins_supports_multiple_origins_and_ports(monkeypatch):
     assert "http://192.168.38.250" in origins_space
 
 
-def test_origins_and_boundary_with_wildcard(monkeypatch):
+def test_wildcard_origin_is_ignored(monkeypatch):
     from dashboard_routes import AccessRoutes
     routes = AccessRoutes()
 
     monkeypatch.setenv("SGRS_LAN_ORIGIN", "*")
     origins = routes._origins()
-    assert "*" in origins
+    assert "*" not in origins
 
     # Test boundary allows any Host and Origin when wildcard is present
     routes.headers = {"Host": "any-host.lan", "Origin": "http://any-host.lan"}
-    # Should not raise AccessError
-    routes._boundary(mutation=False)
-
-
+    with pytest.raises(access.AccessError):
+        routes._boundary(mutation=False)
