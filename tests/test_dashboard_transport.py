@@ -64,6 +64,23 @@ def test_public_ip_rejected_even_if_lan_origin_set(monkeypatch):
         route._boundary(mutation=False)
 
 
+def test_configured_institutional_cidr_can_use_lan_http(monkeypatch):
+    monkeypatch.setenv("SGRS_LAN_ORIGIN", "http://192.168.38.250:3000")
+    monkeypatch.setenv("SGRS_LAN_CLIENT_CIDRS", "15.40.0.0/16")
+    route = handler(monkeypatch, peer="15.40.1.57", host="192.168.38.250:3000",
+                    origin="http://192.168.38.250:3000", path="/api/auth/session")
+    route._boundary(mutation=False)
+
+
+def test_unconfigured_public_client_remains_rejected(monkeypatch):
+    monkeypatch.setenv("SGRS_LAN_ORIGIN", "http://192.168.38.250:3000")
+    monkeypatch.setenv("SGRS_LAN_CLIENT_CIDRS", "15.40.0.0/16")
+    route = handler(monkeypatch, peer="8.8.8.8", host="192.168.38.250:3000",
+                    origin="http://192.168.38.250:3000", path="/api/auth/session")
+    with pytest.raises(AccessError, match="HTTPS"):
+        route._boundary(mutation=False)
+
+
 @pytest.mark.parametrize("peer,proto", [("192.0.2.10", None), ("192.0.2.10", "https"), ("127.0.0.1", None), ("127.0.0.1", "http"), ("127.0.0.1", "https,http")])
 def test_forged_https_origin_is_not_transport_evidence(monkeypatch, peer, proto):
     route = handler(monkeypatch, public="https://dashboard.example", host="dashboard.example",

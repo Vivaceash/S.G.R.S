@@ -52,6 +52,21 @@ def reserved_read_allowed(path):
 
 
 class AccessRoutes:
+    def _lan_client_allowed(self, client_ip):
+        """Allow HTTP sessions only from private clients or configured LAN CIDRs."""
+        if client_ip.is_private or client_ip.is_loopback:
+            return True
+        configured = os.environ.get("SGRS_LAN_CLIENT_CIDRS", "")
+        for value in re.split(r"[\s,;]+", configured.strip()):
+            if not value:
+                continue
+            try:
+                if client_ip in ipaddress.ip_network(value, strict=False):
+                    return True
+            except ValueError:
+                continue
+        return False
+
     def _secure_transport(self):
         # Only a proxy on this machine may attest TLS. Origin is client input,
         # not evidence of encryption. The backend must remain on loopback.
@@ -92,8 +107,9 @@ class AccessRoutes:
                 and (not origin or (origin.scheme == "http" and origin.hostname in ("localhost", "127.0.0.1", "::1")))):
             return
 
-        # 2. Acceso LAN privado permitido (IP privada o loopback con host/origin en SGRS_LAN_ORIGIN / interfaces)
-        if client_ip.is_private or client_ip.is_loopback:
+        # 2. Acceso LAN permitido desde redes privadas o CIDRs institucionales
+        # explícitamente configurados, siempre con host/origen local autorizado.
+        if self._lan_client_allowed(client_ip):
             origins = self._origins()
             lan_origins = {orig for orig in origins if orig != "*" and urlsplit(orig).hostname not in ("localhost", "127.0.0.1", "::1")}
             lan_hosts = {urlsplit(orig).netloc for orig in lan_origins}
