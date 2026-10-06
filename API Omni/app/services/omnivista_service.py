@@ -423,7 +423,7 @@ class OmniVistaService:
                 connected = self.login()
                 message = "Conexión exitosa con OmniVista 2500" if connected else "Credenciales o login fallido"
         except Exception as exc:
-            message = f"Error de enlace: {str(exc)}" if settings.DEBUG else "Error de enlace con OmniVista"
+            message = "Error de enlace con OmniVista"
 
         elapsed_ms = round((time.time() - start) * 1000, 2)
 

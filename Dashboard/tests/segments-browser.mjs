@@ -124,7 +124,7 @@ try {
   await devicesPanel.waitFor();
   await devicesPanel.locator('.segment-device-row').first().click();
   await page.locator('dialog[open]').waitFor();
-  assert.equal(await page.locator('dialog[open] h2').innerText(), 'Local 0');
+  assert.equal(await page.locator('dialog[open] h2').innerText(), 'ov-device-0');
   assert.equal(await page.locator('.omni-detail-box').count(), 1);
   await page.keyboard.press('Escape');
 
@@ -138,4 +138,29 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 });
   assert.deepEqual(errors, []);
   console.log('PASS: in-place bottom segment devices modal, card selection border, search filter, toggle & close');
+
+  // Meztli must use the same confirmed connections in its card and details.
+  const meztli = data.segments.find(segment => segment.name === 'Meztli');
+  meztli.active_leases = 6;
+  data.segments = [meztli];
+  const prefix = meztli.default_gateway.split('.').slice(0, 3).join('.');
+  data.devices = [
+    ...Array.from({ length: 6 }, (_, i) => ({ name: `Confirmado ${i}`, ip: `${prefix}.${i + 10}`, status: 'online', ip_source: 'dhcp+arp' })),
+    ...Array.from({ length: 20 }, (_, i) => ({ name: `Sin confirmar ${i}`, ip: '—', status: 'online', ip_source: 'unconfirmed', interface: meztli.interface })),
+    { name: 'Detección histórica', ip: `${prefix}.80`, status: 'online', ip_source: 'device-detection' },
+    { name: 'Reserva fuera de línea', ip: `${prefix}.81`, status: 'offline', ip_source: 'reservation', is_reserved: true },
+  ];
+  meztli.dhcp_clients = data.devices.slice(0, 6).map(device => ({ ip: device.ip, hostname: device.name, interface: meztli.interface }));
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  const meztliCard = page.locator('.segment-card').filter({ has: page.getByRole('heading', { name: 'Meztli', exact: true }) });
+  await meztliCard.waitFor();
+  assert.equal(await meztliCard.locator('.segment-secondary dd strong').innerText(), '6');
+  await meztliCard.getByRole('button', { name: 'Ver dispositivos', exact: true }).click();
+  await page.locator('.segment-devices-table tbody tr').first().waitFor();
+  assert.equal(await page.locator('.segment-devices-table tbody tr').count(), 6);
+  assert.equal(await page.locator('.segment-devices-panel').getByText('Pendiente de confirmar', { exact: true }).count(), 0);
+  assert.equal(await page.locator('.segment-devices-panel').getByText('Detección histórica', { exact: true }).count(), 0);
+  assert.deepEqual(errors, []);
+  console.log('PASS: Meztli card and device list show only six confirmed online fixture connections');
 } finally { await browser.close(); }

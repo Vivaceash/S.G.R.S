@@ -134,24 +134,24 @@ class FortiOSClient:
             return data
 
         except httpx.ConnectError as exc:
-            logger.error(f"Error de conexión con FortiGate en {self.base_url}: {exc}")
+            logger.error("Error de conexión con FortiGate (%s)", type(exc).__name__)
             raise FortiOSConnectionError(
-                message=f"No se pudo conectar con el FortiGate en {self.base_url}. Verifica IP, puerto y conectividad de red.",
-                details=str(exc)
+                message="No se pudo conectar con el FortiGate. Verifica el estado de la integración.",
+                details=None
             )
         except httpx.TimeoutException as exc:
-            logger.error(f"Timeout al conectar con FortiGate ({self.timeout}s): {exc}")
+            logger.error("Timeout al conectar con FortiGate después de %.1f segundos", self.timeout)
             raise FortiOSConnectionError(
                 message=f"Tiempo de espera agotado al conectar con FortiGate ({self.timeout}s).",
-                details=str(exc)
+                details=None
             )
         except (FortiOSBaseException, FortiOSAuthError, FortiOSNotFoundError, FortiOSResponseError):
             raise
         except Exception as exc:
-            logger.error(f"Error inesperado al consultar FortiOS: {exc}")
+            logger.error("Error inesperado al consultar FortiOS (%s)", type(exc).__name__)
             raise FortiOSResponseError(
                 message="Error inesperado durante la comunicación con FortiOS.",
-                details=str(exc)
+                details=None
             )
 
     # -------------------------------------------------------------

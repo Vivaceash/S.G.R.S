@@ -8,6 +8,7 @@ from app.security import mask_sensitive_ip
 
 router = APIRouter(
     tags=["Sistema y Diagnóstico"],
+    dependencies=[Depends(verify_api_key)],
 )
 
 

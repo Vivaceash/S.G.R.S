@@ -33,6 +33,7 @@ def _calculate_ip_range_count(start_ip: str, end_ip: str) -> int:
     "/dhcp-pools",
     response_model=BaseResponse[DhcpPoolSummary],
     summary="Consultar capacidad, asignaciones y saturación de los pools DHCP",
+    dependencies=[Depends(verify_api_key)],
 )
 async def get_dhcp_pools(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar")):
     """

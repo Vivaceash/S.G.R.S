@@ -109,7 +109,7 @@ def local_network_ip() -> str:
 
 def dashboard_environment(env: dict, port: int) -> dict:
     """Expone el dashboard en LAN y fija el único origen de red autorizado."""
-    result = {**env, "PORT": str(port), "DASHBOARD_PORT": str(port), "DASHBOARD_HOST": "0.0.0.0"}
+    result = {**env, "PORT": str(port), "DASHBOARD_PORT": str(port), "DASHBOARD_HOST": env.get("DASHBOARD_HOST", "127.0.0.1")}
     # SGRS_PUBLIC_ORIGIN se reserva para despliegues HTTPS. Este origen HTTP
     # solo habilita el acceso desde la misma red institucional para la planilla QR.
     if not result.get("SGRS_LAN_ORIGIN"):

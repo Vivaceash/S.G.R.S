@@ -28,7 +28,7 @@ const demoSession = {
   allowed_pages: ['resumen', 'dispositivos', 'disponibilidad', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
 };
 
-function Login({ onLogin, onBootstrap, setup, error, retry, expired }) {
+function Login({ onLogin, onBootstrap, setup, setupAllowed, error, retry, expired }) {
   const f = useForm({ username: '', password: '' }, values => Object.fromEntries(['username', 'password'].filter(k => !values[k]).map(k => [k, 'Completa este campo.'])), onLogin, null, true);
   const setupForm = useForm({ username: '', name: '', password: '', password_confirmation: '' }, values => {
     const errors = Object.fromEntries(['username', 'name', 'password', 'password_confirmation'].filter(key => !String(values[key] || '').trim()).map(key => [key, 'Completa este campo.']));
@@ -38,10 +38,10 @@ function Login({ onLogin, onBootstrap, setup, error, retry, expired }) {
   }, onBootstrap, null, true);
   useEffect(() => { document.title = 'Iniciar sesión · Centro Operativo SGRS'; }, []);
   return <main className="login-page"><section className="login-intro" aria-label="Sistema de Gestión en Redes y Seguridad"><p className="eyebrow">Infraestructura NOC</p><h1>Sistema de Gestión<br />en Redes y Seguridad</h1><p>Consulta, documenta y da seguimiento a la infraestructura institucional desde un solo lugar.</p><div className="login-intro-points"><span><i /> Inventario y disponibilidad IP</span><span><i /> Reportes de IDF en tiempo real</span><span><i /> Monitoreo de red centralizado</span></div></section><section className="login-panel panel"><div className="brand-image" role="img" aria-label="ISSSTE" /><p className="eyebrow">Centro Operativo · Redes e Infraestructura</p>{expired && <h1>Vuelve a iniciar sesión</h1>}<p className="muted">Acceso con tu cuenta personal. Tus permisos dependen del rol asignado.</p>
-    {setup && <Notice title="Configuración inicial pendiente">Crea la primera cuenta local para habilitar el dashboard.<Button onClick={retry}>Comprobar disponibilidad</Button></Notice>}
+    {setup && <Notice title="Configuración inicial pendiente">{setupAllowed ? 'Crea la primera cuenta local para habilitar el dashboard.' : 'La primera cuenta debe crearse desde la consola del servidor.'}<Button onClick={retry}>Comprobar disponibilidad</Button></Notice>}
     {error && <Notice title="No se pudo consultar el acceso" tone="warning" action={<Button onClick={retry}>Reintentar</Button>}>{error}</Notice>}
-    {expired && <Notice title="Sesión no válida">Vuelve a entrar con la misma cuenta para recuperar la pantalla. Si cambias de cuenta, se descartará su contenido.</Notice>}
-    {setup && <form noValidate ref={setupForm.form} onSubmit={setupForm.submit} aria-busy={setupForm.busy} className="setup-form"><h2>Crear cuenta inicial</h2>{setupForm.error && <Notice title="No se pudo crear la cuenta" tone="danger">{setupForm.error}</Notice>}<fieldset disabled={setupForm.busy}>
+    {expired && <Notice title="Sesión no válida">Vuelve a iniciar sesión. Los datos de la sesión anterior se han retirado de la pantalla.</Notice>}
+    {setup && setupAllowed && <form noValidate ref={setupForm.form} onSubmit={setupForm.submit} aria-busy={setupForm.busy} className="setup-form"><h2>Crear cuenta inicial</h2>{setupForm.error && <Notice title="No se pudo crear la cuenta" tone="danger">{setupForm.error}</Notice>}<fieldset disabled={setupForm.busy}>
       <Field label="Usuario" required error={setupForm.errors.username}><input autoComplete="username" autoCapitalize="none" value={setupForm.values.username} onChange={e => setupForm.change('username', e.target.value)} maxLength={80} /></Field>
       <Field label="Nombre completo" required error={setupForm.errors.name}><input autoComplete="name" value={setupForm.values.name} onChange={e => setupForm.change('name', e.target.value)} maxLength={120} /></Field>
       <Field label="Contraseña" required error={setupForm.errors.password}><SecretInput autoComplete="new-password" value={setupForm.values.password} onChange={e => setupForm.change('password', e.target.value)} maxLength={128} /></Field>
@@ -62,6 +62,7 @@ export function SessionProvider({ children }) {
   const [ready, setReady] = useState(demo);
   const [expired, setExpired] = useState(false);
   const [setup, setSetup] = useState(false);
+  const [setupAllowed, setSetupAllowed] = useState(false);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
   useEffect(() => {
@@ -72,6 +73,7 @@ export function SessionProvider({ children }) {
     request('/api/auth/session', { signal: controller.signal }).then(value => {
       if (!alive || controller.signal.aborted) return;
       setCsrfToken(value.csrf); setSetup(Boolean(value.setup_required));
+      setSetupAllowed(Boolean(value.web_bootstrap_allowed));
       if (value.user) { setIdentity(value); setExpired(false); }
       else { setExpired(true); window.dispatchEvent(new Event('sgrs-session-expired')); }
     }).catch(() => { if (alive) setError('Inicia el servidor local del dashboard para acceder con una cuenta.'); })
@@ -91,7 +93,9 @@ export function SessionProvider({ children }) {
     const url = new URL(location.href); if (value) url.searchParams.set('demo', '1'); else url.searchParams.delete('demo');
     history.replaceState(null, '', url);
   };
-  const signIn = async values => { const result = await request('/api/auth/login', { body: values }); setCsrfToken(result.csrf); setIdentity(result); setExpired(false); setReady(true); setError(''); };
+  const signIn = async values => {
+    const result = await request('/api/auth/login', { body: values }); setCsrfToken(result.csrf); setIdentity(result); setExpired(false); setReady(true); setError('');
+  };
   const bootstrap = async values => { const result = await request('/api/auth/bootstrap', { body: values }); setCsrfToken(result.csrf); setIdentity(result); setSetup(false); setExpired(false); setReady(true); setError(''); };
   const signOut = async () => { if (!demo) await request('/api/auth/logout', { body: {} }); setCsrfToken(''); setIdentity(null); setExpired(false); };
   const [demoRole, setDemoRole] = useState(() => new URLSearchParams(location.search).get('role') || 'super-admin');
@@ -113,6 +117,7 @@ export function SessionProvider({ children }) {
 
   const computedDemo = {
     ...demoSession,
+    roles: BASE_ROLE_CATALOG.filter(role => activeDemoRole === 'super-admin' || (activeDemoRole === 'admin' && role.id !== 'super-admin')),
     user: {
       ...demoSession.user,
       role: activeDemoRole,
@@ -152,8 +157,8 @@ export function SessionProvider({ children }) {
     can: name => Boolean(current?.capabilities?.includes(name)),
   }}>
     {!ready ? <div className="login-page"><Loading /></div> : <>
-      {current && <div hidden={!demo && expired} inert={!demo && expired ? true : undefined} key={`${demo ? `demo-${activeDemoRole}` : 'live'}-${current.user.id}-${current.user.role}-${current.user.version}`}>{children}</div>}
-      {(!current || (!demo && expired)) && <Login onLogin={signIn} onBootstrap={bootstrap} setup={setup} error={error} retry={() => setRevision(r => r+1)} expired={Boolean(current)} />}
+      {current && (demo || !expired) && <div key={`${demo ? `demo-${activeDemoRole}` : 'live'}-${current.user.id}-${current.user.role}-${current.user.version}`}>{children}</div>}
+      {(!current || (!demo && expired)) && <Login onLogin={signIn} onBootstrap={bootstrap} setup={setup} setupAllowed={setupAllowed} error={error} retry={() => setRevision(r => r+1)} expired={Boolean(current)} />}
     </>}
   </SessionContext.Provider>;
 }

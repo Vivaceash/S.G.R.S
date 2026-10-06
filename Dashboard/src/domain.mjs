@@ -1,6 +1,6 @@
 export const LOCALE = 'es-MX';
 export const TIME_ZONE = 'America/Mexico_City';
-export const roleLabel = role => role === 'super-admin' ? 'Admin' : role === 'admin' ? 'admin' : role === 'soporte' ? 'Soporte' : (role || '');
+export const roleLabel = role => role === 'super-admin' ? 'Admin' : role === 'admin' ? 'Administrador' : role === 'soporte' ? 'Soporte' : (role || '');
 
 export const AVAILABLE_PAGES = [
   { id: 'resumen', label: 'Dashboard Operativo' },
@@ -18,20 +18,23 @@ export const AVAILABLE_PAGES = [
 
 export const BASE_ROLE_CATALOG = [
   { id: 'soporte', title: 'Soporte', description: 'Atención y diagnóstico técnico: consulta de dispositivos, fichas técnicas y DHCP.' },
-  { id: 'admin', title: 'admin', description: 'Administra la operación: inventario, visitas e incidencias de IDF y gestión de usuarios.' },
+  { id: 'admin', title: 'Administrador', description: 'Administra la operación: inventario, visitas e incidencias de IDF y gestión de usuarios.' },
   { id: 'super-admin', title: 'Admin', description: 'Gestiona cuentas, privilegios modulares, conexiones y consultas técnicas.' },
 ];
 
 export function getEffectiveRoles(roleInfo) {
-  const rawRoles = (Array.isArray(roleInfo) && roleInfo.length ? roleInfo : BASE_ROLE_CATALOG)
-    .filter(r => r && r.id && r.id !== 'viewer');
-  const hasSoporte = rawRoles.some(r => r.id === 'soporte');
-  const normalized = hasSoporte ? rawRoles : [BASE_ROLE_CATALOG[0], ...rawRoles];
-
-  return BASE_ROLE_CATALOG.map(base => {
-    const existing = normalized.find(r => r.id === base.id);
-    return existing ? { ...base, ...existing, title: base.title } : base;
+  if (!Array.isArray(roleInfo)) return [];
+  return BASE_ROLE_CATALOG.flatMap(base => {
+    const existing = roleInfo.find(r => r?.id === base.id);
+    return existing ? [{ ...base, ...existing, title: base.title }] : [];
   });
+}
+
+export function usersForDemo(users, actorRole) {
+  if (actorRole === 'super-admin') return users;
+  return users.filter(user => !user.is_hidden).map(({ is_hidden, allowed_pages, ...user }) => ({
+    ...user, role: user.role === 'super-admin' ? 'admin' : user.role,
+  }));
 }
 
 export const ROLE_PAGE_DEFAULTS = {
@@ -72,6 +75,21 @@ export function deviceInSegment(device, segment) {
 export function getSegmentDevices(devices, segment) {
   if (!Array.isArray(devices) || !segment) return [];
   return devices.filter(device => deviceInSegment(device, segment));
+}
+
+export function isMeztliSegment(segment) {
+  return /\bmeztli\b/.test(normalizeText(`${segment?.name || ''} ${segment?.interface || ''}`));
+}
+export function getOverviewSegmentDevices(devices, segment) {
+  if (!isMeztliSegment(segment)) return getSegmentDevices(devices, segment);
+  const mac = value => String(value || '').toLowerCase().replace(/[^a-f0-9]/g, '');
+  return (segment.dhcp_clients || []).map(lease => {
+    const observed = (devices || []).find(device => device.interface === segment.interface
+      && (lease.mac ? mac(device.mac) === mac(lease.mac) : device.ip === lease.ip));
+    return { ...observed, name: observed?.name || lease.hostname || lease.mac || lease.ip || 'Cliente DHCP',
+      ip: lease.ip, mac: lease.mac || observed?.mac, interface: segment.interface,
+      status: 'online', ip_source: 'dhcp', activity: 'Concesión DHCP activa' };
+  });
 }
 
 export const SUPPORT_ALLOWED_NETWORKS = ['meztli', 'tona', 'tlalo', 'quetzal', 'ehecatl'];
@@ -474,8 +492,10 @@ export class ApiError extends Error {
 let csrfToken = '';
 export function setCsrfToken(value) { csrfToken = value || ''; }
 export async function request(path, { signal, body } = {}) {
+  if (!path.startsWith('/api/') || new URL(path, location.origin).origin !== location.origin) throw new Error('Destino de solicitud no permitido.');
+  if (location.protocol !== 'https:' && !(location.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname))) throw new ApiError(403, 'Abre el dashboard mediante HTTPS para proteger las credenciales y la sesión.');
   const response = await fetch(path, {
-    signal: signal || AbortSignal.timeout(15000), credentials: 'same-origin', headers: body ? { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken } : { Accept: 'application/json' },
+    signal: signal || AbortSignal.timeout(15000), credentials: 'same-origin', cache: 'no-store', redirect: 'error', headers: body ? { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken } : { Accept: 'application/json' },
     method: body ? 'POST' : 'GET', ...(body ? { body: JSON.stringify(body) } : {}),
   });
   if (!response.ok) {
