@@ -1,6 +1,6 @@
 export const LOCALE = 'es-MX';
 export const TIME_ZONE = 'America/Mexico_City';
-export const roleLabel = role => role === 'super-admin' ? 'Admin' : role === 'admin' ? 'admin' : role === 'soporte' ? 'Soporte' : (role || '');
+export const roleLabel = role => role === 'super-admin' ? 'Admin' : role === 'admin' ? 'Administrador' : role === 'soporte' ? 'Soporte' : (role || '');
 
 export const AVAILABLE_PAGES = [
   { id: 'resumen', label: 'Dashboard Operativo' },
@@ -19,20 +19,56 @@ export const AVAILABLE_PAGES = [
 
 export const BASE_ROLE_CATALOG = [
   { id: 'soporte', title: 'Soporte', description: 'Atención y diagnóstico técnico: consulta de dispositivos, fichas técnicas y DHCP.' },
-  { id: 'admin', title: 'admin', description: 'Administra la operación: inventario, visitas e incidencias de IDF y gestión de usuarios.' },
+  { id: 'admin', title: 'Administrador', description: 'Administra la operación: inventario, visitas e incidencias de IDF y gestión de usuarios.' },
   { id: 'super-admin', title: 'Admin', description: 'Gestiona cuentas, privilegios modulares, conexiones y consultas técnicas.' },
 ];
 
-export function getEffectiveRoles(roleInfo) {
-  const rawRoles = (Array.isArray(roleInfo) && roleInfo.length ? roleInfo : BASE_ROLE_CATALOG)
-    .filter(r => r && r.id && r.id !== 'viewer');
-  const hasSoporte = rawRoles.some(r => r.id === 'soporte');
-  const normalized = hasSoporte ? rawRoles : [BASE_ROLE_CATALOG[0], ...rawRoles];
-
-  return BASE_ROLE_CATALOG.map(base => {
-    const existing = normalized.find(r => r.id === base.id);
-    return existing ? { ...base, ...existing, title: base.title } : base;
+export function getEffectiveRoles(roleInfo, actorRole) {
+  if (!Array.isArray(roleInfo)) return [];
+  const roles = BASE_ROLE_CATALOG.flatMap(base => {
+    const existing = roleInfo.find(r => r?.id === base.id);
+    return existing ? [{ ...base, ...existing, title: base.title }] : [];
   });
+  if (actorRole === 'admin') {
+    return roles.filter(r => r.id !== 'super-admin');
+  }
+  return roles;
+}
+
+export function projectUsersForActor(users, actorRole) {
+  if (!Array.isArray(users)) return [];
+  if (actorRole === 'super-admin') return users;
+  return users.filter(user => !user.is_hidden).map(({ is_hidden, allowed_pages, ...user }) => ({
+    ...user,
+    role: user.role === 'super-admin' ? 'admin' : user.role,
+  }));
+}
+
+export function usersForDemo(users, actorRole) {
+  return projectUsersForActor(users, actorRole);
+}
+
+export function getCardRoles(actorRole, roleInfo) {
+  const catalog = Array.isArray(roleInfo) && roleInfo.length > 0 ? roleInfo : BASE_ROLE_CATALOG;
+  const roles = getEffectiveRoles(catalog, actorRole);
+  return roles.filter(r => r.id !== 'super-admin');
+}
+
+export function getUserFilterRoles(actorRole, roleInfo) {
+  const catalog = Array.isArray(roleInfo) && roleInfo.length > 0 ? roleInfo : BASE_ROLE_CATALOG;
+  const roles = getEffectiveRoles(catalog, actorRole);
+  if (actorRole === 'super-admin') {
+    return roles;
+  }
+  return roles.filter(r => r.id !== 'super-admin');
+}
+
+export function countUsersForRoleCard(users, roleId, actorRole) {
+  if (!Array.isArray(users)) return 0;
+  return users.filter(u => {
+    const effectiveRole = u.role === 'super-admin' ? 'admin' : u.role;
+    return effectiveRole === roleId;
+  }).length;
 }
 
 export const ROLE_PAGE_DEFAULTS = {
@@ -73,6 +109,21 @@ export function deviceInSegment(device, segment) {
 export function getSegmentDevices(devices, segment) {
   if (!Array.isArray(devices) || !segment) return [];
   return devices.filter(device => deviceInSegment(device, segment));
+}
+
+export function isMeztliSegment(segment) {
+  return /\bmeztli\b/.test(normalizeText(`${segment?.name || ''} ${segment?.interface || ''}`));
+}
+export function getOverviewSegmentDevices(devices, segment) {
+  if (!isMeztliSegment(segment)) return getSegmentDevices(devices, segment);
+  const mac = value => String(value || '').toLowerCase().replace(/[^a-f0-9]/g, '');
+  return (segment.dhcp_clients || []).map(lease => {
+    const observed = (devices || []).find(device => device.interface === segment.interface
+      && (lease.mac ? mac(device.mac) === mac(lease.mac) : device.ip === lease.ip));
+    return { ...observed, name: observed?.name || lease.hostname || lease.mac || lease.ip || 'Cliente DHCP',
+      ip: lease.ip, mac: lease.mac || observed?.mac, interface: segment.interface,
+      status: 'online', ip_source: 'dhcp', activity: 'Concesión DHCP activa' };
+  });
 }
 
 export const SUPPORT_ALLOWED_NETWORKS = ['meztli', 'tona', 'tlalo', 'quetzal', 'ehecatl'];
@@ -473,11 +524,32 @@ export class ApiError extends Error {
     this.status = status;
   }
 }
+export function isLocalOrPrivateHost(hostname) {
+  if (!hostname) return false;
+  const host = String(hostname).trim().toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0') return true;
+  if (host.endsWith('.local') || host.endsWith('.lan')) return true;
+  const parts = host.split('.');
+  if (parts.length === 4 && parts.every(p => /^\d{1,3}$/.test(p) && Number(p) >= 0 && Number(p) <= 255)) {
+    const [a, b] = parts.map(Number);
+    if (a === 127) return true;
+    if (a === 10) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;
+    return false;
+  }
+  if (/^(fc|fd|fe[89ab])/i.test(host)) return true;
+  return false;
+}
+
 let csrfToken = '';
 export function setCsrfToken(value) { csrfToken = value || ''; }
 export async function request(path, { signal, body } = {}) {
+  if (!path.startsWith('/api/') || new URL(path, location.origin).origin !== location.origin) throw new Error('Destino de solicitud no permitido.');
+  if (location.protocol !== 'https:' && !(location.protocol === 'http:' && isLocalOrPrivateHost(location.hostname))) throw new ApiError(403, 'Abre el dashboard mediante HTTPS para proteger las credenciales y la sesión.');
   const response = await fetch(path, {
-    signal: signal || AbortSignal.timeout(15000), credentials: 'same-origin', headers: body ? { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken } : { Accept: 'application/json' },
+    signal: signal || AbortSignal.timeout(15000), credentials: 'same-origin', cache: 'no-store', redirect: 'error', headers: body ? { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken } : { Accept: 'application/json' },
     method: body ? 'POST' : 'GET', ...(body ? { body: JSON.stringify(body) } : {}),
   });
   if (!response.ok) {

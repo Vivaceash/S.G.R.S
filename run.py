@@ -109,7 +109,7 @@ def local_network_ip() -> str:
 
 def dashboard_environment(env: dict, port: int) -> dict:
     """Expone el dashboard en LAN y fija el único origen de red autorizado."""
-    result = {**env, "PORT": str(port), "DASHBOARD_PORT": str(port), "DASHBOARD_HOST": "0.0.0.0"}
+    result = {**env, "PORT": str(port), "DASHBOARD_PORT": str(port), "DASHBOARD_HOST": env.get("DASHBOARD_HOST", "127.0.0.1")}
     # SGRS_PUBLIC_ORIGIN se reserva para despliegues HTTPS. Este origen HTTP
     # solo habilita el acceso desde la misma red institucional para la planilla QR.
     if not result.get("SGRS_LAN_ORIGIN"):
@@ -187,10 +187,23 @@ def load_pids() -> dict:
     return {}
 
 
+def get_inventory_port():
+    return int(os.environ.get("INVENTARIOS_PORT", "8002"))
+
+
+def ensure_inventory_config(py_exe):
+    script = ROOT_DIR / "API Inventarios" / "scripts" / "configure_local.py"
+    private_env = ROOT_DIR / "API Inventarios" / ".private" / ".env"
+    if not private_env.exists():
+        subprocess.run([py_exe, str(script)], cwd=str(ROOT_DIR), check=True)
+
+
 def status_services():
     """Muestra el estado actual de los 3 servicios de S.G.R.S."""
     omni_ok = is_port_in_use(8000)
     forti_ok = is_port_in_use(8001)
+    inventory_port = get_inventory_port()
+    inventory_ok = is_port_in_use(inventory_port)
     dash_port = get_dashboard_port()
     dash_ok = is_port_in_use(dash_port)
 
@@ -212,7 +225,8 @@ def status_services():
     print(f"      -> URL: http://localhost:{dash_port}")
     print("=" * 72)
 
-    if omni_ok or forti_ok or dash_ok:
+    print(f"  API Inventarios ({inventory_port}): {'[ACTIVO]' if inventory_ok else '[DETENIDO]'} (Docs: /scalar)")
+    if omni_ok or forti_ok or dash_ok or inventory_ok:
         print("  Servicios en ejecución. Comandos disponibles:")
         print("    python run.py logs     -> Ver logs en vivo")
         print("    python run.py stop     -> Detener todos los servicios")
@@ -229,7 +243,7 @@ def stop_services():
     pids = load_pids()
     if pids:
         for name, pid in pids.items():
-            if not pid:
+            if name not in ("api_forti", "api_omni", "api_inventarios", "dashboard") or not pid:
                 continue
             try:
                 if sys.platform == "win32":
@@ -257,7 +271,6 @@ def stop_services():
 
     # Garantizar que todos los puertos queden liberados
     dash_port = get_dashboard_port()
-    free_ports_if_busy([8000, 8001, dash_port], silent=True)
     print("[SGRS] [OK] Todos los servicios detenidos y puertos liberados correctamente.\n")
 
 
@@ -423,17 +436,27 @@ def start_services(detached: bool = True):
     dash_port = get_dashboard_port()
     env["PORT"] = str(dash_port)
 
+    ensure_inventory_config(py_exe)
+
     # Si todos los servicios ya están activos, mostrar estado y no duplicar
-    if is_port_in_use(8000) and is_port_in_use(8001) and is_port_in_use(dash_port):
+    if is_port_in_use(8000) and is_port_in_use(8001) and is_port_in_use(get_inventory_port()) and is_port_in_use(dash_port):
         print("\n[SGRS] Los servicios ya están en ejecución:")
         status_services()
         return
 
-    # Limpiar puertos huérfanos o colgados previamente
-    free_ports_if_busy([8000, 8001, dash_port])
+    # Never terminate an unrelated listener on the new service port.
+    if is_port_in_use(get_inventory_port()):
+        raise RuntimeError("El puerto de Inventarios está ocupado. Detén su proceso o configura INVENTARIOS_PORT.")
+
+    # Do not kill an existing service as an implicit side effect of starting the
+    # fourth component. An explicit restart command owns teardown of registered PIDs.
+    busy = [port for port in (8000, 8001, dash_port) if is_port_in_use(port)]
+    if busy:
+        raise RuntimeError(f"Puertos ocupados {busy}. Ejecuta `python run.py restart` para reiniciar servicios registrados.")
 
     forti_dir = ROOT_DIR / "API Forti"
     omni_dir = ROOT_DIR / "API Omni"
+    inventory_dir = ROOT_DIR / "API Inventarios"
     server_py = ROOT_DIR / "server.py"
 
     if detached:
@@ -457,6 +480,7 @@ def start_services(detached: bool = True):
 
         env_forti = {**env, "PORT": "8001"}
         env_omni = {**env, "PORT": "8000"}
+        env_inventory = {**env, "INVENTARIOS_PORT": str(get_inventory_port())}
         env_dash = dashboard_environment(env, dash_port)
 
         # Iniciar API Forti (Puerto 8001)
@@ -464,6 +488,8 @@ def start_services(detached: bool = True):
 
         # Iniciar API Omni (Puerto 8000)
         proc_omni = subprocess.Popen([py_exe, "run.py"], cwd=str(omni_dir), **{**popen_kwargs, "env": env_omni})
+
+        proc_inventory = subprocess.Popen([py_exe, "run.py"], cwd=str(inventory_dir), **{**popen_kwargs, "env": env_inventory})
 
         # Iniciar Dashboard Server (Puerto dinámico)
         proc_dash = None
@@ -477,6 +503,7 @@ def start_services(detached: bool = True):
         save_pids({
             "api_forti": proc_forti.pid,
             "api_omni": proc_omni.pid,
+        "api_inventarios": proc_inventory.pid,
             "dashboard": proc_dash.pid if proc_dash else None,
             "dashboard_port": dash_port if proc_dash else None,
         })
@@ -493,6 +520,7 @@ def start_services(detached: bool = True):
         print("      - Documentación:   http://localhost:8000/scalar (o /docs)")
         print("      - Liveness Probe:  http://localhost:8000/health")
         print()
+        print(f"  API Inventarios: http://localhost:{get_inventory_port()}/scalar")
         print("  [2] API Fortinet FortiGate:")
         print("      - Endpoint base:   http://localhost:8001")
         print("      - Documentación:   http://localhost:8001/scalar")
@@ -522,6 +550,7 @@ def start_services(detached: bool = True):
     print("=" * 72)
     print("  [1] API Alcatel OmniVista 2500:  http://localhost:8000")
     print("  [2] API Fortinet FortiGate:      http://localhost:8001")
+    print(f"  API Inventarios: http://localhost:{get_inventory_port()}/scalar")
     print(f"  [3] Dashboard Web UI:            http://localhost:{dash_port}")
     print("=" * 72)
     print("  Presione [Ctrl + C] para detener todos los servicios.")
@@ -539,10 +568,12 @@ def start_services(detached: bool = True):
 
     env_forti = {**env, "PORT": "8001"}
     env_omni = {**env, "PORT": "8000"}
+    env_inventory = {**env, "INVENTARIOS_PORT": str(get_inventory_port())}
     env_dash = dashboard_environment(env, dash_port)
 
     proc_forti = subprocess.Popen([py_exe, "run.py"], cwd=str(forti_dir), **{**popen_fg, "env": env_forti})
     proc_omni = subprocess.Popen([py_exe, "run.py"], cwd=str(omni_dir), **{**popen_fg, "env": env_omni})
+    proc_inventory = subprocess.Popen([py_exe, "run.py"], cwd=str(inventory_dir), **{**popen_fg, "env": env_inventory})
     proc_dash = None
     if server_py.exists():
         try:
@@ -553,12 +584,15 @@ def start_services(detached: bool = True):
     save_pids({
         "api_forti": proc_forti.pid,
         "api_omni": proc_omni.pid,
+        "api_inventarios": proc_inventory.pid,
         "dashboard": proc_dash.pid if proc_dash else None,
         "dashboard_port": dash_port if proc_dash else None,
     })
 
     t_forti = threading.Thread(target=stream_logs_to_output, args=(proc_forti.stdout, "[API-FORTI]", log_file), daemon=True)
     t_omni = threading.Thread(target=stream_logs_to_output, args=(proc_omni.stdout, "[API-OMNI] ", log_file), daemon=True)
+    t_inventory = threading.Thread(target=stream_logs_to_output, args=(proc_inventory.stdout, "[INVENTARIOS]", log_file), daemon=True)
+    t_inventory.start()
     t_forti.start()
     t_omni.start()
 
@@ -586,6 +620,9 @@ def start_services(detached: bool = True):
         while True:
             if proc_forti.poll() is not None:
                 print(f"\n[ALERTA] API Forti se detuvo con código {proc_forti.returncode}.")
+                break
+            if proc_inventory.poll() is not None:
+                print(f"API Inventarios se detuvo con código {proc_inventory.returncode}.")
                 break
             if proc_omni.poll() is not None:
                 print(f"\n[ALERTA] API Omni se detuvo con código {proc_omni.returncode}.")

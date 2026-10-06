@@ -1,7 +1,7 @@
 import asyncio
 import ipaddress
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 
 from app.core.security import verify_api_key
 from app.clients.fortios import fortios_client
@@ -12,12 +12,52 @@ from app.schemas.network import (
     DhcpPoolScope,
     DhcpPoolSummary,
     InterfaceItem,
+    InterfaceConfigItem,
 )
 
 router = APIRouter(
     prefix="/network",
     tags=["Red, DHCP e Interfaces"],
 )
+
+
+@router.get('/interface-config', response_model=BaseResponse[List[InterfaceConfigItem]],
+            summary='Configuración de interfaces y VLAN para inventarios', dependencies=[Depends(verify_api_key)])
+async def get_interface_config(vdom: Optional[str] = Query(None, pattern=r'^[a-zA-Z0-9_\-.]{1,32}$', max_length=32)):
+    raw = await fortios_client.request('GET', 'api/v2/cmdb/system/interface', vdom=vdom)
+    rows = raw.get('results')
+    if not isinstance(rows, list) or any(not isinstance(row, dict) or not isinstance(row.get('name'), str) for row in rows) or raw.get('limit_reached') is True:
+        raise HTTPException(502, 'FortiGate no entregó una colección completa de interfaces.')
+    result = []
+    for row in rows:
+        row_vdom = row.get('vdom') or raw.get('vdom') or vdom
+        if not isinstance(row_vdom, str) or (vdom and row_vdom != vdom):
+            raise HTTPException(502, 'La configuración no confirma el VDOM solicitado.')
+        addresses = []
+        secondary = row.get('secondaryip', []) if row.get('secondary-IP') == 'enable' else []
+        if not isinstance(secondary, list):
+            raise HTTPException(502, 'Direcciones secundarias no reconocidas.')
+        for value in [row.get('ip'), *[r.get('ip') for r in secondary if isinstance(r, dict)]]:
+            if not value:
+                continue
+            try:
+                parsed = ipaddress.ip_interface('/'.join(str(value).split()))
+                if not parsed.ip.is_unspecified:
+                    addresses.append(str(parsed))
+            except ValueError:
+                raise HTTPException(502, 'Dirección de interfaz no reconocida.') from None
+        vlan = row.get('vlanid') if row.get('type') == 'vlan' else None
+        if vlan is not None:
+            try:
+                if isinstance(vlan, bool) or not 1 <= int(vlan) <= 4094:
+                    raise ValueError()
+                vlan = int(vlan)
+            except (ValueError, TypeError):
+                raise HTTPException(502, 'Identificador VLAN no válido.') from None
+        result.append(InterfaceConfigItem(name=row['name'], alias=row.get('alias'), type=row.get('type'),
+                                          vlan_id=vlan, parent=row.get('interface'), vdom=row_vdom,
+                                          addresses=addresses, subnets=sorted({str(ipaddress.ip_interface(a).network) for a in addresses})))
+    return BaseResponse(data=result, vdom=raw.get('vdom') or vdom, message='Configuración de red consultada; campos limitados a inventario.')
 
 
 def _calculate_ip_range_count(start_ip: str, end_ip: str) -> int:
@@ -34,6 +74,7 @@ def _calculate_ip_range_count(start_ip: str, end_ip: str) -> int:
     "/dhcp-pools",
     response_model=BaseResponse[DhcpPoolSummary],
     summary="Consultar capacidad, asignaciones y saturación de los pools DHCP",
+    dependencies=[Depends(verify_api_key)],
 )
 async def get_dhcp_pools(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_\-\.]{1,32}$", max_length=32, description="VDOM a consultar")):
     """

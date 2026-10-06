@@ -20,7 +20,7 @@ class OmniVistaClient:
         username: Optional[str] = None,
         password: Optional[str] = None,
         api_key: Optional[str] = None,
-        verify_ssl: bool = False,
+        verify_ssl: bool = True,
         env_file: str = ".env"
     ):
         # Cargar variables desde .env si están disponibles
@@ -32,7 +32,7 @@ class OmniVistaClient:
         self.username = username or env_config.get("OV_USERNAME", "")
         self.password = password or env_config.get("OV_PASSWORD", "")
         self.api_key = api_key or env_config.get("OV_API_KEY", "")
-        self.verify_ssl = verify_ssl if verify_ssl is not None else (env_config.get("OV_VERIFY_SSL", "false").lower() == "true")
+        self.verify_ssl = verify_ssl if verify_ssl is not None else (env_config.get("OV_VERIFY_SSL", "true").lower() == "true")
         
         self.base_url = f"{self.protocol}://{self.host}" if self.port in (80, 443) else f"{self.protocol}://{self.host}:{self.port}"
         
@@ -74,10 +74,10 @@ class OmniVistaClient:
                 })
                 return True
             else:
-                print(f"[OmniVistaClient] Error de login HTTP {response.status_code}: {response.text}")
+                print(f"[OmniVistaClient] Error de login HTTP {response.status_code}")
                 return False
         except Exception as e:
-            print(f"[OmniVistaClient] Excepción durante login: {e}")
+            print(f"[OmniVistaClient] Excepción durante login: {type(e).__name__}")
             return False
 
     def request(self, method: str, endpoint: str, **kwargs) -> requests.Response:

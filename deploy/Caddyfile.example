@@ -1,0 +1,7 @@
+# Sustituye el dominio y el puerto por los del despliegue.
+# Ejecutar Caddy en el mismo equipo que el gateway, fuera de contenedores.
+dashboard.institucion.gob.mx {
+    reverse_proxy 127.0.0.1:3000 {
+        header_up X-Forwarded-Proto {scheme}
+    }
+}

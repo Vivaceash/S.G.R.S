@@ -1,4 +1,5 @@
 from typing import Any, Dict, Set
+import re
 
 
 SENSITIVE_KEY_PATTERNS: Set[str] = {
@@ -11,12 +12,14 @@ SENSITIVE_KEY_PATTERNS: Set[str] = {
     "api_key",
     "credential",
     "authorization",
+    "cookie",
+    "pre_shared_key",
 }
 
 
 def is_sensitive_key(key: str) -> bool:
-    normalized = key.lower().replace("-", "_")
-    return any(pattern in normalized for pattern in SENSITIVE_KEY_PATTERNS)
+    normalized = re.sub(r"[^a-z0-9]", "", key.lower())
+    return any(pattern.replace("_", "") in normalized for pattern in SENSITIVE_KEY_PATTERNS)
 
 
 def sanitize_data(value: Any) -> Any:

@@ -14,7 +14,7 @@ def main():
         print("[-] Falló el inicio de sesión. Revisa tu archivo .env")
         return
 
-    print(f"[+] Conectado exitosamente! Token: {client.access_token}")
+    print("[+] Conectado exitosamente. Credencial reservada en memoria.")
 
     # Consultar resumen de dispositivos
     print("\n[2] Consultando inventario de dispositivos en la red...")

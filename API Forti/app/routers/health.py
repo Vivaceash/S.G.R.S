@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, status
 
 from app.core.config import settings
+from app.core.security import verify_api_key
 from app.clients.fortios import fortios_client
 from app.schemas.common import BaseResponse
 from app.security.logging import mask_sensitive_ip
@@ -10,6 +11,7 @@ from app.security.logging import mask_sensitive_ip
 router = APIRouter(
     prefix="/health",
     tags=["Salud y Conectividad"],
+    dependencies=[Depends(verify_api_key)],
 )
 _START_TIME = time.time()
 
@@ -56,7 +58,7 @@ async def check_health():
                 raw_serial = results.get("serial")
                 fortigate_status["serial"] = _mask_serial(raw_serial) if settings.MASK_INTERNAL_IPS else raw_serial
     except Exception as exc:
-        fortigate_status["message"] = "Error al contactar con FortiGate" if not settings.DEBUG else f"Aviso de conexión: {str(exc)}"
+        fortigate_status["message"] = "Error al contactar con FortiGate"
 
     return BaseResponse(
         success=True,

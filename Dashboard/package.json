@@ -15,12 +15,13 @@
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-super-responsive-table": "^6.0.2",
     "tailwindcss": "^4.1.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
     "@axe-core/playwright": "^4.10.0",
     "@playwright/test": "^1.51.0",
+    "@vitejs/plugin-react": "^4.3.4",
     "vite": "^6.1.0"
   }
 }

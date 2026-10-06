@@ -13,6 +13,8 @@ Para desarrollo: `npm --prefix Dashboard run dev`; abrir `http://127.0.0.1:5173/
 
 Ver [guía del dashboard](Dashboard/README.md), [usuarios y conexiones](USUARIOS_Y_CONEXIONES.md), [contratos de interacción](UX-CONTRACT.md) y [plan general de seguridad](PLAN_USUARIOS_PRIVILEGIOS.md). El gateway incorpora cuentas locales y permisos viewer/admin/super-admin; crear la primera cuenta mediante `.venv/bin/python dashboard_access.py bootstrap`. MFA/SSO, ámbitos y cifrado de secretos en reposo siguen pendientes. El HTML/JS anterior se conserva como referencia, no como entrada de producción.
 
+La nueva [API Inventarios](</home/vivaceash/Projects/SGRS/API Inventarios/README.md>) centraliza CCTV, sus correcciones e historial, y enriquece cámaras con observaciones Forti/Omni y VLAN configurada. Scalar está en `http://localhost:8002/scalar`. La plataforma ya carga el proxy del dashboard y el corte CCTV desde Inventarios. Si el puerto 3000 está ocupado, el runner elige 3001. La vuelta al escritor anterior está en la guía de la API.
+
 El [análisis de APIs y evolución del dashboard](ANALISIS_APIS_Y_EVOLUCION_DASHBOARD.md) documenta las 34 consultas de datos/diagnóstico, sus límites y las páginas propuestas. El rol Superusuario permanece interno; viewer/admin reciben un catálogo operativo de dos roles y la demo no muestra funciones internas. Esta documentación es técnica, no ayuda pública para ejecutivos.
 
 > **Plataforma centralizada de observabilidad, telemetría perimetral, inventario de infraestructura y control de acceso para redes corporativas de misión crítica.**
@@ -241,7 +243,7 @@ Cada microservicio se configura mediante variables de entorno validadas con **Py
 | `FORTIOS_SCHEME` | `str` | `https` | Protocolo de conexión con FortiGate. |
 | `FORTIOS_API_TOKEN` | `str` | `""` | Token REST API generado en FortiOS (`Administrators`). |
 | `FORTIOS_DEFAULT_VDOM` | `str` | `root` | VDOM principal de consulta en FortiGate. |
-| `FORTIOS_VERIFY_SSL` | `bool` | `false` | Valida certificados TLS de FortiGate. |
+| `FORTIOS_VERIFY_SSL` | `bool` | `true` | Valida certificados TLS de FortiGate. |
 | `FORTIOS_CA_BUNDLE` | `str` | `""` | Ruta a certificado CA corporativo si aplica. |
 | `FORTIOS_TIMEOUT` | `float` | `15.0` | Tiempo de espera en segundos para respuestas de FortiOS. |
 
@@ -266,7 +268,7 @@ Cada microservicio se configura mediante variables de entorno validadas con **Py
 | `OV_USERNAME` | `str` | `admin.red` | Usuario de servicio para sesión de respaldo en OmniVista. |
 | `OV_PASSWORD` | `str` | `""` | Contraseña del usuario de servicio. |
 | `OV_API_KEY` | `str` | `""` | API Key generada en OmniVista (*External Applications*). |
-| `OV_VERIFY_SSL` | `bool` | `false` | Validación estricta de certificados TLS. |
+| `OV_VERIFY_SSL` | `bool` | `true` | Validación estricta de certificados TLS. |
 | `OV_CA_BUNDLE` | `str` | `""` | Ruta hacia el certificado CA corporativo. |
 
 ---

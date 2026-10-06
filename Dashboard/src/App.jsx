@@ -295,6 +295,7 @@ function IdfHub({ data, records, navigate, openEditor, canWrite, canEditInventor
   // Keep the operator's current task while switching between IDFs.
   const choose = id => setSelectedId(id);
   const detectHost = async () => {
+    if (demo) return;
     setDetectingHost(true);
     try {
       const response = await fetch('/api/ip', { credentials: 'same-origin' });
@@ -319,9 +320,11 @@ function IdfHub({ data, records, navigate, openEditor, canWrite, canEditInventor
       detectHost();
     }
   }, []);
-  // Refresh the generated address whenever QR is opened, including a stale
-  // invalid value that may have been saved in this browser before an update.
-  useEffect(() => { if (tab === 'qr') detectHost(); }, [tab]);
+  // Preserve the address selected by the operator. A network gateway can
+  // report another interface, so only detect an address while on localhost.
+  useEffect(() => {
+    if (!demo && tab === 'qr' && /^(localhost|127(?:\.\d{1,3}){3})(?::|$)/i.test(host)) detectHost();
+  }, [tab, host, demo]);
   if (!selected) return <><PageHeading eyebrow="Distribución y gabinetes" title="Registro IDF" description="Consulta de inventario, incidencias y acceso móvil por código QR" updatedAt={data.updatedAt} /><Loading label="Cargando gabinetes IDF…" /></>;
   const devices = data.resources.filter(resource => resource.idfId === selected.id);
   return <><PageHeading eyebrow="Distribución y gabinetes" title="Registro IDF" description="Inventario físico, incidencias y reportes móviles por gabinete" updatedAt={data.updatedAt} />
@@ -696,6 +699,10 @@ export default function App() {
       )}
     </aside>
     <main className="main-content" id="main-content" tabIndex={-1}>
+      {route.path === 'resumen' && <div className="mode-bar">
+        <div className={`operation-status ${Object.keys(errors).length ? 'degraded' : ''}`} role="status"><span className="status-light" /><div><strong>{demo ? 'Escenario de demostración' : Object.keys(errors).length ? 'Información parcial' : loading ? 'Consultando servicios' : 'Consulta completada'}</strong><small>{demo ? 'Datos de ejemplo para revisar el diseño' : data.updatedAt ? `Última consulta: ${dateTime(data.updatedAt)}` : 'Esperando la primera respuesta de las APIs'}</small></div></div>
+        {!demo && <div className="api-status-summary" aria-label="Conexión con las APIs">{[['FortiGate', data.health?.forti], ['OmniVista', data.health?.omni]].map(([name, status]) => <Badge key={name} status={status === true ? 'normal' : status === false ? 'offline' : 'unknown'}>{name} · {status === true ? 'Conectada' : status === false ? 'Sin conexión' : 'Sin verificar'}</Badge>)}</div>}
+      </div>}
       {Object.keys(errors).length > 0 && <Notice title="No se pudo actualizar toda la información" tone="warning" action={<Button onClick={refresh} busy={loading}>Reintentar</Button>}>Los datos conservados pueden estar desactualizados. Consultas pendientes: {Object.keys(errors).map(k => ({ idfs: 'IDFs', ips: 'direcciones IP', devices: 'dispositivos', reports: 'bitácora', health: 'servicios', segments: 'segmentos DHCP' })[k]).join(', ')}.</Notice>}
       {!can('inventory.write') && user.role !== 'soporte' && <Notice title="Perfil viewer · Solo consulta">Puedes revisar la información operativa. El registro y la edición requieren un perfil administrador.</Notice>}{page}
     </main>

@@ -93,13 +93,17 @@ def parse_allowed_pages(raw_pages, role):
         try:
             pages = json.loads(raw_pages)
         except Exception:
-            pages = []
+            pages = None
     elif isinstance(raw_pages, (list, tuple)):
         pages = list(raw_pages)
     else:
-        pages = []
-    valid = [p for p in pages if p in AVAILABLE_PAGES]
-    return valid if valid else list(ROLE_PAGE_DEFAULTS.get(role, []))
+        pages = None
+    valid = [p for p in pages if isinstance(p, str) and p in AVAILABLE_PAGES] if isinstance(pages, (list, tuple)) else []
+    # Legacy root accounts stored [] before page permissions existed. Keep their
+    # administration reachable without granting pages to restricted operators.
+    if pages == [] and role == "super-admin":
+        return list(ROLE_PAGE_DEFAULTS[role])
+    return valid if isinstance(pages, list) else list(ROLE_PAGE_DEFAULTS.get(role, []))
 
 
 def session_identity(row, csrf):
@@ -171,6 +175,8 @@ def database(write=False):
         cols = [r[1] for r in db.execute("PRAGMA table_info(users)").fetchall()]
         if "allowed_pages" not in cols:
             db.execute("ALTER TABLE users ADD COLUMN allowed_pages TEXT NOT NULL DEFAULT '[]'")
+        if "is_hidden" not in cols:
+            db.execute("ALTER TABLE users ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0 CHECK(is_hidden IN (0,1))")
         dh_cols = [r[1] for r in db.execute("PRAGMA table_info(device_connection_history)").fetchall()]
         if "serial" not in dh_cols and dh_cols:
             db.execute("ALTER TABLE device_connection_history ADD COLUMN serial TEXT")
@@ -186,10 +192,62 @@ def database(write=False):
 
 
 def public_user(row):
-    user = {k: row[k] for k in ("id", "username", "name", "role", "active", "version", "created_at")}
+    user = {k: row[k] for k in ("id", "username", "name", "role", "version", "created_at")}
+    user["active"] = bool(row["active"])
     raw_pages = row.get("allowed_pages") if hasattr(row, "get") else (row["allowed_pages"] if "allowed_pages" in row.keys() else None)
     user["allowed_pages"] = parse_allowed_pages(raw_pages, row["role"])
     return user
+
+
+def user_for_actor(row, actor_role):
+    """Directory projection only; never use this representation to authorize."""
+    user = public_user(row)
+    if actor_role == "super-admin":
+        user["is_hidden"] = bool(row.get("is_hidden") if hasattr(row, "get") else (row["is_hidden"] if "is_hidden" in row.keys() else 0))
+    else:
+        if user["role"] == "super-admin":
+            user["role"] = "admin"
+        user.pop("allowed_pages", None)
+        user.pop("is_hidden", None)
+    return user
+
+
+def list_users(actor):
+    with database() as db:
+        viewer = db.execute("SELECT role FROM users WHERE id=? AND active=1", (actor,)).fetchone()
+        if not viewer or viewer["role"] not in ("admin", "super-admin"):
+            raise AccessError(403, "No tienes permiso para acceder a esta sección.")
+        clause = "" if viewer["role"] == "super-admin" else "WHERE is_hidden=0"
+        return [user_for_actor(row, viewer["role"]) for row in db.execute(
+            f"SELECT * FROM users {clause} ORDER BY created_at DESC,id")]
+
+
+def project_hidden_actors(data):
+    """Redact structured attribution, preserving stored records and their keys."""
+    with database() as db:
+        rows = db.execute("SELECT id,name,username FROM users WHERE is_hidden=1").fetchall()
+    identifiers = {row["id"] for row in rows}
+    names = {value for row in rows for value in (row["name"], row["username"])}
+    id_fields = {"actor_id", "resolved_by", "updated_by", "created_by"}
+    name_fields = {"tech", "actor", "reporter", "responsable", "username"}
+
+    def clean(value):
+        if isinstance(value, list):
+            return [clean(item) for item in value]
+        if not isinstance(value, dict):
+            return value
+        hidden_author = value.get("actor_id") in identifiers if isinstance(value.get("actor_id"), str) else False
+        result = {}
+        for key, item in value.items():
+            if key in id_fields and isinstance(item, str) and item in identifiers:
+                continue
+            if key in name_fields and (hidden_author or (isinstance(item, str) and item in names | identifiers)):
+                result[key] = "Cuenta reservada"
+            else:
+                result[key] = clean(item)
+        return result
+
+    return clean(data)
 
 
 def audit(db, actor, action, target):
@@ -244,29 +302,37 @@ def save_user(body, actor=None, bootstrap=False):
             if db.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
                 raise AccessError(409, "Ya existe una cuenta. Usa Usuarios con un super-admin.")
             role = "super-admin"
+            actor_role = "super-admin"
             allowed_pages = list(ROLE_PAGE_DEFAULTS["super-admin"])
         else:
             actor_row = db.execute("SELECT * FROM users WHERE id=? AND active=1", (actor,)).fetchone()
             if not actor_row or actor_row["role"] not in ("admin", "super-admin"):
                 raise AccessError(403, "No tienes permiso para realizar esta operación.")
             actor_role = actor_row["role"]
+            if "is_hidden" in body and actor_role != "super-admin":
+                raise AccessError(403, "No tienes permiso para realizar esta operación.")
             if actor_role == "admin" and role not in ("soporte", "admin"):
                 raise AccessError(403, "Los administradores solo pueden asignar roles de soporte o administrador.")
 
         active = body.get("active", True)
-        if not isinstance(active, bool):
+        hidden = body.get("is_hidden", False)
+        if not isinstance(hidden, bool):
+            raise AccessError(422, "La visibilidad debe ser un valor booleano.")
+        if active not in (True, False, 1, 0):
             raise AccessError(422, "El estado debe ser activo o suspendido.")
+        active = bool(active)
         try:
             if user_id:
                 old = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
-                if not old:
+                if not old or (actor_role != "super-admin" and old["is_hidden"]):
                     raise AccessError(404, "No se encontró el usuario.")
+                if actor_role == "admin" and old["role"] == "super-admin":
+                    raise AccessError(403, "No tienes permiso para modificar esta cuenta.")
+                hidden = body.get("is_hidden", bool(old["is_hidden"]))
                 if body.get("version") != old["version"]:
                     raise AccessError(409, "Otro administrador modificó este usuario. Cierra y vuelve a abrir su ficha.")
                 if not bootstrap:
                     if actor_role == "admin":
-                        if old["role"] == "super-admin":
-                            raise AccessError(403, "Los administradores no pueden modificar una cuenta de super-admin.")
                         old_raw = old.get("allowed_pages") if hasattr(old, "get") else (old["allowed_pages"] if "allowed_pages" in old.keys() else None)
                         allowed_pages = parse_allowed_pages(old_raw, old["role"])
                     elif actor_role == "super-admin":
@@ -278,14 +344,18 @@ def save_user(body, actor=None, bootstrap=False):
                         else:
                             old_raw = old.get("allowed_pages") if hasattr(old, "get") else (old["allowed_pages"] if "allowed_pages" in old.keys() else None)
                             allowed_pages = parse_allowed_pages(old_raw, role)
-                if user_id == actor and (role != old["role"] or not active):
-                    raise AccessError(409, "No puedes cambiar tu propio rol ni suspender tu cuenta.")
+                if user_id == actor and not active:
+                    raise AccessError(409, "No puedes suspender tu propia cuenta.")
+                if user_id == actor and role != old["role"] and body.get("confirmed") is not True:
+                    raise AccessError(409, "Confirma el cambio de tu propio rol. Se cerrará tu sesión y cambiarán tus permisos.")
                 if old["active"] and old["role"] == "super-admin" and (role != "super-admin" or not active):
                     count = db.execute("SELECT COUNT(*) FROM users WHERE role='super-admin' AND active=1").fetchone()[0]
                     if count <= 1:
                         raise AccessError(409, "Debe existir al menos un super-admin activo.")
-                db.execute("UPDATE users SET username=?,name=?,role=?,active=?,password_hash=?,version=version+1,allowed_pages=? WHERE id=?",
-                           (username, name, role, int(active), encoded or old["password_hash"], json.dumps(allowed_pages), user_id))
+                db.execute("UPDATE users SET username=?,name=?,role=?,active=?,password_hash=?,version=version+1,allowed_pages=?,is_hidden=? WHERE id=?",
+                           (username, name, role, int(active), encoded or old["password_hash"], json.dumps(allowed_pages), int(hidden), user_id))
+                if hidden != bool(old["is_hidden"]):
+                    audit(db, actor, "user.hidden" if hidden else "user.unhidden", user_id)
                 old_pages_raw = old.get("allowed_pages") if hasattr(old, "get") else (old["allowed_pages"] if "allowed_pages" in old.keys() else None)
                 if role != old["role"] or not active or encoded or username != old["username"] or json.dumps(allowed_pages) != str(old_pages_raw):
                     db.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
@@ -306,12 +376,12 @@ def save_user(body, actor=None, bootstrap=False):
                         else:
                             allowed_pages = list(ROLE_PAGE_DEFAULTS.get(role, []))
                 user_id = secrets.token_hex(16)
-                db.execute("INSERT INTO users(id,username,name,role,active,password_hash,created_at,allowed_pages) VALUES(?,?,?,?,?,?,?,?)",
-                           (user_id, username, name, role, int(active), encoded, int(time.time()), json.dumps(allowed_pages)))
+                db.execute("INSERT INTO users(id,username,name,role,active,password_hash,created_at,allowed_pages,is_hidden) VALUES(?,?,?,?,?,?,?,?,?)",
+                           (user_id, username, name, role, int(active), encoded, int(time.time()), json.dumps(allowed_pages), int(hidden)))
         except sqlite3.IntegrityError:
-            raise AccessError(409, "Ese nombre de usuario ya está registrado.") from None
+            raise AccessError(409, "No se pudo guardar la cuenta. Revisa los datos o elige otro usuario.") from None
         audit(db, actor or "bootstrap-local", "user.updated" if body.get("id") else "user.created", user_id)
-        return public_user(db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone())
+        return user_for_actor(db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone(), actor_role)
 
 
 def login(body, address):
@@ -360,12 +430,20 @@ def session(cookie):
 
 
 def connection_default(service):
+    if service == 'inventarios':
+        try:
+            configured = json.loads((PRIVATE / 'inventarios-connection.json').read_text())
+        except (OSError, ValueError):
+            configured = {}
+        return {"id": service, "url": os.environ.get('INVENTARIOS_API_URL', configured.get('url', 'http://127.0.0.1:8002/api/v1')),
+                "auth_mode": 'api-key', "username": '', "secret": os.environ.get('INVENTARIOS_API_KEY', configured.get('secret', '')),
+                "version": 0, "updated_at": None}
     return {"id": service, "url": os.environ.get(f"{service.upper()}_API_URL", f"http://127.0.0.1:{8001 if service == 'forti' else 8000}/api/v1"),
             "auth_mode": "api-key", "username": "", "secret": os.environ.get(f"{service.upper()}_API_KEY", os.environ.get("APP_API_KEY", "")), "version": 0, "updated_at": None}
 
 
 def connection(service, public=False):
-    if service not in ("forti", "omni"):
+    if service not in ("forti", "omni", "inventarios"):
         raise AccessError(404, "Integración no encontrada.")
     with database() as db:
         row = db.execute("SELECT * FROM connections WHERE id=?", (service,)).fetchone()

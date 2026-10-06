@@ -2,6 +2,17 @@ from typing import List, Optional, Union
 from pydantic import BaseModel, Field
 
 
+class InterfaceConfigItem(BaseModel):
+    name: str
+    alias: Optional[str] = None
+    type: Optional[str] = None
+    vlan_id: Optional[int] = Field(None, ge=0, le=4094)
+    parent: Optional[str] = None
+    vdom: str
+    addresses: List[str] = Field(default_factory=list, description="Direcciones configuradas, con prefijo; no acredita el gateway de cada terminal")
+    subnets: List[str] = Field(default_factory=list)
+
+
 class DHCPLeaseItem(BaseModel):
     ip: Optional[str] = Field(None, description="Dirección IP asignada por DHCP")
     mac: Optional[str] = Field(None, description="Dirección MAC del cliente")

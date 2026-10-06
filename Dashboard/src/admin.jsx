@@ -3,29 +3,19 @@ import { Users, UserPlus, ShieldCheck, Eye, Settings2, PlugZap, Save, RefreshCw,
 import { Badge, Button, DataTable, Dialog, Field, Loading, Notice, SearchField, SecretInput, Select, useListState } from './components.jsx';
 import { PageHeading } from './pages.jsx';
 import { useForm } from './forms.jsx';
-import { roleLabel, request, dateTime, AVAILABLE_PAGES, ROLE_PAGE_DEFAULTS, BASE_ROLE_CATALOG } from './domain.mjs';
+import { roleLabel, request, dateTime, AVAILABLE_PAGES, ROLE_PAGE_DEFAULTS, BASE_ROLE_CATALOG, getEffectiveRoles, usersForDemo, projectUsersForActor, countUsersForRoleCard, getCardRoles, getUserFilterRoles } from './domain.mjs';
 import { useSession } from './session.jsx';
 
 export const BASE_ROLES = BASE_ROLE_CATALOG;
 
-export function getEffectiveRoles(roleInfo) {
-  const rawRoles = (Array.isArray(roleInfo) && roleInfo.length ? roleInfo : BASE_ROLE_CATALOG)
-    .filter(r => r && r.id && r.id !== 'viewer');
-  const hasSoporte = rawRoles.some(r => r.id === 'soporte');
-  const normalized = hasSoporte ? rawRoles : [BASE_ROLE_CATALOG[0], ...rawRoles];
-
-  return BASE_ROLE_CATALOG.map(base => {
-    const existing = normalized.find(r => r.id === base.id);
-    return existing ? { ...base, ...existing, title: base.title } : base;
-  });
-}
+export { getEffectiveRoles, usersForDemo, projectUsersForActor, countUsersForRoleCard, getCardRoles, getUserFilterRoles } from './domain.mjs';
 
 export const initialDemoUsers = [
   { id: 'demo-super', username: 'admin.demo', name: 'Administrador Principal', role: 'super-admin', active: true, version: 1, allowed_pages: ROLE_PAGE_DEFAULTS['super-admin'] },
   { id: 'demo-admin', username: 'operador.redes', name: 'Operador de redes', role: 'admin', active: true, version: 1, allowed_pages: ROLE_PAGE_DEFAULTS['admin'] },
   { id: 'demo-soporte', username: 'soporte.tecnico', name: 'Técnico de Soporte', role: 'soporte', active: true, version: 1, allowed_pages: ROLE_PAGE_DEFAULTS['soporte'] },
 ];
-export const initialDemoConnections = ['forti', 'omni'].map(id => ({ id, url: `http://127.0.0.1:${id === 'forti' ? 8001 : 8000}/api/v1`, auth_mode: 'api-key', username: '', has_secret: false, version: 0 }));
+export const initialDemoConnections = ['forti', 'omni', 'inventarios'].map(id => ({ id, url: `http://127.0.0.1:${id === 'forti' ? 8001 : id === 'inventarios' ? 8002 : 8000}/api/v1`, auth_mode: 'api-key', username: '', has_secret: false, version: 0 }));
 
 function useAdminLoad(path, demo, example) {
   const [value, setValue] = useState(null);
@@ -48,7 +38,7 @@ function useAdminLoad(path, demo, example) {
 function UserForm({ row, save, cancel, onDirty, currentId }) {
   const { user: currentUser, roles: roleInfo } = useSession();
   const isSuperAdmin = currentUser?.role === 'super-admin';
-  const normalizedRoles = getEffectiveRoles(roleInfo);
+  const normalizedRoles = getEffectiveRoles(roleInfo?.length ? roleInfo : BASE_ROLE_CATALOG, currentUser?.role);
 
   // Role options according to actor hierarchy:
   // super-admin can select: 'soporte', 'admin', 'super-admin'
@@ -101,6 +91,7 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
       payload.allowed_pages = allowedPages;
     } else {
       delete payload.allowed_pages;
+      delete payload.is_hidden;
     }
     return save(payload);
   };
@@ -113,6 +104,7 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
       name: row?.name || '',
       role: row?.role || defaultRole,
       active: row ? Boolean(row.active) : true,
+      is_hidden: Boolean(row?.is_hidden),
       password: '',
       confirmed: false,
     },
@@ -141,11 +133,12 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
     <fieldset disabled={f.busy || f.uncertain}><div className="form-grid">
       <Field label="Nombre completo" required error={f.errors.name}><input value={f.values.name} maxLength={120} autoComplete="off" onChange={e => change('name', e.target.value)} /></Field>
       <Field label="Usuario de acceso" required error={f.errors.username}><input value={f.values.username} maxLength={80} autoCapitalize="none" autoComplete="off" onChange={e => change('username', e.target.value)} /></Field>
-      <Field label="Rol asignado" required><select value={f.values.role} disabled={row?.id === currentId} onChange={e => change('role', e.target.value)}>{selectableRoles.map(role => <option key={role.id} value={role.id}>{roleLabel(role.id)}</option>)}</select></Field>
+      <Field label="Rol asignado" required><select value={f.values.role} onChange={e => change('role', e.target.value)}>{selectableRoles.map(role => <option key={role.id} value={role.id}>{roleLabel(role.id)}</option>)}</select></Field>
       <Field label="Estado de la cuenta"><select value={f.values.active ? 'active' : 'inactive'} disabled={row?.id === currentId} onChange={e => change('active', e.target.value === 'active')}><option value="active">Activa</option><option value="inactive">Suspendidas</option></select></Field>
       <div className="col-span-full"><Field label={row ? 'Nueva contraseña (opcional)' : 'Contraseña inicial'} required={!row} error={f.errors.password} hint={row ? 'Déjala vacía para conservarla. Al cambiarla se cerrarán las sesiones del usuario.' : '12–128 caracteres. Entrégala a la persona por un canal seguro.'}><SecretInput autoComplete="new-password" value={f.values.password} maxLength={128} onChange={e => change('password', e.target.value)} /></Field></div>
       
-      <div className="col-span-full modular-pages-container">
+      {isSuperAdmin && <div className="col-span-full"><Field label="Ocultar a otros usuarios" hint="Solo los Admin podrán ver y administrar esta cuenta. La cuenta conserva su acceso y sus permisos."><input type="checkbox" className="confirmation-checkbox" checked={f.values.is_hidden} onChange={e => change('is_hidden', e.target.checked)} /></Field></div>}
+      {isSuperAdmin && <div className="col-span-full modular-pages-container">
         <div className="modular-pages-header">
           <div>
             <h3>Permisos de páginas modulares</h3>
@@ -161,12 +154,6 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
             </div>
           )}
         </div>
-
-        {!isSuperAdmin && (
-          <Notice tone="info" title="Permisos de páginas modulares">
-            Solo un Admin puede configurar los permisos de páginas modulares.
-          </Notice>
-        )}
 
         <div className="modular-pages-grid">
           {AVAILABLE_PAGES.map(page => {
@@ -187,16 +174,19 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
             );
           })}
         </div>
-      </div>
+      </div>}
     </div><Notice title={`Permisos de ${roleLabel(f.values.role)}`} tone={f.values.active ? 'info' : 'warning'}>{normalizedRoles.find(r => r.id === f.values.role)?.description} {!f.values.active && 'La cuenta no podrá iniciar sesión. Sus registros se conservarán.'} {row && 'Los cambios de rol, contraseña o suspensión revocan sus sesiones.'}</Notice>
-    <Field label={`Confirmo ${row ? 'actualizar' : 'crear'} esta cuenta con el rol ${roleLabel(f.values.role)}`} required error={f.errors.confirmed}><input className="confirmation-checkbox" type="checkbox" checked={f.values.confirmed} onChange={e => f.change('confirmed', e.target.checked)} /></Field>
+    {row?.id === currentId && f.values.role !== row.role && <Notice title="Estás cambiando tu propio rol" tone="warning">Se cerrará tu sesión y deberás volver a entrar con los nuevos permisos. Si dejas de ser Admin, otro Admin tendrá que devolverte ese rol. No se permite quitar el rol al último Admin activo.</Notice>}
+    <Field label={row?.id === currentId && f.values.role !== row.role ? `Confirmo cambiar mi propio rol a ${roleLabel(f.values.role)} y cerrar mi sesión` : `Confirmo ${row ? 'actualizar' : 'crear'} esta cuenta con el rol ${roleLabel(f.values.role)}`} required error={f.errors.confirmed}><input className="confirmation-checkbox" type="checkbox" checked={f.values.confirmed} onChange={e => f.change('confirmed', e.target.checked)} /></Field>
     </fieldset><div className="form-actions"><Button disabled={f.busy} onClick={cancel}>Cancelar</Button><Button type="submit" icon={Save} variant="primary" busy={f.busy} disabled={f.uncertain}>{row ? 'Guardar usuario y permisos' : 'Crear usuario y asignar rol'}</Button></div>
   </form>;
 }
 
 export function UsersPage({ demoUsers, setDemoUsers, notify }) {
   const { demo, user, roles: roleInfo } = useSession();
-  const normalizedRoles = getEffectiveRoles(roleInfo);
+  const isSuperAdmin = user?.role === 'super-admin';
+  const cardRoles = getCardRoles(user?.role, roleInfo);
+  const filterRoles = getUserFilterRoles(user?.role, roleInfo);
   const list = useAdminLoad('/api/admin/users', demo, { users: demoUsers });
   const state = useListState('usuarios');
   const [editor, setEditor] = useState(null);
@@ -212,6 +202,8 @@ export function UsersPage({ demoUsers, setDemoUsers, notify }) {
     try {
       let saved;
       if (demo) {
+        const target = demoUsers.find(u => u.id === values.id);
+        if (!isSuperAdmin && (target?.is_hidden || target?.role === 'super-admin' || !['soporte', 'admin'].includes(values.role))) throw Object.assign(new Error('No tienes permiso para modificar esta cuenta.'), { status: 403 });
         if (demoUsers.some(u => u.username.toLowerCase() === values.username.toLowerCase() && u.id !== values.id)) throw Object.assign(new Error('Ese usuario ya existe en la demostración.'), { status: 409 });
         const { password, confirmed, ...publicValues } = values;
         saved = { ...publicValues, id: values.id || crypto.randomUUID(), version: (values.version || 0)+1 };
@@ -221,14 +213,20 @@ export function UsersPage({ demoUsers, setDemoUsers, notify }) {
         list.setValue(old => ({ users: values.id ? old.users.map(u => u.id === values.id ? saved : u) : [saved, ...old.users] }));
       }
       setDirty(false); setEditor(null); notify(demo ? 'Usuario de ejemplo guardado. No crea acceso real.' : 'Usuario y permisos guardados.');
+      if (!demo && saved.id === user.id && saved.role !== user.role) window.dispatchEvent(new Event('sgrs-session-expired'));
     } finally { busy.current = false; }
   };
-  const rows = (list.value?.users || []).map(u => ({ ...u, state: u.active ? 'active' : 'inactive' }));
+  const rawUsers = list.value?.users || [];
+  const visibleUsers = demo
+    ? usersForDemo(rawUsers, user?.role)
+    : (isSuperAdmin ? rawUsers : projectUsersForActor(rawUsers, user?.role));
+  const rows = visibleUsers.map(u => ({ ...u, state: u.active ? 'active' : 'inactive', visibility: u.is_hidden ? 'hidden' : 'visible' }));
   return <><PageHeading eyebrow="Administración del sistema" title="Usuarios y privilegios" description="Cuentas personales y permisos de acceso al Centro Operativo"><Button icon={UserPlus} variant="primary" disabled={list.loading || Boolean(list.error)} onClick={() => { setDirty(false); setDiscard(false); setEditor({ row: null }); }}>Crear usuario</Button></PageHeading>
-    <div className="role-cards">{normalizedRoles.map(({ id, title, description }) => <article className="role-card panel" key={id}><ShieldCheck size={24} /><h2>{roleLabel(id)}</h2><p>{description}</p><span>{rows.filter(u => u.role === id).length} cuentas</span></article>)}</div>
-    <div className="toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar por nombre o usuario…" /><Select label="Rol" value={state.filters.role || ''} onChange={e => state.setFilter('role', e.target.value)}><option value="">Todos los roles</option>{normalizedRoles.map(r => <option key={r.id} value={r.id}>{roleLabel(r.id)}</option>)}</Select><Select label="Estado" value={state.filters.state || ''} onChange={e => state.setFilter('state', e.target.value)}><option value="">Todas las cuentas</option><option value="active">Activas</option><option value="inactive">Suspendidas</option></Select></div>
+    <div className="role-cards">{cardRoles.map(({ id, description }) => <article className="role-card panel" key={id}><ShieldCheck size={24} /><h2>{roleLabel(id)}</h2><p>{description}</p><span>{countUsersForRoleCard(rows, id, user?.role)} cuentas</span></article>)}</div>
+    {isSuperAdmin && <Select label="Visibilidad" value={state.filters.visibility || ''} onChange={e => state.setFilter('visibility', e.target.value)}><option value="">Todas las cuentas</option><option value="visible">Visibles</option><option value="hidden">Ocultas</option></Select>}
+    <div className="toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar por nombre o usuario…" /><Select label="Rol" value={state.filters.role || ''} onChange={e => state.setFilter('role', e.target.value)}><option value="">Todos los roles</option>{filterRoles.map(r => <option key={r.id} value={r.id}>{roleLabel(r.id)}</option>)}</Select><Select label="Estado" value={state.filters.state || ''} onChange={e => state.setFilter('state', e.target.value)}><option value="">Todas las cuentas</option><option value="active">Activas</option><option value="inactive">Suspendidas</option></Select></div>
     <DataTable title="Usuarios del sistema" rows={rows} state={state} noun="usuarios" loading={list.loading} error={list.error} onRetry={list.refresh} columns={[
-      { key: 'name', label: 'Nombre', render: r => <div className="cell-detail"><strong>{r.name}</strong><small>{r.id === user.id ? 'Tu cuenta' : 'Cuenta personal'}</small></div> },
+      { key: 'name', label: 'Nombre', render: r => <div className="cell-detail"><strong>{r.name}</strong><small>{r.id === user.id ? 'Tu cuenta' : 'Cuenta personal'}{isSuperAdmin && r.is_hidden ? ' · Oculto' : ''}</small></div> },
       { key: 'username', label: 'Usuario' }, { key: 'role', label: 'Rol', render: r => <span className="network-tag">{roleLabel(r.role)}</span> },
       { key: 'state', label: 'Estado', render: r => <Badge status={r.active ? 'online' : 'offline'}>{r.active ? 'Activa' : 'Suspendida'}</Badge> },
       { key: 'actions', label: 'Permisos', sortable: false, render: r => <Button icon={Settings2} onClick={() => { setDirty(false); setDiscard(false); setEditor({ row: r }); }}>Administrar</Button> },
@@ -274,14 +272,14 @@ function ConnectionForm({ row, onSave, onDirty, notify }) {
     finally { clearTimeout(timeout); if (current === sequence.current) setTesting(false); }
   };
   return <form className="connection-panel panel" noValidate ref={f.form} onSubmit={f.submit} aria-busy={f.busy || testing}>
-    <div className="section-heading"><span className="metric-icon metric-icon-brand"><Server size={24} /></span><div><h2>{row.id === 'forti' ? 'API FortiGate' : 'API OmniVista'}</h2><p>{row.id === 'forti' ? 'Telemetría, segmentos y dispositivos de red' : 'Infraestructura Alcatel-Lucent y servicios de red'}</p></div><Badge status={row.has_secret ? 'normal' : 'unknown'}>{row.has_secret ? 'Configurada' : 'Sin credencial'}</Badge></div>
+    <div className="section-heading"><span className="metric-icon metric-icon-brand"><Server size={24} /></span><div><h2>{row.id === 'forti' ? 'API FortiGate' : row.id === 'inventarios' ? 'API Inventarios' : 'API OmniVista'}</h2><p>{row.id === 'forti' ? 'Telemetría, segmentos y dispositivos de red' : row.id === 'inventarios' ? 'Inventario CCTV, correcciones y cotejo de red' : 'Infraestructura Alcatel-Lucent y servicios de red'}</p></div><Badge status={row.has_secret ? 'normal' : 'unknown'}>{row.has_secret ? 'Configurada' : 'Sin credencial'}</Badge></div>
     {f.error && <Notice title="Guardado sin completar" tone="danger">{f.error}</Notice>}
     <fieldset disabled={f.busy || f.uncertain || testing}><div className="form-grid">
       <div className="col-span-full"><Field label="URL base de la API" required error={f.errors.url} hint="Incluye /api/v1. HTTPS obligatorio fuera de localhost."><input type="url" autoComplete="off" placeholder="https://api.institucion.gob.mx/api/v1" value={f.values.url} onChange={e => change('url', e.target.value)} /></Field></div>
       <Field label="Autenticación del request"><select value={f.values.auth_mode} onChange={e => change('auth_mode', e.target.value)}><option value="api-key">Clave API · X-API-Key</option><option value="bearer">Token · Authorization Bearer</option><option value="basic">Usuario y contraseña · Basic</option></select></Field>
       {f.values.auth_mode === 'basic' ? <Field label="Usuario de la API" required error={f.errors.username}><input value={f.values.username} autoComplete="off" onChange={e => change('username', e.target.value)} /></Field> : <div className="connection-header-note"><LockKeyhole size={18} /><span>{f.values.auth_mode === 'api-key' ? 'Se envía en X-API-Key' : 'Se envía en Authorization'}</span></div>}
       <div className="col-span-full"><Field label="Contraseña / clave de consulta" error={f.errors.secret} hint={row.has_secret ? 'Credencial guardada. Déjala vacía para conservarla si no cambias el destino.' : 'Solo se envía al servidor al guardar o probar la conexión.'}><SecretInput label="credencial de consulta" value={f.values.secret} autoComplete="new-password" maxLength={4096} placeholder={row.has_secret ? 'Credencial almacenada · No se muestra' : 'Introduce la contraseña o clave del request'} onChange={e => change('secret', e.target.value)} /></Field></div>
-    </div><Field label={`Confirmo usar este destino para las consultas de ${row.id === 'forti' ? 'FortiGate' : 'OmniVista'}`} required error={f.errors.confirmed}><input type="checkbox" className="confirmation-checkbox" checked={f.values.confirmed} onChange={e => f.change('confirmed', e.target.checked)} /></Field></fieldset>
+    </div><Field label={`Confirmo usar este destino para las consultas de ${row.id === 'forti' ? 'FortiGate' : row.id === 'inventarios' ? 'Inventarios' : 'OmniVista'}`} required error={f.errors.confirmed}><input type="checkbox" className="confirmation-checkbox" checked={f.values.confirmed} onChange={e => f.change('confirmed', e.target.checked)} /></Field></fieldset>
     <div className="connection-result" role="status">{test && <Notice title={test.ok === true ? 'Conexión verificada' : test.ok === false ? 'Conexión no confirmada' : 'Sin consulta externa'} tone={test.ok === false ? 'warning' : 'info'}>{test.message}{test.http_status && ` HTTP ${test.http_status} · ${test.elapsed_ms} ms`}</Notice>}</div>
     <div className="form-actions"><Button icon={PlugZap} busy={testing} disabled={f.busy || f.uncertain} onClick={probe}>Probar conexión</Button><Button type="submit" icon={Save} variant="primary" busy={f.busy} disabled={testing || f.uncertain}>Guardar conexión</Button></div>
   </form>;

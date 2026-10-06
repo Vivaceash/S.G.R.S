@@ -126,7 +126,7 @@ async def scalar_docs(request: Request):
         servers=[{"url": base_url, "description": f"Servidor API ({base_url})"}],
         show_sidebar=True,
         default_open_all_tags=True,
-        persist_auth=True,
+        persist_auth=False,
         hide_models=False,
     )
 
@@ -158,7 +158,7 @@ async def omnivista_exception_handler(request: Request, exc: OmniVistaBaseExcept
             "success": False,
             "message": exc.message,
             "error": exc.message,
-            "data": exc.details if settings.DEBUG else None,
+            "data": None,
         },
         headers={"X-Request-ID": req_id}
     )
@@ -189,8 +189,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 async def unhandled_exception_handler(request: Request, exc: Exception):
     req_id = getattr(request.state, "request_id", "N/A")
     security_logger.error(
-        f"Internal Error | req_id={req_id} | path={request.url.path} | exc={repr(exc)}",
-        exc_info=settings.DEBUG
+        "Internal Error | req_id=%s | type=%s", req_id, type(exc).__name__
     )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -211,4 +210,3 @@ app.include_router(catalogs_router)
 app.include_router(monitoring_router)
 app.include_router(system_router)
 app.include_router(auth_router)
-

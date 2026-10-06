@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     FORTIOS_SCHEME: str = "https"
     FORTIOS_API_TOKEN: str = ""
     FORTIOS_DEFAULT_VDOM: str = "root"
-    FORTIOS_VERIFY_SSL: bool = False
+    FORTIOS_VERIFY_SSL: bool = True
     FORTIOS_CA_BUNDLE: Optional[str] = None
     FORTIOS_TIMEOUT: float = 15.0
 
@@ -115,6 +115,8 @@ class Settings(BaseSettings):
             raise ValueError(
                 "ENABLE_2FA requiere un JWT_SECRET_KEY aleatorio de al menos 32 bytes."
             )
+        if self.ENABLE_2FA and not self.TOTP_SECRET_KEY:
+            raise ValueError("ENABLE_2FA requiere configurar un TOTP_SECRET_KEY propio y aleatorio.")
 
         if environment not in {"development", "test"}:
             if self.DEBUG:
@@ -127,6 +129,8 @@ class Settings(BaseSettings):
                 raise ValueError("JWT_SECRET_KEY debe reemplazarse fuera de development/test.")
             if self.ALLOW_2FA_ENROLLMENT:
                 raise ValueError("El enrolamiento 2FA debe permanecer cerrado fuera de development/test.")
+            if self.ENABLE_2FA and (not self.TOTP_SECRET_KEY or len(self.TOTP_SECRET_KEY.encode("utf-8")) < 32):
+                raise ValueError("TOTP_SECRET_KEY debe contener al menos 32 bytes aleatorios.")
             if not self.FORTIOS_VERIFY_SSL and not self.FORTIOS_CA_BUNDLE:
                 raise ValueError("La validación TLS de FortiOS es obligatoria fuera de development/test.")
             if self.FORTIOS_SCHEME.lower() != "https":

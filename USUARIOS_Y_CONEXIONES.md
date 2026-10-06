@@ -10,7 +10,8 @@ Esta etapa añade cuentas locales al gateway del dashboard, sin depender de un p
 | Agregar/actualizar recursos y asignar/liberar IP | No | Sí | Sí |
 | Registrar visita/incidencia y adjuntar evidencia | No | Sí | Sí |
 | Exportación desde la interfaz | No | Sí | Sí |
-| Crear usuarios, asignar roles, suspender/restablecer cuentas | No | No | Sí |
+| Crear usuarios y administrar cuentas visibles | No | Sí, roles admin/soporte | Sí, todos los roles |
+| Ocultar o volver visible una cuenta | No | No | Sí |
 | Configurar/probar conexiones y credenciales | No | No | Sí |
 | Consultas sensibles mediante proxy (tráfico, etc.) | No | No | Solo lectura |
 | Configurar equipos mediante API externa | No | No | No |
@@ -21,9 +22,11 @@ El ámbito actual es esta instancia completa: todavía no se asignan subconjunto
 
 Administrador es el nivel operativo superior visible para ejecutivos. Superusuario es un rol interno permanente de SGRS, sin relación con sudo/Linux. Conserva el identificador `super-admin` en SQLite para no migrar cuentas existentes.
 
-El servidor entrega un catálogo `roles` en login/sesión: viewer y admin reciben únicamente Viewer y Administrador; solo Superusuario recibe el tercer rol. Las cuentas operativas no pueden listar cuentas, configurar conexiones ni consultar las rutas técnicas reservadas. No se amplían sus permisos de gestión de usuarios. Los mensajes de denegación no nombran el rol interno y el detalle de dispositivos omite la acción de tráfico cuando falta permiso.
+El servidor entrega un catálogo `roles` en login/sesión: viewer y admin reciben únicamente Viewer y Administrador; solo Superusuario recibe el tercer rol. En la lista de Usuarios, las cuentas super-admin visibles se presentan como Administrador, sin mostrar privilegios ni páginas internas. El super-admin puede ocultar una cuenta: deja de aparecer a las cuentas operativas, que tampoco pueden administrarla usando su ID. Ocultarla conserva el inicio de sesión; suspenderla es una acción aparte. El filtro Visibles/Ocultos/Todas solo se ofrece a super-admin.
 
-El frontend público no incluye el nombre ni la definición del rol interno como constantes. La demo ofrece únicamente un administrador operativo. Esto no promete indetectabilidad ante acceso al repositorio, servidor, bundles antiguos o una sesión interna: el bundle compartido todavía contiene lógica de pantallas administrativas. Separar el frontend técnico en un despliegue privado es la siguiente fase si también se requiere ocultar esa estructura. Este manual y el informe de arquitectura son documentación técnica, no ayuda pública para ejecutivos.
+Las tarjetas de Usuarios solo muestran los roles operativos; ambos tipos de administrador cuentan como Administrador. Ocultar información visual no convierte el rol en secreto ante acceso al repositorio, servidor o bundle frontend. Este manual y el informe de arquitectura son documentación técnica, no ayuda pública para ejecutivos.
+
+La contraseña de inicio de sesión aparece en la petición que envía el navegador de la propia persona; eso es visible en sus DevTools y no se puede ocultar al cliente. En HTTP podría observarse en el trayecto, por eso el acceso desde otros equipos requiere HTTPS. El servidor no devuelve la contraseña ni su hash, conserva un hash scrypt y emite la sesión en cookie `HttpOnly`.
 
 Las consultas del proxy se restringen ahora a una lista explícita de rutas de lectura y patrones de detalle conocidos; las nuevas rutas del proveedor no se habilitan automáticamente. Se conservan denegadas autenticación, documentación y escrituras externas. Véase [análisis completo de cobertura y evolución](ANALISIS_APIS_Y_EVOLUCION_DASHBOARD.md).
 
@@ -41,9 +44,9 @@ El comando solicita usuario, nombre y contraseña (12–128 caracteres, entrada 
 
 Abrir `http://127.0.0.1:3000` e iniciar sesión. En desarrollo, Vite puede seguir sirviendo el frontend en el puerto 5173 y reenviando `/api` a Python. Reinicia únicamente el proceso habitual de Python para cargar el nuevo código; no es necesario iniciar las APIs externas para administrar cuentas.
 
-En **Administración → Usuarios y privilegios**, al pie del sidebar, se crean las cuentas y se asigna uno de los tres roles. Para cambiar rol, contraseña o estado, abrir Administrar, revisar la consecuencia y confirmar. No hay eliminación definitiva. La suspensión se revierte seleccionando Activa.
+En **Administración → Usuarios y privilegios**, al pie del sidebar, admin puede crear cuentas de soporte o administrador; super-admin puede asignar todos los roles y configurar páginas. Para cambiar contraseña o estado, abrir Administrar, revisar la consecuencia y confirmar. Super-admin también puede ocultar y restaurar cuentas. No hay eliminación definitiva. La suspensión se revierte seleccionando Activa.
 
-No se permite cambiar el propio rol ni suspender la propia cuenta. Tampoco degradar/suspender el último super-admin activo, incluso con peticiones concurrentes. Cambiar rol, contraseña o usuario de acceso y suspender una cuenta revoca sus sesiones. La entrega de contraseñas es manual por un canal seguro; invitaciones y cambio obligatorio en primer ingreso quedan para una fase posterior.
+Se permite cambiar el propio rol dentro de la jerarquía autorizada, con confirmación explícita y cierre de sesión inmediato. No se permite suspender la propia cuenta ni degradar/suspender el último super-admin activo, incluso con peticiones concurrentes. Cambiar rol, contraseña o usuario de acceso y suspender una cuenta revoca sus sesiones. La entrega de contraseñas es manual por un canal seguro; invitaciones y cambio obligatorio en primer ingreso quedan para una fase posterior.
 
 ## Conexiones con las APIs
 
@@ -77,10 +80,10 @@ Los reportes nuevos usan identificador de solicitud estable, responsable autenti
 
 ## Almacenamiento y límites de seguridad
 
-- `dashboard_access.py`: SQLite en `.sgrs-private/dashboard.sqlite3`, directorio `0700` y archivo `0600`, excluidos de Git y del build público.
+- `dashboard_access.py`: SQLite en `.sgrs-private/dashboard.sqlite3`, directorio `0700` y archivo `0600`, excluido del build público. Actualmente Git incluye la base privada y los `.env`: los permisos locales no protegen las copias del repositorio ni su historial.
 - Contraseñas de usuario: scrypt con sal aleatoria por cuenta (`N=32768`, `r=8`, `p=1`). Nunca se almacenan en texto plano ni se devuelven a la interfaz.
 - Credenciales API: recuperables en SQLite para enviar las consultas. **El archivo tiene permisos restrictivos, pero los secretos no están cifrados en reposo.** Utilizar cifrado de disco y restringir las copias de seguridad en local; migrar a un almacén de secretos antes de producción. No guardar credenciales reales en modo demo.
-- Sesiones: token aleatorio con hash en DB, duración máxima de 8 horas e inactividad máxima de 30 minutos; cookie HttpOnly/SameSite=Strict. Secure cuando se configura el origen HTTPS. CSRF en escrituras y validación de origen/Host; sin CORS comodín.
+- Sesiones: token aleatorio con hash en DB, duración máxima de 8 horas e inactividad máxima de 30 minutos; cookie HttpOnly/SameSite=Strict/Secure mediante el proxy HTTPS local autorizado. CSRF en escrituras y validación de origen/Host; sin CORS comodín. HTTP remoto no permite autenticación ni consultas con sesión.
 - Auditoría local: creación/cambio de cuentas, cambio de conexiones, intento de diagnóstico y acceso satisfactorio. No contiene contraseñas ni tokens. No es un registro inmutable ni una auditoría completa de todas las operaciones.
 - Límites de intentos de acceso por usuario/IP y global; hasta seis diagnósticos por minuto por super-admin. Catálogo local limitado a 1000 cuentas.
 - Ejecutar una sola instancia del gateway: el inventario y los reportes siguen dependiendo de archivos y un lock de proceso. Las cuentas y las conexiones sí usan transacciones SQLite.
@@ -96,6 +99,8 @@ SGRS_PUBLIC_ORIGIN=https://sgrs.institucion.gob.mx .venv/bin/python server.py
 ```
 
 El ejemplo es ilustrativo: requiere DNS y TLS válidos, no se crea ningún dominio automáticamente. Mantener el gateway detrás del proxy; no desactivar estas protecciones para enviar contraseñas por HTTP a la red. La apariencia móvil puede revisarse localmente reduciendo el ancho sin configurar infraestructura adicional.
+
+El proxy debe ejecutarse en el mismo equipo, conservar Host y establecer `X-Forwarded-Proto` a partir de la conexión real. Ver [configuración HTTPS](Dashboard/README.md#https-para-acceso-desde-otros-equipos) y [Caddyfile de ejemplo](deploy/Caddyfile.example). El flujo QR `/api/mobile-report` aún admite HTTP para compatibilidad; usar HTTPS también para esos enlaces protege sus tokens y datos.
 
 ## Modo demostración y verificación
 

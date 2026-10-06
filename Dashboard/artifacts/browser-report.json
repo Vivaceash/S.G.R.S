@@ -9,14 +9,42 @@
       "details": "0 violations"
     },
     {
-      "name": "Render y accesibilidad: inventario",
+      "name": "Render y accesibilidad: dispositivos",
       "details": "0 violations"
+    },
+    {
+      "name": "Render y accesibilidad: disponibilidad",
+      "details": "0 violations"
+    },
+    {
+      "name": "Render y accesibilidad: idf",
+      "details": "0 violations"
+    },
+    {
+      "name": "Render y accesibilidad: bitacora",
+      "details": "0 violations"
+    },
+    {
+      "name": "Búsqueda, limpieza y paginación",
+      "details": "passed"
+    },
+    {
+      "name": "Edición de IP en demo sin escritura externa",
+      "details": "passed"
+    },
+    {
+      "name": "Validación accesible, guardia de borrador y creación de visita",
+      "details": "passed"
+    },
+    {
+      "name": "IDF de escritorio: bitácora, reporte autorizado, detalle, Escape y restauración de foco",
+      "details": "passed"
     }
   ],
   "failures": [
     {
       "test": "runtime",
-      "message": "locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('heading', { name: 'Disponibilidad IP', exact: true }) to be visible\u001b[22m\n"
+      "message": "locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('heading', { name: 'No tienes permiso para esta sección' }) to be visible\n"
     }
   ]
 }

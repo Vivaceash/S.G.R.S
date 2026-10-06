@@ -1,4 +1,5 @@
 import copy
+import re
 from typing import Any, Dict, List, Set, Union
 
 # Conjunto de nombres de campos sensibles que no deben exponerse en texto plano
@@ -14,13 +15,16 @@ SENSITIVE_KEY_PATTERNS: Set[str] = {
     "pre_shared_key",
     "credential",
     "auth_password",
+    "api_key",
+    "authorization",
+    "cookie",
 }
 
 
 def is_sensitive_key(key: str) -> bool:
     """Verifica si una clave coincide con nombres de campos sensibles."""
-    lower = key.lower().replace("-", "_")
-    return any(pattern in lower for pattern in SENSITIVE_KEY_PATTERNS)
+    lower = re.sub(r"[^a-z0-9]", "", key.lower())
+    return any(pattern.replace("_", "") in lower for pattern in SENSITIVE_KEY_PATTERNS)
 
 
 def sanitize_data(obj: Any) -> Any:

@@ -40,19 +40,15 @@ async def test_unauthenticated_request_rejected():
 
 
 @pytest.mark.anyio
-async def test_public_health_and_dhcp_pools_without_auth():
-    """Verifica que /api/v1/health y /api/v1/network/dhcp-pools no requieran autenticación"""
+async def test_diagnostics_require_auth_but_minimal_health_is_public():
+    """Solo el liveness mínimo es público; los diagnósticos exigen credenciales."""
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         r_health = await client.get("/api/v1/health")
-        assert r_health.status_code == 200
+        assert r_health.status_code == 401
 
         r_pools = await client.get("/api/v1/network/dhcp-pools")
-        assert r_pools.status_code in (200, 503)
-        assert r_pools.status_code != 401
-        assert r_pools.status_code != 403
-
-        # Los demás endpoints de red deben seguir requiriendo autenticación
+        assert r_pools.status_code == 401
         r_leases = await client.get("/api/v1/network/dhcp-leases")
         assert r_leases.status_code == 401
 
@@ -232,6 +228,7 @@ async def test_2fa_setup_and_verification_flow(monkeypatch):
     monkeypatch.setattr(settings, "ENABLE_2FA", True)
     monkeypatch.setattr(settings, "ALLOW_2FA_ENROLLMENT", True)
     monkeypatch.setattr(settings, "JWT_SECRET_KEY", "forti-test-jwt-secret-with-at-least-32-bytes")
+    monkeypatch.setattr(settings, "TOTP_SECRET_KEY", "forti-test-dedicated-totp-master-key")
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -308,4 +305,3 @@ async def test_jwt_is_not_accepted_when_2fa_is_disabled():
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/api/v1/devices", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 403
-

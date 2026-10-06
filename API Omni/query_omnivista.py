@@ -42,12 +42,12 @@ def main():
     )
 
     if r_login.status_code != 200:
-        print(f"[-] Error en login: {r_login.status_code} - {r_login.text}")
+        print(f"[-] Error en login: HTTP {r_login.status_code}")
         return
 
     data = r_login.json()
     token = data.get("accessToken")
-    print(f"[+] Login Exitoso! Token obtenido: {token}")
+    print("[+] Login exitoso. Credencial recibida y reservada en memoria.")
 
     # Guardar headers para llamadas posteriores
     session.headers.update({
@@ -85,13 +85,13 @@ def main():
                 if isinstance(js, list):
                     print(f"    [OK] Lista con {len(js)} registros")
                     if js:
-                        print(f"    Muestra: {json.dumps(js[0], indent=2)[:300]}...")
+                        print("    Muestra omitida para proteger datos de cuentas y credenciales.")
                 elif isinstance(js, dict):
                     keys = list(js.keys())
                     print(f"    [OK] Objeto devuelto. Claves principales: {keys[:8]}")
-                    print(f"    Muestra: {json.dumps({k: js[k] for k in keys[:4]}, indent=2)[:300]}...")
+                    print("    Muestra omitida para proteger datos de cuentas y credenciales.")
         except Exception as e:
-            print(f" -> {name:25} | Error: {e}")
+            print(f" -> {name:25} | Error de consulta: {type(e).__name__}")
 
     print("\n" + "=" * 65)
 
