@@ -247,11 +247,11 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
     const controller = new AbortController(); let active = true;
     setLoading(true); setError('');
     const timer = setTimeout(() => controller.abort(), 12000);
-    request(route === 'cctv' ? '/api/inventarios/cctv/catalog' : '/api/inventory/catalog', { signal: controller.signal }).then(result => {
+    request('/api/inventory/catalog', { signal: controller.signal }).then(result => {
       if (active && !controller.signal.aborted) setCatalog(result);
     }).catch(e => { if (active) setError(e.name === 'AbortError' ? 'La consulta tardó demasiado. Vuelve a intentar.' : e.message); }).finally(() => { clearTimeout(timer); if (active) setLoading(false); });
     return () => { active = false; controller.abort(); clearTimeout(timer); };
-  }, [demo, revision, route]);
+  }, [demo, revision]);
   useEffect(() => () => { generation.current++; requestRef.current?.abort(); }, []);
   const markDirty = value => { setDirty(value); onDirty(value); };
   const close = () => { if (busy) return; if (dirty) setDiscard(true); else setModal(null); };
@@ -264,17 +264,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
     setChecking(true); setNetwork(null); setNetworkError('');
     const timer = setTimeout(() => controller.abort(), 14000);
     try {
-      let result;
-      if (route === 'cctv') {
-        let job = await mutate('/api/inventarios/reconciliation/jobs', {});
-        while (['queued', 'running'].includes(job.status)) {
-          await new Promise(resolve => window.setTimeout(resolve, 500));
-          if (controller.signal.aborted || version !== generation.current) return;
-          job = await request(`/api/inventarios/reconciliation/jobs/${job.id}`, { signal: controller.signal });
-        }
-        if (!job.result) throw new Error(job.error || 'No se pudo completar el cotejo.');
-        result = job.result;
-      } else result = await request('/api/inventory/reconcile', { signal: controller.signal });
+      const result = await request('/api/inventory/reconcile', { signal: controller.signal });
       if (version !== generation.current) return;
       if (result.revision !== catalog.revision) { setNetworkError('El catálogo documental cambió. Actualiza la consulta antes de cotejar.'); return; }
       setNetwork(result);
@@ -284,10 +274,8 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   const rows = catalog.assets.filter(a => a.dataset === dataset).map(a => ({ ...a,
     idf: catalog.cabinets.find(c => c.id === a.idf_id)?.name || 'Sin asignar',
     kindLabel: a.kind === 'rack' ? 'Rack / Contenedor' : 'Equipo / Componente',
-    comparison: comparisonLabels[(network?.assets[a.id] || a.network)?.comparison || 'pending'],
-    current_ip: (network?.assets[a.id] || a.network)?.ip || '', status: (network?.assets[a.id] || a.network)?.status || 'unknown',
-    vlan_id: (network?.assets[a.id] || a.network)?.vlan?.vlan_id ?? '',
-    network_info: network?.assets[a.id] || a.network,
+    comparison: comparisonLabels[network?.assets[a.id]?.comparison || 'pending'],
+    current_ip: network?.assets[a.id]?.ip || '', status: network?.assets[a.id]?.status || 'unknown',
     relocation: a.destination && !a.relocated ? 'Por confirmar' : a.relocated ? 'Reubicada' : 'Sin reubicación',
     lifecycle: a.decommissioned ? 'Retirada / desactivada' : 'Activa',
     issuesText: (a.issues || []).join(' · '), sourceText: sourceLabel(a.source),
@@ -298,20 +286,20 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
     try {
       const result = demo
         ? { asset: { ...asset, decommissioned: next, documented: asset.documented || asset, corrected_at: new Date().toISOString() } }
-        : await mutate(route === 'cctv' ? '/api/inventarios/cctv/asset' : '/api/inventory/asset', { id: asset.id, version: asset.version, fields: { decommissioned: next } });
+        : await mutate('/api/inventory/asset', { id: asset.id, version: asset.version, fields: { decommissioned: next } });
       setCatalog(old => ({ ...old, assets: old.assets.map(a => a.id === asset.id ? result.asset : a) }));
       setNetwork(null);
       notify(next ? 'Cámara marcada como retirada / desactivada.' : 'Cámara marcada como activa en inventario.');
     } catch (err) { notify(err.message || 'No se pudo actualizar el estado de la cámara.'); }
   };
-  const allColumns = [{ key: 'name', label: 'Recurso' }, { key: 'idf', label: 'Gabinete' },
+  const allColumns = [{ key: 'name', label: 'Recurso' }, { key: 'idf', label: route === 'cctv' ? 'Ubicación del IDF' : 'Gabinete' },
     { key: 'location', label: 'Ubicación' }, { key: 'model', label: 'Modelo' },
     { key: 'documented_ip', label: 'IP documentada' }, { key: 'current_ip', label: 'IP observada en API' },
-    { key: 'vlan_id', label: 'VLAN' }, { key: 'comparison', label: 'Cotejo' }, { key: 'status', label: 'Estado API', render: a => <Badge status={a.status} /> },
+    { key: 'comparison', label: 'Cotejo' }, { key: 'status', label: 'Estado API', render: a => <Badge status={a.status} /> },
     ...(route === 'cctv' ? [{ key: 'lifecycle', label: 'Inventario', render: a => <span className={a.decommissioned ? 'camera-state is-decommissioned' : 'camera-state'}><i />{a.lifecycle}</span> }] : []),
     { key: 'actions', label: 'Acciones', sortable: false, render: a => <div className="camera-actions"><Button onClick={() => setModal({ type: 'detail', asset: a })}>Ver ficha</Button>{route === 'cctv' && canWrite && a.dataset !== 'cctv_original' && <button type="button" className={`camera-power ${a.decommissioned ? 'is-on' : ''}`} onClick={() => toggleCamera(a)} aria-label={a.decommissioned ? `Activar ${a.name}` : `Marcar ${a.name} como retirada`} title={a.decommissioned ? 'Reactivar en inventario' : 'Marcar como retirada / desactivada'}><Power size={15} /></button>}</div> }];
   const columns = route === 'cctv'
-    ? allColumns.filter(column => ['name', 'location', 'documented_ip', 'current_ip', 'status', 'vlan_id', 'lifecycle', 'actions'].includes(column.key))
+    ? allColumns.filter(column => ['name', 'idf', 'location', 'model', 'documented_ip', 'current_ip', 'vlan_id', 'status', 'lifecycle', 'actions'].includes(column.key))
     : allColumns;
   const tableFilters = { ...state.filters, ...(dataset === 'cctv_original' ? { relocation: '', decommissioned: '' } : {}) };
   const exportRows = selectRows(rows, state.query, tableFilters, state.sort, state.asc);
@@ -332,7 +320,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   const save = async fields => {
     const asset = modal.asset;
     generation.current++; requestRef.current?.abort(); setChecking(false);
-    const result = demo ? { asset: { ...asset, ...fields, documented: asset.documented || asset, corrected_at: new Date().toISOString() } } : await mutate(route === 'cctv' ? '/api/inventarios/cctv/asset' : '/api/inventory/asset', { id: asset.id, version: asset.version, fields });
+    const result = demo ? { asset: { ...asset, ...fields, documented: asset.documented || asset, corrected_at: new Date().toISOString() } } : await mutate('/api/inventory/asset', { id: asset.id, version: asset.version, fields });
     setCatalog(old => ({ ...old, assets: old.assets.map(a => a.id === asset.id ? result.asset : a) }));
     setNetwork(null); markDirty(false); setModal(null);
     notify(demo ? 'Corrección de ejemplo guardada en esta sesión.' : 'Corrección física guardada. La fuente original se conserva.');
@@ -489,28 +477,21 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
           {route === 'cctv' && dataset === 'cctv' && <Select label="Reubicación" value={state.filters.relocation || ''} onChange={e => state.setFilter('relocation', e.target.value)}><option value="">Todas</option><option>Reubicada</option><option>Por confirmar</option><option>Sin reubicación</option></Select>}
           {route === 'cctv' && dataset === 'cctv' && <button type="button" className={`camera-retired-filter ${state.filters.decommissioned === 'true' ? 'is-active' : ''}`} aria-pressed={state.filters.decommissioned === 'true'} onClick={() => state.setFilter('decommissioned', state.filters.decommissioned === 'true' ? '' : 'true')}><Power size={15} />Retiradas <b>{rows.filter(row => row.decommissioned).length}</b></button>}
           <SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar descripción, serie, MAC o ubicación…" />
-          <Button icon={RefreshCw} busy={loading} disabled={busy || checking} onClick={reload}>Actualizar catálogo</Button>
-          <Button variant="primary" busy={checking} disabled={demo || loading || busy || Boolean(error) || !catalog.assets.length || dataset === 'cctv_original'} onClick={check}>Cotejar APIs</Button>
-          {route === 'cctv' && <Button icon={Download} disabled={!canExport || loading || Boolean(error) || !exportRows.length} onClick={() => downloadCsv(title, allColumns.filter(column => column.key !== 'actions'), exportRows)}>Exportar consulta</Button>}
+          {route === 'cctv' ? <Button icon={Download} disabled={!canExport || loading || Boolean(error) || !exportRows.length} onClick={() => downloadCsv(title, columns.filter(column => column.key !== 'actions'), exportRows)}>Exportar consulta</Button> : <><Button icon={RefreshCw} busy={loading} disabled={busy || checking} onClick={reload}>Actualizar catálogo</Button><Button variant="primary" busy={checking} disabled={demo || loading || Boolean(error) || !catalog.assets.length} onClick={check}>Cotejar APIs</Button></>}
         </div>
         {networkError && <Notice title="No se pudo completar el cotejo" tone="warning">{networkError}</Notice>}
-        {network && <Notice title={network.sources.every(s => s.available) ? 'Cotejo realizado' : 'Cotejo parcial · Fuentes no disponibles'} tone={network.sources.every(s => s.available) ? 'info' : 'warning'}>{network.sources.map(s => `${`${s.provider === 'forti' ? 'FortiGate' : 'OmniVista'}${s.endpoint ? ` ${s.endpoint}` : ''}`}: ${s.available ? s.count == null ? 'consultado' : `${s.count} registros consultados` : 'no disponible'} · ${dateTime(s.observed_at)}`).join(' / ')}. {network.scope} {network.only_api.length} registros de API sin vínculo confirmado con el catálogo.</Notice>}
-        <DataTable title={title} className={route === 'cctv' ? 'cctv-table cctv-network-table' : ''} rows={rows} columns={columns} state={{ ...state, filters: tableFilters }} rowClassName={route === 'cctv' ? row => row.decommissioned ? 'camera-row-decommissioned' : '' : undefined} loading={loading} error={error} onRetry={reload} exportable={route !== 'cctv' && canExport} />
+        {network && <Notice title={network.sources.every(s => s.available) ? 'Cotejo realizado' : 'Cotejo parcial · Fuentes no disponibles'} tone={network.sources.every(s => s.available) ? 'info' : 'warning'}>{network.sources.map(s => `${s.provider === 'forti' ? 'FortiGate' : 'OmniVista'}: ${s.available ? `${s.count} registros consultados` : 'no disponible'} · ${dateTime(s.observed_at)}`).join(' / ')}. {network.scope} {network.only_api.length} registros de API sin vínculo confirmado con el catálogo.</Notice>}
+        <DataTable title={title} className={route === 'cctv' ? 'cctv-table' : ''} rows={rows} columns={columns} state={{ ...state, filters: tableFilters }} rowClassName={route === 'cctv' ? row => row.decommissioned ? 'camera-row-decommissioned' : '' : undefined} loading={loading} error={error} onRetry={reload} exportable={route !== 'cctv' && canExport} />
         <Button disabled={loading || Boolean(error)} onClick={() => setModal({ type: 'sources' })}>Fuentes y discrepancias documentales</Button>
         {network?.only_api.length > 0 && <Button onClick={() => setModal({ type: 'unlinked' })}>Ver registros de API sin vínculo confirmado</Button>}
         <Dialog open={Boolean(modal)} onClose={close} title={modal?.type === 'edit' ? 'Corregir datos físicos' : modal?.type === 'unlinked' ? 'API sin vínculo confirmado' : modal?.type === 'sources' ? 'Fuentes documentales' : 'Ficha del recurso'} wide busy={busy}>
           {discard && <Notice title="¿Descartar los cambios sin guardar?" tone="warning" action={<><Button autoFocus onClick={() => setDiscard(false)}>Seguir editando</Button><Button variant="danger" onClick={() => { markDirty(false); setDiscard(false); setModal(null); }}>Descartar</Button></>}>La fuente original y las correcciones guardadas se conservan.</Notice>}
           {modal?.type === 'edit' && <AssetForm key={selected.id} asset={selected} cabinets={catalog.cabinets} onSave={save} onDirty={markDirty} onBusy={setBusy} onCancel={close} />}
           {modal?.type === 'detail' && <>
-            <dl className="detail-grid">{Object.entries({ Descripción: selected.name, Gabinete: selected.idf, Tipo: selected.kindLabel, Rack: selected.rack, Ubicación: selected.location, Modelo: selected.model, Serie: selected.serial, MAC: selected.mac, Puertos: selected.ports, 'IP documentada': selected.documented_ip, 'IP observada en API': selected.current_ip, VLAN: selected.vlan_id,
-              'Interfaz Forti': selected.network_info?.vlan?.name,
-              Subredes: selected.network_info?.vlan?.subnets?.join(', '),
-              'Direcciones de interfaz': selected.network_info?.vlan?.addresses?.join(', '),
-              'Consulta de red': selected.network_info?.observed_at ? dateTime(selected.network_info.observed_at) : 'Sin cotejar',
-              'Vigencia': selected.network_info?.stale ? 'Dato antiguo; actualiza el cotejo' : selected.network_info ? 'Consulta reciente' : 'Sin verificar', Cotejo: selected.comparison, 'Última corrección': selected.corrected_at ? dateTime(selected.corrected_at) : 'Sin correcciones', Estado: selected.dataset === 'cctv' ? selected.lifecycle : 'No aplica', Reubicación: selected.dataset === 'cctv' ? selected.relocation : 'No aplica', Destino: selected.destination, Fuente: selected.sourceText }).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value || 'No informado'}</dd></div>)}</dl>
+            <dl className="detail-grid">{Object.entries({ Descripción: selected.name, Gabinete: selected.idf, Tipo: selected.kindLabel, Rack: selected.rack, Ubicación: selected.location, Modelo: selected.model, Serie: selected.serial, MAC: selected.mac, Puertos: selected.ports, 'IP documentada': selected.documented_ip, 'IP observada en API': selected.current_ip, Cotejo: selected.comparison, 'Última corrección': selected.corrected_at ? dateTime(selected.corrected_at) : 'Sin correcciones', Estado: selected.dataset === 'cctv' ? selected.lifecycle : 'No aplica', Reubicación: selected.dataset === 'cctv' ? selected.relocation : 'No aplica', Destino: selected.destination, Fuente: selected.sourceText }).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value || 'No informado'}</dd></div>)}</dl>
             {selected.issuesText && <Notice title="Observaciones de la fuente" tone="warning">{selected.issuesText}</Notice>}
             {selected.documented && selected.corrected_at && <Notice title="Valores originales conservados">Ubicación: {selected.documented.location || 'no informada'}. Gabinete: {selected.documented.idf_id || 'sin asignar'}. Destino: {selected.documented.destination || 'no informado'}.</Notice>}
-            {(selected.network_info?.observations || []).map((o, i) => <Notice key={i} title={`Observación de ${o.provider}`}>IP: {o.ip || 'no informada'} · Estado: {o.status} · Interfaz: {o.interface || 'no informada'} · {dateTime(o.observed_at)}</Notice>)}
+            {(network?.assets[selected.id]?.observations || []).map((o, i) => <Notice key={i} title={`Observación de ${o.provider}`}>IP: {o.ip || 'no informada'} · Estado: {o.status} · Interfaz: {o.interface || 'no informada'} · {dateTime(o.observed_at)}</Notice>)}
             {catalog.observations.filter(o => o.idf_id === selected.idf_id).length > 0 && <><h3>Observaciones históricas del gabinete</h3><ul>{catalog.observations.filter(o => o.idf_id === selected.idf_id).map((o, i) => <li key={i}>{o.text}</li>)}</ul></>}
             <div className="form-actions">
               {data.idfs.some(c => c.id === selected.idf_id) && <Button onClick={() => { setModal(null); openEditor('qr', data.idfs.find(c => c.id === selected.idf_id)); }}>Código QR del gabinete</Button>}

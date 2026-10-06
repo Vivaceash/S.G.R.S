@@ -857,6 +857,16 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
 
         # 9. Detección de IP de red para QR
         elif path == '/api/ip':
+            # SGRS_LAN_ORIGIN authorizes browser origins; it can contain a
+            # historical or proxy address and must not decide the QR target.
+            # A fixed QR address is opt-in via SGRS_QR_ORIGIN. Otherwise we
+            # report the actual active interface of this server.
+            configured = os.environ.get('SGRS_QR_ORIGIN') or os.environ.get('SGRS_PUBLIC_ORIGIN')
+            parsed = urlsplit(configured.strip()) if configured else None
+            if parsed and parsed.scheme in ('http', 'https') and parsed.hostname and not parsed.username and not parsed.password:
+                self._send_json({"ip": parsed.netloc})
+                return
+
             ip = '127.0.0.1'
             for target in [('10.255.255.255', 1), ('8.8.8.8', 80), ('1.1.1.1', 80)]:
                 try:

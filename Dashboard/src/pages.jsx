@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, ArrowRight, ArrowUpDown, Building2, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Copy, Download, FileText, Grid, HardDrive, Headset, Info, Laptop, Layers3, List, Monitor, Network, Package, Plus, Printer, Radio, RotateCcw, Router, Server, ShieldCheck, Smartphone, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { Activity, ArrowRight, ArrowUpDown, Building2, Camera, Check, CheckCircle2, Eye, Thermometer, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Copy, Download, FileText, Grid, HardDrive, Headset, Info, Laptop, Layers3, List, Monitor, Network, Package, Plus, Printer, Radio, RotateCcw, Router, Server, ShieldCheck, Smartphone, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X, LogIn, LogOut, UserPlus, KeyRound, PlugZap, MapPin, MapPinOff } from 'lucide-react';
 import { Badge, Button, DataTable, Dialog, Empty, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, downloadExcel, useListState } from './components.jsx';
 import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getOverviewSegmentDevices, isMeztliSegment, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, getSupportSegments, normalizeText } from './domain.mjs';
 
@@ -275,7 +275,7 @@ export function Addresses({ data, navigate, openEditor, loading, errors, refresh
   const filteredBySegment = filtered.reduce((groups, row) => { const key = row.vlan || 'Sin segmento'; (groups[key] ||= []).push(row); return groups; }, {});
   const chooseStatus = status => state.setFilter('status', status === 'all' ? '' : status);
   const labelForStatus = status => ({ available: 'Libre', occupied: 'Ocupada', reserved: 'Reservada' }[status] || 'Sin estado');
-  return <><PageHeading eyebrow="Inventario de infraestructura" title="Direcciones IP" description="Consulta de direcciones disponibles y asignadas por segmento de red" updatedAt={data.updatedAt}><Button icon={Download} disabled={!filtered.length || !canExport} onClick={() => downloadCsv('Direcciones-IP', columns.filter(c => c.key !== 'actions'), filtered)}>Exportar</Button></PageHeading>
+  return <><PageHeading eyebrow="Inventario de infraestructura" title="Direcciones IP" description="Consulta de direcciones disponibles y asignadas por segmento de red" updatedAt={data.updatedAt} />
     <section className="ip-kpi-grid" aria-label="Resumen de direcciones IP">{[
       ['all', 'Total direcciones', counts.all, 'Todos los segmentos'], ['available', 'Libres disponibles', counts.available, 'Listas para asignación'], ['occupied', 'IPs ocupadas', counts.occupied, 'Asignadas en producción'], ['reserved', 'Reservadas / gateways', counts.reserved, 'Gateways y VIPs de enlace'],
     ].map(([status, label, value, caption]) => <button key={status} type="button" className={`ip-kpi ip-kpi-${status} ${(!state.filters.status && status === 'all') || state.filters.status === status ? 'is-active' : ''}`} onClick={() => chooseStatus(status)}><span>{label}</span><strong>{number(value)}</strong><i style={{ width: `${counts.all ? Math.round(value / counts.all * 100) : 0}%` }} /><small>{caption}</small></button>)}</section>
@@ -531,7 +531,10 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
 
 export function MeztliManagement({ data, openEditor, loading, errors, refresh, canExport }) {
   const state = useListState('gestion-meztli');
-  const [admissionFilter, setAdmissionFilter] = useState('not-admitted');
+  // La vista no debe iniciar ocultando los equipos admitidos: cuando todos
+  // tienen reserva DHCP, el filtro "No admitidos" hacía parecer que la tabla
+  // no se actualizaba aunque FortiGate hubiera devuelto concesiones vigentes.
+  const [admissionFilter, setAdmissionFilter] = useState('all');
   const [deviceTypeFilter, setDeviceTypeFilter] = useState('');
   const directLeases = Array.isArray(data.meztliLeases) ? data.meztliLeases : [];
   const meztliSegment = data.segments.find(segment => normalizeText(`${segment.name || ''} ${segment.interface || ''} ${segment.vlan || ''}`).includes('meztli') || /\b94\b/.test(String(segment.vlan || '')));
@@ -581,17 +584,400 @@ export function MeztliManagement({ data, openEditor, loading, errors, refresh, c
     <Note title="Alcance de Gestión Meztli">La vista es de supervisión: no modifica reservas DHCP ni desconecta equipos. Abre un registro para revisar sus datos técnicos antes de realizar cualquier acción en la red.</Note>
   </>;
 }
-export function AuditLog({ data, records, navigate, openEditor, loading, errors, refresh, idfView = false, canWrite, canExport }) {
+export function AuditLog({
+  data,
+  records,
+  navigate,
+  openEditor,
+  loading,
+  errors,
+  refresh,
+  idfView = false,
+  filterIdf = null,
+  canWrite,
+  canExport,
+  canResolve,
+  onResolve,
+}) {
   const state = useListState(idfView ? 'reportes-idf' : 'bitacora');
-  const columns = [{ key: 'id', label: 'Folio', render: r => <span className="folio">{r.id}</span> }, { key: 'idf', label: 'IDF' }, { key: 'title', label: 'Actividad', render: r => detailText(r.title, r.description) }, { key: 'actor', label: 'Responsable' }, { key: 'temp', label: 'Temperatura', render: r => r.temp == null ? '—' : `${r.temp} °C` }, { key: 'status', label: 'Estado', render: r => <Badge status={r.status} /> }, { key: 'date', label: 'Fecha y hora', render: r => dateTime(r.date) }, { key: 'actions', label: 'Acciones', sortable: false, render: r => <Button onClick={() => openEditor('report-detail', r)}>Ver</Button> }];
-  return <><PageHeading eyebrow={idfView ? 'Registro IDF · Supervisión' : 'Trazabilidad operativa'} title={idfView ? 'Reportes e incidencias de IDF' : 'Bitácora de Registros'} description={idfView ? 'Consulta los registros enviados desde dispositivos móviles' : 'Historial de inspecciones e incidencias en cuartos de telecomunicaciones'} updatedAt={data.updatedAt} />
-    {idfView && <><section className="metric-grid"><Metric icon={FileText} label="Reportes recibidos" value={number(records.length)} caption="registros en la bitácora" /><Metric icon={TriangleAlert} tone="danger" label="Con incidencias" value={number(records.filter(r => r.status === 'open').length)} caption="inconvenientes reportados" /><Metric icon={CheckCircle2} tone="success" label="Sin pendientes" value={number(records.filter(r => r.status === 'resolved').length)} caption="visitas sin incidencias abiertas" /><Metric icon={Building2} tone="gold" label="IDFs con registros" value={number(new Set(records.map(r => r.idfId)).size)} caption="cuartos con actividad documentada" /></section><Notice title="Vista de consulta en escritorio">Las entradas se registran desde Registro IDF en el móvil. Desde el detalle puedes consultar una incidencia y registrar su resolución; el reporte original se conserva.</Notice></>}
-    <div className="toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar folio, responsable o actividad…" /><Select label="IDF" value={state.filters.idf || ''} onChange={e => state.setFilter('idf', e.target.value)}><option value="">Todos los IDFs</option>{options(records.map(r => r.idf))}</Select><Select label="Tipo de reporte" value={state.filters.status || ''} onChange={e => state.setFilter('status', e.target.value)}><option value="">Todos los reportes</option><option value="open">Con incidencias abiertas</option><option value="resolved">Sin pendientes</option></Select><Button icon={RefreshCw} busy={loading} onClick={refresh}>Actualizar reportes</Button></div>
-    <DataTable title={idfView ? 'Reportes enviados desde móvil' : 'Bitácora de visitas'} rows={records} rowKey="key" columns={columns} state={state} noun="registros" exportable={canExport} loading={loading} error={errors.reports || errors.idfs} onRetry={refresh} />
-    {!idfView && canWrite && <div className="idf-mobile"><Button icon={Plus} onClick={() => navigate('idf')}>Registrar otra entrada</Button></div>}
-    <Note>Horarios de Ciudad de México. Los registros nuevos incluyen la identidad de la cuenta y la fecha asignadas por el servidor. Los registros históricos conservan la información declarada originalmente.</Note></>;
-}
+  const [resolvingId, setResolvingId] = useState(null);
 
+  useEffect(() => {
+    if (filterIdf) {
+      state.setFilter('idf', filterIdf);
+    }
+  }, [filterIdf]);
+
+  const enrichedRecords = useMemo(() => {
+    return (records || []).map(r => {
+      const hasEvidence = Boolean(r.evidence || r.evidenceDemo);
+      const isTempAlert = r.temp != null && Number(r.temp) >= 25;
+      return {
+        ...r,
+        hasEvidence: hasEvidence ? 'yes' : 'no',
+        tempAlert: isTempAlert ? 'alert' : 'normal',
+        evidenceLabel: hasEvidence ? 'Con foto' : 'Sin foto',
+        statusLabel: r.status === 'resolved' ? 'Resuelto' : 'Abierto',
+        formattedDate: dateTime(r.date),
+        temperatureValue: r.temp != null ? `${r.temp} °C` : '—',
+      };
+    });
+  }, [records]);
+
+  const counts = useMemo(() => {
+    const total = enrichedRecords.length;
+    const open = enrichedRecords.filter(r => r.status === 'open').length;
+    const resolved = enrichedRecords.filter(r => r.status === 'resolved').length;
+    const evidence = enrichedRecords.filter(r => r.hasEvidence === 'yes').length;
+    const tempAlert = enrichedRecords.filter(r => r.tempAlert === 'alert').length;
+    const idfsCount = new Set(enrichedRecords.map(r => r.idfId || r.idf)).size;
+    return { total, open, resolved, evidence, tempAlert, idfsCount };
+  }, [enrichedRecords]);
+
+  const handleResolve = async (record) => {
+    if (!onResolve) return;
+    setResolvingId(record.id || record.key);
+    try {
+      await onResolve(record);
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
+  const auditKpis = [
+    {
+      id: 'all',
+      label: 'Total registros',
+      value: counts.total,
+      caption: `${counts.idfsCount} IDFs con visitas`,
+      icon: FileText,
+      tone: 'total',
+      pct: 100,
+      isActive: !state.filters.status && !state.filters.hasEvidence && !state.filters.tempAlert,
+      onClick: () => {
+        state.setFilter('status', '');
+        state.setFilter('hasEvidence', '');
+        state.setFilter('tempAlert', '');
+      },
+    },
+    {
+      id: 'open',
+      label: 'Incidencias pendientes',
+      value: counts.open,
+      caption: 'Inconvenientes por resolver',
+      icon: TriangleAlert,
+      tone: 'occupied',
+      pct: counts.total ? Math.round((counts.open / counts.total) * 100) : 0,
+      isActive: state.filters.status === 'open',
+      onClick: () => {
+        state.setFilter('hasEvidence', '');
+        state.setFilter('tempAlert', '');
+        state.setFilter('status', state.filters.status === 'open' ? '' : 'open');
+      },
+    },
+    {
+      id: 'resolved',
+      label: 'Sin pendientes / Conformes',
+      value: counts.resolved,
+      caption: 'Inspecciones atendidas',
+      icon: CheckCircle2,
+      tone: 'available',
+      pct: counts.total ? Math.round((counts.resolved / counts.total) * 100) : 0,
+      isActive: state.filters.status === 'resolved',
+      onClick: () => {
+        state.setFilter('hasEvidence', '');
+        state.setFilter('tempAlert', '');
+        state.setFilter('status', state.filters.status === 'resolved' ? '' : 'resolved');
+      },
+    },
+    {
+      id: 'evidence',
+      label: 'Con evidencia fotográfica',
+      value: counts.evidence,
+      caption: 'Inspecciones con fotografía',
+      icon: Camera,
+      tone: 'evidence',
+      pct: counts.total ? Math.round((counts.evidence / counts.total) * 100) : 0,
+      isActive: state.filters.hasEvidence === 'yes',
+      onClick: () => {
+        state.setFilter('status', '');
+        state.setFilter('tempAlert', '');
+        state.setFilter('hasEvidence', state.filters.hasEvidence === 'yes' ? '' : 'yes');
+      },
+    },
+    {
+      id: 'temp',
+      label: 'Alertas térmicas',
+      value: counts.tempAlert,
+      caption: 'Temperatura ≥ 25 °C',
+      icon: Thermometer,
+      tone: 'reserved',
+      pct: counts.total ? Math.round((counts.tempAlert / counts.total) * 100) : 0,
+      isActive: state.filters.tempAlert === 'alert',
+      onClick: () => {
+        state.setFilter('status', '');
+        state.setFilter('hasEvidence', '');
+        state.setFilter('tempAlert', state.filters.tempAlert === 'alert' ? '' : 'alert');
+      },
+    },
+  ];
+
+  // 6 perfectly proportioned columns: generous width for Actions so NO buttons are cut off
+  const columns = [
+    {
+      key: 'idf',
+      label: 'IDF / Folio',
+      value: r => `${r.idf} ${r.id}`,
+      render: r => (
+        <div className="audit-cell-group">
+          <span className="audit-idf-tag">
+            <Building2 size={13} aria-hidden="true" />
+            <b>{r.idf || 'IDF'}</b>
+          </span>
+          <span className="audit-folio-pill" title={r.id}>
+            {r.id}
+          </span>
+          {r.device && <small className="audit-device-subtext">{r.device}</small>}
+        </div>
+      ),
+    },
+    {
+      key: 'title',
+      label: 'Actividad e incidencia',
+      value: r => `${r.title || ''} ${r.description || ''}`,
+      render: r => (
+        <div className="audit-activity-content">
+          <strong>{r.title || 'Inspección técnica'}</strong>
+          <p className="audit-desc-text" title={r.description}>
+            {r.description || 'Sin notas adicionales.'}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: 'actor',
+      label: 'Responsable y fecha',
+      value: r => `${r.actor} ${r.date}`,
+      render: r => (
+        <div className="audit-actor-group">
+          <div className="audit-actor-line">
+            <span className="audit-actor-avatar" aria-hidden="true">
+              {(r.actor || 'T').charAt(0).toUpperCase()}
+            </span>
+            <span className="audit-actor-name">{r.actor || 'Sin responsable'}</span>
+          </div>
+          <span className="audit-date-subtext">{dateTime(r.date)}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'temp',
+      label: 'Temperatura / Foto',
+      value: r => (r.temp != null ? Number(r.temp) : -999),
+      render: r => {
+        const isHot = r.temp != null && Number(r.temp) >= 25;
+        const hasPhoto = r.hasEvidence === 'yes';
+        return (
+          <div className="audit-conditions-group">
+            {r.temp != null ? (
+              <span className={`audit-temp-pill ${isHot ? 'is-hot' : 'is-normal'}`}>
+                <Thermometer size={12} aria-hidden="true" />
+                <b>{r.temp} °C</b>
+              </span>
+            ) : (
+              <span className="text-muted text-xs">—</span>
+            )}
+            {hasPhoto && (
+              <button
+                type="button"
+                className="audit-photo-badge"
+                onClick={e => {
+                  e.stopPropagation();
+                  openEditor('report-detail', r);
+                }}
+                title="Ver fotografía adjunta"
+              >
+                <Camera size={12} aria-hidden="true" />
+                <span>Foto</span>
+              </button>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'status',
+      label: 'Estado',
+      value: r => r.status,
+      render: r => (
+        <div className="audit-status-cell">
+          <Badge status={r.status}>
+            {r.status === 'resolved' ? 'Resuelto' : 'Abierto'}
+          </Badge>
+          {r.severity && r.status !== 'resolved' && (
+            <span className={`severity-tag severity-${r.severity}`}>
+              {r.severity === 'high' ? 'Alta' : r.severity === 'medium' ? 'Media' : 'Baja'}
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'actions',
+      label: 'Acciones',
+      sortable: false,
+      render: r => (
+        <div className="audit-actions-group" onClick={e => e.stopPropagation()}>
+          <Button
+            icon={Eye}
+            onClick={() => openEditor('report-detail', r)}
+            title="Ver detalle completo"
+          >
+            Ver
+          </Button>
+          {r.status !== 'resolved' && (canResolve || canWrite) && onResolve && (
+            <Button
+              variant="primary"
+              icon={Check}
+              busy={resolvingId === (r.id || r.key)}
+              onClick={() => handleResolve(r)}
+              title="Resolver incidencia"
+            >
+              Resolver
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+  const exportColumns = [
+    { key: 'id', label: 'Folio' },
+    { key: 'idf', label: 'IDF' },
+    { key: 'device', label: 'Equipo / Componente' },
+    { key: 'title', label: 'Actividad' },
+    { key: 'description', label: 'Descripción' },
+    { key: 'actor', label: 'Responsable' },
+    { key: 'temperatureValue', label: 'Temperatura' },
+    { key: 'evidenceLabel', label: 'Evidencia fotográfica' },
+    { key: 'statusLabel', label: 'Estado' },
+    { key: 'severity', label: 'Severidad' },
+    { key: 'formattedDate', label: 'Fecha de inspección' },
+  ];
+
+  const hasActiveFilters = Boolean(
+    state.query ||
+    state.filters.idf ||
+    state.filters.status ||
+    state.filters.hasEvidence ||
+    state.filters.tempAlert
+  );
+
+  return (
+    <>
+      {!idfView && (
+        <PageHeading
+          eyebrow="Trazabilidad operativa · Cuartos de telecomunicaciones"
+          title="Bitácora de Visitas e Incidencias en IDF"
+          description="Historial de inspecciones, bitácora de visitas técnicas, telemetría y resolución de incidencias en IDFs"
+          updatedAt={data.updatedAt}
+        />
+      )}
+
+
+
+      {!idfView && (
+        <section className="audit-kpi-grid" aria-label="Resumen de la bitácora IDF">
+          {auditKpis.map(({ id, label, value, caption, icon: Icon, tone, pct, isActive, onClick }) => (
+            <button
+              key={id}
+              type="button"
+              className={`audit-kpi audit-kpi-${tone} ${isActive ? 'is-active' : ''}`}
+              onClick={onClick}
+            >
+              <span className="audit-kpi-heading">
+                <i><Icon size={19} /></i>
+                {label}
+              </span>
+              <strong>{number(value)}</strong>
+              <div className="audit-kpi-meter"><i style={{ width: `${pct}%` }} /></div>
+              <small>{caption}<b>{pct}%</b></small>
+            </button>
+          ))}
+        </section>
+      )}
+
+      <DataTable
+        title={idfView ? 'Reportes enviados desde móvil' : 'Bitácora institucional de visitas a IDFs'}
+        className="audit-table"
+        rows={enrichedRecords}
+        rowKey="key"
+        columns={columns}
+        state={state}
+        noun="registros"
+        exportable={false}
+        loading={loading}
+        error={errors.reports || errors.idfs}
+        onRetry={refresh}
+        onRowClick={row => openEditor('report-detail', row)}
+        toolbar={
+          <div className="audit-toolbar">
+            <SearchField
+              value={state.query}
+              onChange={state.setQuery}
+              placeholder="Buscar folio, responsable, IDF, equipo o nota…"
+            />
+            <Select
+              label="IDF / Cuarto"
+              value={state.filters.idf || ''}
+              onChange={e => state.setFilter('idf', e.target.value)}
+            >
+              <option value="">Todos los IDFs</option>
+              {options(records.map(r => r.idf))}
+            </Select>
+            <Select
+              label="Estado"
+              value={state.filters.status || ''}
+              onChange={e => state.setFilter('status', e.target.value)}
+            >
+              <option value="">Todos los estados</option>
+              <option value="open">Con incidencias abiertas</option>
+              <option value="resolved">Sin pendientes / Resueltos</option>
+            </Select>
+            <Select
+              label="Evidencia fotográfica"
+              value={state.filters.hasEvidence || ''}
+              onChange={e => state.setFilter('hasEvidence', e.target.value)}
+            >
+              <option value="">Toda la bitácora</option>
+              <option value="yes">Con foto adjunta</option>
+              <option value="no">Sin fotografía</option>
+            </Select>
+            <Select
+              label="Temperatura"
+              value={state.filters.tempAlert || ''}
+              onChange={e => state.setFilter('tempAlert', e.target.value)}
+            >
+              <option value="">Cualquier temperatura</option>
+              <option value="alert">Alerta térmica (≥ 25 °C)</option>
+              <option value="normal">Normal (&lt; 25 °C)</option>
+            </Select>
+            {hasActiveFilters && (
+              <Button onClick={state.reset} variant="secondary">
+                Limpiar filtros
+              </Button>
+            )}
+          </div>
+        }
+      />
+
+
+      <Note title="Trazabilidad y normativa técnica">
+        Horarios referenciados a la Ciudad de México. Las visitas y reportes nuevos incorporan sello temporal e identidad validados por el servidor. Las entradas registradas son inmutables para garantizar auditoría institucional y cumplimiento técnico.
+      </Note>
+    </>
+  );
+}
 
 export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, openEditor }) {
   const [query, setQuery] = useState('');
@@ -1273,6 +1659,409 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
           </div>
         </div>
       </Dialog>
+    </>
+  );
+}
+
+
+export function resolveActionMetadata(action = '') {
+  if (action === 'session.login') {
+    return {
+      category: 'session',
+      categoryLabel: 'Sesión',
+      categoryTone: 'info',
+      title: 'Inicio de sesión',
+      icon: LogIn,
+      description: 'Acceso autenticado al centro operativo S.G.R.S.',
+    };
+  }
+  if (action === 'session.logout') {
+    return {
+      category: 'session',
+      categoryLabel: 'Sesión',
+      categoryTone: 'secondary',
+      title: 'Cierre de sesión',
+      icon: LogOut,
+      description: 'Finalización de sesión de usuario.',
+    };
+  }
+  if (action === 'user.created') {
+    return {
+      category: 'users',
+      categoryLabel: 'Usuarios',
+      categoryTone: 'brand',
+      title: 'Alta de usuario',
+      icon: UserPlus,
+      description: 'Registro de nueva cuenta de usuario institucional.',
+    };
+  }
+  if (action === 'user.updated') {
+    return {
+      category: 'users',
+      categoryLabel: 'Usuarios',
+      categoryTone: 'brand',
+      title: 'Modificación de usuario',
+      icon: Users,
+      description: 'Actualización de datos, rol o permisos de usuario.',
+    };
+  }
+  if (action === 'user.password.reset') {
+    return {
+      category: 'users',
+      categoryLabel: 'Usuarios',
+      categoryTone: 'warning',
+      title: 'Restablecimiento de clave',
+      icon: KeyRound,
+      description: 'Reinicio de contraseña para acceso al sistema.',
+    };
+  }
+  if (action === 'inventory.physical.update') {
+    return {
+      category: 'inventory',
+      categoryLabel: 'Inventario',
+      categoryTone: 'success',
+      title: 'Cambio en inventario físico',
+      icon: Server,
+      description: 'Modificación física o documental de equipo / rack.',
+    };
+  }
+  if (action === 'ap.map.position.saved') {
+    return {
+      category: 'maps',
+      categoryLabel: 'Plano y APs',
+      categoryTone: 'info',
+      title: 'AP posicionado en plano',
+      icon: MapPin,
+      description: 'Punto de acceso ubicado en el mapa arquitectónico.',
+    };
+  }
+  if (action === 'ap.map.position.removed') {
+    return {
+      category: 'maps',
+      categoryLabel: 'Plano y APs',
+      categoryTone: 'secondary',
+      title: 'AP retirado de plano',
+      icon: MapPinOff,
+      description: 'Ubicación del punto de acceso retirada del plano.',
+    };
+  }
+  if (action === 'connection.test') {
+    return {
+      category: 'connections',
+      categoryLabel: 'Conexiones API',
+      categoryTone: 'info',
+      title: 'Prueba de enlace API',
+      icon: Activity,
+      description: 'Verificación de conectividad e integración con servicio externo.',
+    };
+  }
+  if (action === 'connection.updated') {
+    return {
+      category: 'connections',
+      categoryLabel: 'Conexiones API',
+      categoryTone: 'warning',
+      title: 'Actualización de API',
+      icon: PlugZap,
+      description: 'Actualización de configuración o credenciales de API.',
+    };
+  }
+  if (action === 'idf.report.created') {
+    return {
+      category: 'idf',
+      categoryLabel: 'Registro IDF',
+      categoryTone: 'warning',
+      title: 'Visita / Incidencia en IDF',
+      icon: Building2,
+      description: 'Inspección técnica o alerta reportada en cuarto IDF.',
+    };
+  }
+  if (action === 'idf.report.resolved') {
+    return {
+      category: 'idf',
+      categoryLabel: 'Registro IDF',
+      categoryTone: 'success',
+      title: 'Incidencia resuelta en IDF',
+      icon: CheckCircle2,
+      description: 'Atención y resolución técnica de inconveniente en cuarto IDF.',
+    };
+  }
+  return {
+    category: 'general',
+    categoryLabel: 'Sistema',
+    categoryTone: 'secondary',
+    title: action.replace(/\./g, ' '),
+    icon: Activity,
+    description: 'Movimiento registrado en la base de datos del sistema.',
+  };
+}
+
+export function ProjectAuditLog({
+  data,
+  navigate,
+  openEditor,
+  loading,
+  errors,
+  refresh,
+  canExport,
+}) {
+  const state = useListState('bitacora-general');
+  const rawAudit = data.audit || [];
+
+  const enrichedEvents = useMemo(() => {
+    return rawAudit.map((e, idx) => {
+      const meta = resolveActionMetadata(e.action);
+      const ts = typeof e.created_at === 'number' && e.created_at < 1e12
+        ? e.created_at * 1000
+        : Number(e.created_at) || Date.now();
+      return {
+        ...e,
+        key: `audit-${e.id || idx}`,
+        meta,
+        formattedDate: dateTime(ts),
+        category: meta.category,
+        categoryLabel: meta.categoryLabel,
+        categoryTone: meta.categoryTone,
+        title: meta.title,
+        description: meta.description,
+        targetDisplay: e.target_label || e.target || '—',
+        actorDisplay: e.actor_name || e.actor || 'Sistema',
+      };
+    });
+  }, [rawAudit]);
+
+  const counts = useMemo(() => {
+    const total = enrichedEvents.length;
+    const session = enrichedEvents.filter(e => e.category === 'session').length;
+    const users = enrichedEvents.filter(e => e.category === 'users').length;
+    const inventory = enrichedEvents.filter(e => e.category === 'inventory' || e.category === 'maps').length;
+    const connections = enrichedEvents.filter(e => e.category === 'connections').length;
+    const idf = enrichedEvents.filter(e => e.category === 'idf').length;
+    return { total, session, users, inventory, connections, idf };
+  }, [enrichedEvents]);
+
+  const auditKpis = [
+    {
+      id: 'all',
+      label: 'Total movimientos',
+      value: counts.total,
+      caption: 'Histórico registrado',
+      pct: 100,
+      icon: Activity,
+      tone: 'brand',
+      isActive: !state.filters.category,
+      onClick: () => state.setFilter('category', ''),
+    },
+    {
+      id: 'session',
+      label: 'Sesiones y accesos',
+      value: counts.session,
+      caption: 'Inicios de sesión',
+      pct: counts.total ? Math.round((counts.session / counts.total) * 100) : 0,
+      icon: LogIn,
+      tone: 'info',
+      isActive: state.filters.category === 'session',
+      onClick: () => state.setFilter('category', state.filters.category === 'session' ? '' : 'session'),
+    },
+    {
+      id: 'users',
+      label: 'Gestión de usuarios',
+      value: counts.users,
+      caption: 'Cuentas y privilegios',
+      pct: counts.total ? Math.round((counts.users / counts.total) * 100) : 0,
+      icon: Users,
+      tone: 'purple',
+      isActive: state.filters.category === 'users',
+      onClick: () => state.setFilter('category', state.filters.category === 'users' ? '' : 'users'),
+    },
+    {
+      id: 'inventory',
+      label: 'Inventario y mapas',
+      value: counts.inventory,
+      caption: 'Cambios físicos y APs',
+      pct: counts.total ? Math.round((counts.inventory / counts.total) * 100) : 0,
+      icon: Server,
+      tone: 'success',
+      isActive: state.filters.category === 'inventory',
+      onClick: () => state.setFilter('category', state.filters.category === 'inventory' ? '' : 'inventory'),
+    },
+    {
+      id: 'idf',
+      label: 'Registros IDF',
+      value: counts.idf,
+      caption: 'Visitas e incidencias',
+      pct: counts.total ? Math.round((counts.idf / counts.total) * 100) : 0,
+      icon: Building2,
+      tone: 'warning',
+      isActive: state.filters.category === 'idf',
+      onClick: () => state.setFilter('category', state.filters.category === 'idf' ? '' : 'idf'),
+    },
+  ];
+
+  const columns = [
+    {
+      key: 'created_at',
+      label: 'Fecha y hora',
+      width: '18%',
+      value: r => r.created_at,
+      render: r => (
+        <div className="audit-actor-line" title={`Timestamp unix: ${r.created_at}`}>
+          <Clock size={13} className="text-muted" aria-hidden="true" />
+          <span className="font-mono text-xs">{r.formattedDate}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'category',
+      label: 'Categoría',
+      width: '13%',
+      value: r => r.categoryLabel,
+      render: r => (
+        <Badge tone={r.categoryTone}>
+          {r.categoryLabel}
+        </Badge>
+      ),
+    },
+    {
+      key: 'action',
+      label: 'Movimiento / Acción',
+      width: '29%',
+      value: r => `${r.title} ${r.description} ${r.action}`,
+      render: r => {
+        const Icon = r.meta.icon || Activity;
+        return (
+          <div className="project-audit-action-cell">
+            <span className="project-audit-icon-wrap" aria-hidden="true">
+              <Icon size={14} />
+            </span>
+            <div className="project-audit-action-info">
+              <strong>{r.title}</strong>
+              <small title={r.description}>{r.details || r.description}</small>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'actor',
+      label: 'Responsable',
+      width: '20%',
+      value: r => `${r.actorDisplay} ${r.username || ''}`,
+      render: r => (
+        <div className="audit-actor-group">
+          <div className="audit-actor-line">
+            <span className="audit-actor-avatar" aria-hidden="true">
+              {(r.actorDisplay || 'S').charAt(0).toUpperCase()}
+            </span>
+            <strong className="audit-actor-name">{r.actorDisplay}</strong>
+          </div>
+          {r.user_role && <span className="audit-date-subtext">Rol: {r.user_role}</span>}
+        </div>
+      ),
+    },
+    {
+      key: 'target',
+      label: 'Recurso / Objetivo',
+      width: '20%',
+      value: r => r.targetDisplay,
+      render: r => (
+        <div className="project-audit-target-cell">
+          <span className="project-audit-target-pill" title={r.targetDisplay}>
+            {r.targetDisplay}
+          </span>
+        </div>
+      ),
+    },
+  ];
+
+  const hasActiveFilters = Boolean(state.query || state.filters.category || state.filters.actor);
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="Auditoría global · Trazabilidad del sistema"
+        title="Bitácora General de Movimientos"
+        description="Registro integral de cualquier evento o cambio en el proyecto: sesiones, usuarios, inventario, planos de red, conexiones y cuartos IDF"
+        updatedAt={data.updatedAt}
+      />
+
+      <section className="audit-kpi-grid" aria-label="Indicadores globales de la bitácora">
+        {auditKpis.map(({ id, label, value, caption, icon: Icon, tone, pct, isActive, onClick }) => (
+          <button
+            key={id}
+            type="button"
+            className={`audit-kpi audit-kpi-${tone} ${isActive ? 'is-active' : ''}`}
+            onClick={onClick}
+          >
+            <span className="audit-kpi-heading">
+              <i>
+                <Icon size={18} />
+              </i>
+              {label}
+            </span>
+            <strong>{number(value)}</strong>
+            <div className="audit-kpi-meter">
+              <i style={{ width: `${pct}%` }} />
+            </div>
+            <small>
+              {caption}
+              <b>{pct}%</b>
+            </small>
+          </button>
+        ))}
+      </section>
+
+      <DataTable
+        title="Historial de movimientos y eventos registrados"
+        className="project-audit-table"
+        rows={enrichedEvents}
+        rowKey="key"
+        columns={columns}
+        state={state}
+        noun="movimientos"
+        exportable={false}
+        loading={loading}
+        error={errors.audit}
+        onRetry={refresh}
+        toolbar={
+          <div className="audit-toolbar">
+            <SearchField
+              value={state.query}
+              onChange={state.setQuery}
+              placeholder="Buscar responsable, acción, objetivo o detalle…"
+            />
+            <Select
+              label="Categoría"
+              value={state.filters.category || ''}
+              onChange={e => state.setFilter('category', e.target.value)}
+            >
+              <option value="">Todas las categorías</option>
+              <option value="session">Sesiones y accesos</option>
+              <option value="users">Gestión de usuarios</option>
+              <option value="inventory">Inventario físico</option>
+              <option value="maps">Plano y APs</option>
+              <option value="connections">Conexiones API</option>
+              <option value="idf">Registros IDF</option>
+            </Select>
+            <Select
+              label="Responsable"
+              value={state.filters.actor || ''}
+              onChange={e => state.setFilter('actor', e.target.value)}
+            >
+              <option value="">Todos los responsables</option>
+              {options(enrichedEvents.map(e => e.actorDisplay))}
+            </Select>
+            {hasActiveFilters && (
+              <Button onClick={state.reset} variant="secondary">
+                Limpiar filtros
+              </Button>
+            )}
+          </div>
+        }
+      />
+
+      <Note title="Inmutabilidad y seguridad de auditoría">
+        Todos los movimientos registrados en la bitácora son firmados por el servidor y almacenados en SQLite institucional con sellos de tiempo unix inmutables.
+      </Note>
     </>
   );
 }
