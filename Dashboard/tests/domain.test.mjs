@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { csvCell, makeCsv, paginate, selectRows, inventoryFromIdfs, reportsFromData, roleLabel, AVAILABLE_PAGES, ROLE_PAGE_DEFAULTS, formatDeviceType, BASE_ROLE_CATALOG, getEffectiveRoles, formatUptime, getSaturationStatus, getSaturationLabel, makeExcelWorkbook, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, escapeXml, sanitizeWorksheetName, EXCEL_MIME_TYPE, SUPPORT_ALLOWED_NETWORKS, isSupportSegment, getSupportSegments, normalizeText } from '../src/domain.mjs';
+import { csvCell, makeCsv, paginate, selectRows, inventoryFromIdfs, reportsFromData, roleLabel, AVAILABLE_PAGES, ROLE_PAGE_DEFAULTS, formatDeviceType, BASE_ROLE_CATALOG, getEffectiveRoles, formatUptime, getSaturationStatus, getSaturationLabel, makeExcelWorkbook, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, escapeXml, sanitizeWorksheetName, EXCEL_MIME_TYPE, SUPPORT_ALLOWED_NETWORKS, isSupportSegment, getSupportSegments, normalizeText, usersForDemo, projectUsersForActor, getCardRoles, getUserFilterRoles, countUsersForRoleCard } from '../src/domain.mjs';
 import { createDemo } from '../src/demo.mjs';
 
 test('Incidencias sin ID conservan su identidad y la resolución sustituye solo su origen', () => {
@@ -140,6 +140,108 @@ test('BASE_ROLE_CATALOG y getEffectiveRoles normalizan roles institucionales y e
   assert.equal(roleLabel(adminSelectable[0].id), 'Administrador');
   assert.ok(!adminSelectable.some(r => r.id === 'super-admin'), 'Admin no puede seleccionar super-admin');
   assert.ok(!adminSelectable.some(r => r.id === 'viewer'), 'Admin no puede seleccionar viewer');
+});
+
+test('Diferenciación de roles, tarjetas y proyección de usuarios según jerarquía del actor (admin vs super-admin)', () => {
+  const users = [
+    { id: 'u-super', username: 'root.super', name: 'Super Admin Principal', role: 'super-admin', is_hidden: false, allowed_pages: ['resumen', 'usuarios'] },
+    { id: 'u-super-hidden', username: 'root.hidden', name: 'Super Admin Oculto', role: 'super-admin', is_hidden: true, allowed_pages: ['resumen'] },
+    { id: 'u-admin-1', username: 'admin.one', name: 'Administrador Uno', role: 'admin', is_hidden: false, allowed_pages: ['resumen'] },
+    { id: 'u-admin-2', username: 'admin.two', name: 'Administrador Dos', role: 'admin', is_hidden: false, allowed_pages: ['resumen'] },
+    { id: 'u-sop-1', username: 'tech.one', name: 'Técnico Soporte', role: 'soporte', is_hidden: false, allowed_pages: ['soporte'] },
+  ];
+
+  // ==========================================
+  // 1. ACTOR: ADMIN (user?.role === 'admin')
+  // ==========================================
+  // A) Proyección de usuarios (usersForDemo y projectUsersForActor):
+  const projectedForAdmin = usersForDemo(users, 'admin');
+  assert.equal(projectedForAdmin.length, 4, 'Admin no ve cuentas con is_hidden === true');
+  assert.ok(!projectedForAdmin.some(u => u.is_hidden), 'Ningún usuario tiene is_hidden visible para admin');
+  assert.ok(!projectedForAdmin.some(u => u.role === 'super-admin'), 'Admin ve a los super-admin proyectados como admin');
+
+  // En la tabla, la columna Rol proyectada:
+  const superProjected = projectedForAdmin.find(u => u.id === 'u-super');
+  assert.equal(superProjected.role, 'admin');
+  assert.equal(roleLabel(superProjected.role), 'Administrador', 'En la tabla su columna Rol muestra Administrador, igual que admin');
+
+  // B) Tarjetas de rol (role-cards):
+  const adminCards = getCardRoles('admin');
+  assert.equal(adminCards.length, 2, 'Admin solo ve 2 tarjetas de rol');
+  assert.deepEqual(adminCards.map(c => c.id), ['soporte', 'admin']);
+  assert.deepEqual(adminCards.map(c => roleLabel(c.id)), ['Soporte', 'Administrador']);
+
+  // Conteos en tarjetas para Admin:
+  const adminSoporteCount = countUsersForRoleCard(projectedForAdmin, 'soporte', 'admin');
+  const adminAdminCount = countUsersForRoleCard(projectedForAdmin, 'admin', 'admin');
+  const adminSuperCount = countUsersForRoleCard(projectedForAdmin, 'super-admin', 'admin');
+  assert.equal(adminSoporteCount, 1, 'Tarjeta Soporte cuenta 1 técnico');
+  assert.equal(adminAdminCount, 3, 'Tarjeta Administrador contabiliza a todos los que ve como admin (2 admin + 1 super-admin proyectado)');
+  assert.equal(adminSuperCount, 0, 'No existe conteo para super-admin');
+
+  // C) Selector de filtro por Rol en la toolbar:
+  const adminFilterRoles = getUserFilterRoles('admin');
+  assert.equal(adminFilterRoles.length, 2, 'Admin solo tiene 2 opciones de rol en el filtro');
+  assert.deepEqual(adminFilterRoles.map(r => r.id), ['soporte', 'admin']);
+  assert.deepEqual(adminFilterRoles.map(r => roleLabel(r.id)), ['Soporte', 'Administrador']);
+  assert.ok(!adminFilterRoles.some(r => r.id === 'super-admin'), 'Admin nunca ve la opción de super-admin ni Admin');
+
+  // ==========================================
+  // 2. ACTOR: SUPER-ADMIN (user?.role === 'super-admin')
+  // ==========================================
+  // A) Usuarios sin proyección (sigue viendo al resto como está):
+  const projectedForSuper = usersForDemo(users, 'super-admin');
+  assert.equal(projectedForSuper.length, 5, 'Super-admin ve todas las cuentas incluyendo ocultas');
+  assert.equal(projectedForSuper.find(u => u.id === 'u-super').role, 'super-admin');
+  assert.equal(roleLabel(projectedForSuper.find(u => u.id === 'u-super').role), 'Admin', 'Super-admin ve super-admin como Admin');
+  assert.equal(roleLabel(projectedForSuper.find(u => u.id === 'u-admin-1').role), 'Administrador', 'Super-admin ve admin como Administrador');
+  assert.equal(roleLabel(projectedForSuper.find(u => u.id === 'u-sop-1').role), 'Soporte', 'Super-admin ve soporte como Soporte');
+
+  // B) Tarjetas de rol (role-cards):
+  // Ahora las tarjetas visibles son únicamente las operativas ('Soporte' y 'Administrador') para TODOS los usuarios (tanto admin como super-admin)
+  const superCards = getCardRoles('super-admin');
+  assert.equal(superCards.length, 2, 'Super-admin ahora solo ve 2 tarjetas de rol (ocultando Admin)');
+  assert.deepEqual(superCards.map(c => c.id), ['soporte', 'admin']);
+  assert.deepEqual(superCards.map(c => roleLabel(c.id)), ['Soporte', 'Administrador']);
+  assert.ok(!superCards.some(c => c.id === 'super-admin'), 'getCardRoles no incluye super-admin para super-admin');
+  assert.ok(!getCardRoles('admin').some(c => c.id === 'super-admin'), 'getCardRoles no incluye super-admin para admin');
+  assert.ok(!getCardRoles().some(c => c.id === 'super-admin'), 'getCardRoles no incluye super-admin para ningún rol');
+
+  // Conteos en tarjetas para Super-Admin:
+  const superSoporteCount = countUsersForRoleCard(projectedForSuper, 'soporte', 'super-admin');
+  const superAdminCount = countUsersForRoleCard(projectedForSuper, 'admin', 'super-admin');
+  const superSuperCount = countUsersForRoleCard(projectedForSuper, 'super-admin', 'super-admin');
+  assert.equal(superSoporteCount, 1, 'Tarjeta Soporte cuenta 1 técnico');
+  assert.equal(superAdminCount, 4, 'Tarjeta Administrador agrupa tanto administradores como super-administradores (2 admin + 2 super-admin)');
+  assert.equal(superSuperCount, 0, 'No existe conteo para super-admin');
+
+  // C) Selector de filtro por Rol en la toolbar:
+  const superFilterRoles = getUserFilterRoles('super-admin');
+  assert.equal(superFilterRoles.length, 3, 'Super-admin ve 3 roles en filtro');
+  assert.deepEqual(superFilterRoles.map(r => r.id), ['soporte', 'admin', 'super-admin']);
+  assert.deepEqual(superFilterRoles.map(r => roleLabel(r.id)), ['Soporte', 'Administrador', 'Admin']);
+
+  // ==========================================
+  // 3. VALIDACIÓN MODO REAL (consumiendo /api/admin/users)
+  // ==========================================
+  // Cuando /api/admin/users entrega datos ya proyectados por dashboard_access.py:
+  const apiUsersReturnedToAdmin = [
+    { id: 'u-super', username: 'root.super', name: 'Super Admin Principal', role: 'admin' },
+    { id: 'u-admin-1', username: 'admin.one', name: 'Administrador Uno', role: 'admin' },
+    { id: 'u-admin-2', username: 'admin.two', name: 'Administrador Dos', role: 'admin' },
+    { id: 'u-sop-1', username: 'tech.one', name: 'Técnico Soporte', role: 'soporte' },
+  ];
+  const realAdminRows = projectUsersForActor(apiUsersReturnedToAdmin, 'admin');
+  assert.equal(realAdminRows.length, 4);
+  assert.equal(countUsersForRoleCard(realAdminRows, 'admin', 'admin'), 3);
+  assert.equal(countUsersForRoleCard(realAdminRows, 'soporte', 'admin'), 1);
+
+  // Cuando /api/admin/users entrega datos reales a super-admin:
+  const realSuperRows = projectUsersForActor(users, 'super-admin');
+  assert.equal(realSuperRows.length, 5);
+  assert.equal(countUsersForRoleCard(realSuperRows, 'admin', 'super-admin'), 4, 'Tarjeta Administrador consolida 2 admin y 2 super-admin');
+  assert.equal(countUsersForRoleCard(realSuperRows, 'super-admin', 'super-admin'), 0);
+  assert.equal(countUsersForRoleCard(realSuperRows, 'soporte', 'super-admin'), 1);
 });
 
 test('formatUptime formatea la duración de conexión según las reglas del NOC institucional', () => {

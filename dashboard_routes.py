@@ -11,6 +11,7 @@ from integration_health import upstream_healthy
 from dashboard_catalog import CATALOG
 from dashboard_history import history
 import dashboard_inventory as inventory
+import dashboard_inventarios as inventories_api
 from dashboard_device_history import get_longest_connected_devices
 
 from dashboard_access import (AccessError, SESSION_SECONDS, database, session, login,
@@ -191,6 +192,17 @@ class AccessRoutes:
                 self.mobile_report_context(self.path)
                 return True
             self._authorize()
+            if path.startswith('/api/inventarios/'):
+                if 'inventory.read' not in self.identity['capabilities']:
+                    raise AccessError(403, 'No tienes permiso para consultar inventarios.')
+                suffix = path[len('/api/inventarios'):]
+                if suffix == '/cctv/catalog':
+                    self._send_json(inventories_api.catalog())
+                elif re.fullmatch(r'/reconciliation/jobs/[a-f0-9-]{36}', suffix):
+                    self._send_json(inventories_api.request(suffix))
+                else:
+                    raise AccessError(404, 'Ruta de inventarios no disponible.')
+                return True
             if path == '/api/inventory/catalog':
                 result = inventory.catalog()
                 if self.identity['user']['role'] == 'viewer':
@@ -230,7 +242,7 @@ class AccessRoutes:
                 return True
             if path == "/api/admin/connections":
                 self._manage()
-                self._send_json({"connections": [connection(name, public=True) for name in ("forti", "omni")]})
+                self._send_json({"connections": [connection(name, public=True) for name in ("forti", "omni", "inventarios")]})
                 return True
             if path == "/api/support/longest-connected":
                 if self.identity["user"]["role"] not in ("soporte", "admin", "super-admin"):
@@ -292,6 +304,19 @@ class AccessRoutes:
                 return True
             self._authorize(mutation=True)
             actor = self.identity["user"]["id"]
+            if path == '/api/inventarios/reconciliation/jobs':
+                if 'inventory.read' not in self.identity['capabilities']:
+                    raise AccessError(403, 'No tienes permiso para consultar inventarios.')
+                self._body()
+                self._send_json(inventories_api.request('/reconciliation/jobs', 'POST', {}, actor), 202)
+                return True
+            if path == '/api/inventarios/cctv/asset':
+                if 'inventory.write' not in self.identity['capabilities']:
+                    raise AccessError(403, 'No tienes permiso para modificar el inventario.')
+                if not inventories_api.active():
+                    raise AccessError(409, 'Activa la migración antes de editar CCTV desde Inventarios.')
+                self._send_json(inventories_api.save(self._body(), actor))
+                return True
             if path == '/api/reports/resolve':
                 if 'idf.visits.write' not in self.identity['capabilities']:
                     raise AccessError(403, 'No tienes permiso para resolver incidencias.')
@@ -323,7 +348,7 @@ class AccessRoutes:
                     raise AccessError(403, "No tienes permiso para realizar esta operación.")
                 self._send_json({"user": save_user(self._body(), actor)})
                 return True
-            match = re.fullmatch(r"/api/admin/connections/(forti|omni)/(save|test)", path)
+            match = re.fullmatch(r"/api/admin/connections/(forti|omni|inventarios)/(save|test)", path)
             if match:
                 self._manage()
                 service, operation = match.groups()

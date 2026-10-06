@@ -17,4 +17,6 @@ def upstream_healthy(service, code, payload):
     if service == "forti":
         connection = data.get("fortigate_connection")
         return isinstance(connection, dict) and connection.get("reachable") is True
+    if service == "inventarios":
+        return data.get('storage_connected') is True
     return service == "omni" and data.get("omnivista_connected") is True

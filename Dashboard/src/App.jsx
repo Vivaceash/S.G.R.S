@@ -278,7 +278,7 @@ function DeviceDetail({ row, demo, canReadTraffic = false }) {
     </>
   );
 }
-function IdfHub({ data, records, navigate, openEditor, canWrite, canEditInventory, notify, onResolve }) {
+function IdfHub({ data, demo, records, navigate, openEditor, canWrite, canEditInventory, notify, onResolve }) {
   const [selectedId, setSelectedId] = useState('');
   const [tab, setTab] = useState('inventory');
   const [host, setHost] = useState(() => (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('sgrs_qr_host')) || location.host);
@@ -288,6 +288,7 @@ function IdfHub({ data, records, navigate, openEditor, canWrite, canEditInventor
   const unresolved = idf => records.filter(record => record.idfId === idf.id && record.status !== 'resolved').length;
   const choose = id => { setSelectedId(id); setTab('inventory'); };
   const detectHost = async () => {
+    if (demo) return;
     setDetectingHost(true);
     try {
       const response = await fetch('/api/ip', { credentials: 'same-origin' });
@@ -303,12 +304,12 @@ function IdfHub({ data, records, navigate, openEditor, canWrite, canEditInventor
     }
   };
   useEffect(() => {
-    if (!sessionStorage.getItem('sgrs_qr_host') || /^(localhost|127(?:\.\d{1,3}){3})(?::|$)/i.test(host)) {
+    if (!demo && (!sessionStorage.getItem('sgrs_qr_host') || /^(localhost|127(?:\.\d{1,3}){3})(?::|$)/i.test(host))) {
       detectHost();
     }
   }, []);
   useEffect(() => {
-    if (tab === 'qr' && /^(localhost|127(?:\.\d{1,3}){3})(?::|$)/i.test(host)) detectHost();
+    if (!demo && tab === 'qr' && /^(localhost|127(?:\.\d{1,3}){3})(?::|$)/i.test(host)) detectHost();
   }, [tab]);
   if (!selected) return <><PageHeading eyebrow="Distribución y gabinetes" title="Registro IDF" description="Consulta de inventario, incidencias y acceso móvil por código QR" updatedAt={data.updatedAt} /><Loading label="Cargando gabinetes IDF…" /></>;
   const devices = data.resources.filter(resource => resource.idfId === selected.id);
@@ -329,7 +330,7 @@ function IdfHub({ data, records, navigate, openEditor, canWrite, canEditInventor
               <label htmlFor="qr-host">Dirección del servidor</label>
               <div className="qr-host-controls">
                 <input id="qr-host" value={host} onChange={e => { setHost(e.target.value); try { sessionStorage.setItem('sgrs_qr_host', e.target.value); } catch {} }} placeholder="192.168.1.25:3001" />
-                <Button onClick={detectHost} busy={detectingHost}>Detectar IP</Button>
+                <Button onClick={detectHost} busy={detectingHost} disabled={demo}>Detectar IP</Button>
               </div>
               <small>Asegúrate de que el teléfono esté conectado a la misma red Wi‑Fi institucional.</small>
             </div>
@@ -577,7 +578,7 @@ export default function App() {
   } else if (route.path === 'altas') {
     page = <Requests {...shared} />;
   } else if (route.path === 'inventario') {
-    page = <IdfHub data={data} records={records} navigate={navigate} openEditor={openEditor} canWrite={can('idf.visits.write')} canEditInventory={can('inventory.write')} notify={notify} onResolve={resolveDirect} />;
+    page = <IdfHub data={data} demo={demo} records={records} navigate={navigate} openEditor={openEditor} canWrite={can('idf.visits.write')} canEditInventory={can('inventory.write')} notify={notify} onResolve={resolveDirect} />;
   } else if (['catalogo', 'aps', 'cctv'].includes(route.path)) {
     page = <DocumentaryInventory key={`${route.path}-${demo}`} {...shared} route={route.path} mutate={mutate} notify={notify} onDirty={setDirty} />;
   } else if (route.path === 'disponibilidad') {
@@ -585,7 +586,7 @@ export default function App() {
   } else if (route.path === 'dispositivos') {
     page = <Devices {...shared} selectedSegment={route.params.get('segmento')} />;
   } else if (route.path === 'idf') {
-    page = <IdfHub data={data} records={records} navigate={navigate} openEditor={openEditor} canWrite={can('idf.visits.write')} canEditInventory={can('inventory.write')} notify={notify} onResolve={resolveDirect} />;
+    page = <IdfHub data={data} demo={demo} records={records} navigate={navigate} openEditor={openEditor} canWrite={can('idf.visits.write')} canEditInventory={can('inventory.write')} notify={notify} onResolve={resolveDirect} />;
   } else if (route.path === 'entrada') {
     page = <EntryForm key={route.raw} {...shared} user={user} canRegister={can('idf.visits.write')} idfId={route.params.get('idf')} save={saveEntry} onDirty={setDirty} />;
   } else if (route.path === 'bitacora') {

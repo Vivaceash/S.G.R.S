@@ -22,19 +22,52 @@ export const BASE_ROLE_CATALOG = [
   { id: 'super-admin', title: 'Admin', description: 'Gestiona cuentas, privilegios modulares, conexiones y consultas técnicas.' },
 ];
 
-export function getEffectiveRoles(roleInfo) {
+export function getEffectiveRoles(roleInfo, actorRole) {
   if (!Array.isArray(roleInfo)) return [];
-  return BASE_ROLE_CATALOG.flatMap(base => {
+  const roles = BASE_ROLE_CATALOG.flatMap(base => {
     const existing = roleInfo.find(r => r?.id === base.id);
     return existing ? [{ ...base, ...existing, title: base.title }] : [];
   });
+  if (actorRole === 'admin') {
+    return roles.filter(r => r.id !== 'super-admin');
+  }
+  return roles;
+}
+
+export function projectUsersForActor(users, actorRole) {
+  if (!Array.isArray(users)) return [];
+  if (actorRole === 'super-admin') return users;
+  return users.filter(user => !user.is_hidden).map(({ is_hidden, allowed_pages, ...user }) => ({
+    ...user,
+    role: user.role === 'super-admin' ? 'admin' : user.role,
+  }));
 }
 
 export function usersForDemo(users, actorRole) {
-  if (actorRole === 'super-admin') return users;
-  return users.filter(user => !user.is_hidden).map(({ is_hidden, allowed_pages, ...user }) => ({
-    ...user, role: user.role === 'super-admin' ? 'admin' : user.role,
-  }));
+  return projectUsersForActor(users, actorRole);
+}
+
+export function getCardRoles(actorRole, roleInfo) {
+  const catalog = Array.isArray(roleInfo) && roleInfo.length > 0 ? roleInfo : BASE_ROLE_CATALOG;
+  const roles = getEffectiveRoles(catalog, actorRole);
+  return roles.filter(r => r.id !== 'super-admin');
+}
+
+export function getUserFilterRoles(actorRole, roleInfo) {
+  const catalog = Array.isArray(roleInfo) && roleInfo.length > 0 ? roleInfo : BASE_ROLE_CATALOG;
+  const roles = getEffectiveRoles(catalog, actorRole);
+  if (actorRole === 'super-admin') {
+    return roles;
+  }
+  return roles.filter(r => r.id !== 'super-admin');
+}
+
+export function countUsersForRoleCard(users, roleId, actorRole) {
+  if (!Array.isArray(users)) return 0;
+  return users.filter(u => {
+    const effectiveRole = u.role === 'super-admin' ? 'admin' : u.role;
+    return effectiveRole === roleId;
+  }).length;
 }
 
 export const ROLE_PAGE_DEFAULTS = {
