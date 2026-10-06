@@ -1,4 +1,5 @@
 import ipaddress
+from app.core.config import settings
 from app.services.matching import mac, network_records, reconcile
 
 
@@ -6,6 +7,36 @@ def collection(response):
     payload = response.get('payload', {})
     data = payload.get('data')
     return data if response['http'] == 200 and payload.get('success') is True and isinstance(data, list) and all(isinstance(r, dict) for r in data) else None
+
+
+def normalized_interfaces(rows):
+    if rows is None:
+        return None
+    result = []
+    for row in rows:
+        name, vdom = row.get('name'), row.get('vdom')
+        vlan = row.get('vlan_id')
+        if (not isinstance(name, str) or len(name) > 128 or not isinstance(vdom, str)
+                or vdom != settings.FORTI_VDOM
+                or (vlan is not None and (not isinstance(vlan, int) or isinstance(vlan, bool) or not 1 <= vlan <= 4094))):
+            return None
+        addresses = row.get('addresses', [])
+        subnets = row.get('subnets', [])
+        if not isinstance(addresses, list) or not isinstance(subnets, list):
+            return None
+        try:
+            normalized_addresses = [str(ipaddress.ip_interface(value)) for value in addresses]
+            normalized_subnets = {str(ipaddress.ip_network(value, strict=False)) for value in subnets}
+        except (ValueError, TypeError):
+            return None
+        allowed = {'name': name, 'alias': row.get('alias') if isinstance(row.get('alias'), str) else None,
+                   'vlan_id': vlan, 'parent': row.get('parent') if isinstance(row.get('parent'), str) else None,
+                   'vdom': vdom, 'addresses': normalized_addresses,
+                   'subnets': sorted(normalized_subnets)}
+        if any(len(value or '') > 128 for key, value in allowed.items() if key in ('alias', 'parent')):
+            return None
+        result.append(allowed)
+    return result
 
 
 def associate_network(ip, interface, configs):
@@ -34,7 +65,7 @@ def enrich(assets, responses):
     arp_response = by_path['/network/arp-table']
     arp = collection(arp_response)
     leases = collection(by_path['/network/dhcp-leases'])
-    configs = collection(by_path['/network/interface-config'])
+    configs = normalized_interfaces(collection(by_path['/network/interface-config']))
     supplemental = []
     for label, rows in (('arp', arp), ('dhcp', leases)):
         if rows is not None:
@@ -54,7 +85,7 @@ def enrich(assets, responses):
             available = collection(response) is not None
         sources.append({k: response[k] for k in ('provider', 'endpoint', 'http', 'observed_at')} | {'available': available})
     result['sources'] = sources
-    result['partial'] = not all(s['available'] for s in sources)
+    result['partial'] = bool(result.get('partial')) or not all(s['available'] for s in sources)
     result['networks'] = configs or []
     forti_payload = by_path['/devices?view=operational']['payload']
     raw_devices = forti_payload.get('data', {}).get('devices', []) if isinstance(forti_payload.get('data'), dict) else []

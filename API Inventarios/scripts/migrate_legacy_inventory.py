@@ -36,6 +36,9 @@ def main():
             legacy.backup(dest)
         os.chmod(backup, 0o600)
     try:
+        # Refuse a second writer transition; repeat imports stay safe/idempotent.
+        if args.activate and marker.exists():
+            parser.error('Inventarios ya está activo; la reactivación requiere rollback primero.')
         legacy.execute('BEGIN IMMEDIATE')
         if args.rollback:
             from app.services.import_service import load_catalog

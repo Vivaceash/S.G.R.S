@@ -522,11 +522,30 @@ export class ApiError extends Error {
     this.status = status;
   }
 }
+export function isLocalOrPrivateHost(hostname) {
+  if (!hostname) return false;
+  const host = String(hostname).trim().toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0') return true;
+  if (host.endsWith('.local') || host.endsWith('.lan')) return true;
+  const parts = host.split('.');
+  if (parts.length === 4 && parts.every(p => /^\d{1,3}$/.test(p) && Number(p) >= 0 && Number(p) <= 255)) {
+    const [a, b] = parts.map(Number);
+    if (a === 127) return true;
+    if (a === 10) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;
+    return false;
+  }
+  if (/^(fc|fd|fe[89ab])/i.test(host)) return true;
+  return false;
+}
+
 let csrfToken = '';
 export function setCsrfToken(value) { csrfToken = value || ''; }
 export async function request(path, { signal, body } = {}) {
   if (!path.startsWith('/api/') || new URL(path, location.origin).origin !== location.origin) throw new Error('Destino de solicitud no permitido.');
-  if (location.protocol !== 'https:' && !(location.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname))) throw new ApiError(403, 'Abre el dashboard mediante HTTPS para proteger las credenciales y la sesión.');
+  if (location.protocol !== 'https:' && !(location.protocol === 'http:' && isLocalOrPrivateHost(location.hostname))) throw new ApiError(403, 'Abre el dashboard mediante HTTPS para proteger las credenciales y la sesión.');
   const response = await fetch(path, {
     signal: signal || AbortSignal.timeout(15000), credentials: 'same-origin', cache: 'no-store', redirect: 'error', headers: body ? { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken } : { Accept: 'application/json' },
     method: body ? 'POST' : 'GET', ...(body ? { body: JSON.stringify(body) } : {}),

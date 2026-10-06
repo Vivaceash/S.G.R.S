@@ -27,10 +27,14 @@ def snapshot():
     with database() as db:
         data, revision = source(db)
         edits = {r['asset_id']: dict(r) for r in db.execute('SELECT * FROM edits')}
-        latest = db.execute("SELECT result FROM jobs WHERE result IS NOT NULL ORDER BY rowid DESC LIMIT 1").fetchone()
+        latest = db.execute("SELECT result,status FROM jobs WHERE result IS NOT NULL ORDER BY rowid DESC LIMIT 1").fetchone()
+        last_valid = db.execute("SELECT result FROM jobs WHERE status='completed' AND result IS NOT NULL ORDER BY rowid DESC LIMIT 1").fetchone()
     network = json.loads(latest['result']) if latest else {}
-    # A result from an older documentary revision cannot authorize current identity.
-    observations = network.get('assets', {}) if network.get('revision') == revision else {}
+    # Keep the last fully confirmed observation visible when a later cycle is
+    # partial; attach current source health and mark that observation stale.
+    fallback = json.loads(last_valid['result']) if last_valid and latest and latest['status'] == 'partial' else {}
+    active = fallback or network
+    observations = active.get('assets', {}) if active.get('revision') == revision else {}
     assets = []
     for original in data['assets']:
         edit = edits.get(original['id'])
@@ -38,9 +42,10 @@ def snapshot():
         net = observations.get(original['id'])
         if net:
             net = {**net, 'sources': network.get('sources', [])}
-            age = (datetime.now(timezone.utc) - datetime.fromisoformat(network['observed_at'])).total_seconds()
-            net['stale'] = age > settings.STALE_SECONDS
-            net['observed_at'] = network['observed_at']
+            stamp = active.get('observed_at')
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(stamp)).total_seconds() if stamp else float('inf')
+            net['stale'] = bool(fallback) or age > settings.STALE_SECONDS
+            net['observed_at'] = stamp
         assets.append({**original, **fields, 'documented': original,
                        'version': f'{revision}:{edit["version"] if edit else 0}',
                        'corrected_at': edit['updated_at'] if edit else None, 'network': net})
