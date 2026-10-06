@@ -18,16 +18,72 @@ if hasattr(sys.stderr, "reconfigure"):
 
 ROOT_DIR = Path(__file__).resolve().parent
 
+def load_env_fallback(env_path: Path) -> None:
+    """Carga variables desde un archivo .env si python-dotenv no está instalado."""
+    if not env_path.is_file():
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("export "):
+                    line = line[7:].strip()
+                if "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                key = key.strip()
+                val = val.strip()
+                if len(val) >= 2 and ((val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'"))):
+                    val = val[1:-1]
+                if key and key not in os.environ:
+                    os.environ[key] = val
+    except Exception:
+        pass
+
+
 # Carga segura de variables de entorno desde el archivo .env raíz
 try:
     from dotenv import load_dotenv
     load_dotenv(ROOT_DIR / ".env")
 except ImportError:
-    pass
+    load_env_fallback(ROOT_DIR / ".env")
 
 PID_FILE = ROOT_DIR / ".sgrs_pids.json"
 LOG_DIR = ROOT_DIR / "logs"
 MAIN_LOG = LOG_DIR / "sgrs.log"
+
+
+def is_pid_alive(pid: int) -> bool:
+    """Verifica si un proceso sigue realmente en ejecución."""
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if handle:
+                exit_code = ctypes.c_ulong()
+                ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code))
+                ctypes.windll.kernel32.CloseHandle(handle)
+                return exit_code.value == 259
+            return False
+        except Exception:
+            try:
+                res = subprocess.run(["tasklist", "/FI", f"PID eq {pid}"], capture_output=True, text=True)
+                return str(pid) in res.stdout
+            except Exception:
+                return False
+    else:
+        try:
+            os.kill(pid, 0)
+            return True
+        except PermissionError:
+            return True
+        except (ProcessLookupError, OSError):
+            return False
 
 
 def is_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
@@ -72,29 +128,40 @@ def free_port(port: int):
 
 def get_dashboard_port() -> int:
     """Retorna el puerto del Dashboard (3000 o 3001 si 3000 está ocupado por un servicio del sistema)."""
-    env_port = os.environ.get("DASHBOARD_PORT") or os.environ.get("PORT")
-    if env_port and env_port.isdigit():
-        return int(env_port)
     pids = load_pids()
-    # Persistir el puerto evita que un dashboard ya escuchando en 3000 sea
-    # interpretado como una colisión y se reporte erróneamente como 3001.
+    dash_pid = pids.get("dashboard")
     registered_port = pids.get("dashboard_port")
-    if pids.get("dashboard") and isinstance(registered_port, int) and registered_port > 0:
-        return registered_port
-    # Compatibilidad con registros generados antes de dashboard_port.
-    if pids.get("dashboard"):
+
+    # Si hay un dashboard registrado y su proceso sigue realmente vivo, reutilizar ese puerto
+    if isinstance(dash_pid, int) and is_pid_alive(dash_pid):
+        if isinstance(registered_port, int) and registered_port > 0:
+            return registered_port
+        # Compatibilidad con registros generados antes de dashboard_port
         if is_port_in_use(3000):
             return 3000
         if is_port_in_use(3001):
             return 3001
-    # Probar si el puerto 3000 está disponible para bind
-    s = socket.socket()
-    try:
-        s.bind(("0.0.0.0", 3000))
-        s.close()
-        return 3000
-    except Exception:
-        return 3001
+
+    # Si no está vivo o no hay registro previo, evalúa el puerto preferido configurado (DASHBOARD_PORT o 3000)
+    env_port = os.environ.get("DASHBOARD_PORT") or os.environ.get("PORT")
+    preferred_port = int(env_port) if (env_port and env_port.isdigit()) else 3000
+
+    candidate_ports = [preferred_port]
+    for alt in (3001, 3002):
+        if alt not in candidate_ports:
+            candidate_ports.append(alt)
+
+    for p in candidate_ports:
+        if is_port_in_use(p):
+            continue
+        s = socket.socket()
+        try:
+            s.bind(("0.0.0.0", p))
+            s.close()
+            return p
+        except Exception:
+            continue
+    return candidate_ports[0]
 
 
 def local_network_ip() -> str:
@@ -109,11 +176,21 @@ def local_network_ip() -> str:
 
 def dashboard_environment(env: dict, port: int) -> dict:
     """Expone el dashboard en LAN y fija el único origen de red autorizado."""
-    result = {**env, "PORT": str(port), "DASHBOARD_PORT": str(port), "DASHBOARD_HOST": env.get("DASHBOARD_HOST", "127.0.0.1")}
-    # SGRS_PUBLIC_ORIGIN se reserva para despliegues HTTPS. Este origen HTTP
-    # solo habilita el acceso desde la misma red institucional para la planilla QR.
-    if not result.get("SGRS_LAN_ORIGIN"):
-        result["SGRS_LAN_ORIGIN"] = f"http://{local_network_ip()}:{port}"
+    configured_lan = (env.get("SGRS_LAN_ORIGIN") or os.environ.get("SGRS_LAN_ORIGIN") or "").strip()
+
+    host = (env.get("DASHBOARD_HOST") or os.environ.get("DASHBOARD_HOST") or "").strip()
+    if not host:
+        host = "0.0.0.0" if configured_lan else "127.0.0.1"
+
+    lan_origin = configured_lan if configured_lan else f"http://{local_network_ip()}:{port}"
+
+    result = {
+        **env,
+        "PORT": str(port),
+        "DASHBOARD_PORT": str(port),
+        "DASHBOARD_HOST": host,
+        "SGRS_LAN_ORIGIN": lan_origin,
+    }
     return result
 
 
