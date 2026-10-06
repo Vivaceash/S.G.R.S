@@ -192,7 +192,8 @@ def database(write=False):
 
 
 def public_user(row):
-    user = {k: row[k] for k in ("id", "username", "name", "role", "active", "version", "created_at")}
+    user = {k: row[k] for k in ("id", "username", "name", "role", "version", "created_at")}
+    user["active"] = bool(row["active"])
     raw_pages = row.get("allowed_pages") if hasattr(row, "get") else (row["allowed_pages"] if "allowed_pages" in row.keys() else None)
     user["allowed_pages"] = parse_allowed_pages(raw_pages, row["role"])
     return user
@@ -202,11 +203,12 @@ def user_for_actor(row, actor_role):
     """Directory projection only; never use this representation to authorize."""
     user = public_user(row)
     if actor_role == "super-admin":
-        user["is_hidden"] = bool(row["is_hidden"])
+        user["is_hidden"] = bool(row.get("is_hidden") if hasattr(row, "get") else (row["is_hidden"] if "is_hidden" in row.keys() else 0))
     else:
         if user["role"] == "super-admin":
             user["role"] = "admin"
         user.pop("allowed_pages", None)
+        user.pop("is_hidden", None)
     return user
 
 
@@ -316,8 +318,9 @@ def save_user(body, actor=None, bootstrap=False):
         hidden = body.get("is_hidden", False)
         if not isinstance(hidden, bool):
             raise AccessError(422, "La visibilidad debe ser un valor booleano.")
-        if not isinstance(active, bool):
+        if active not in (True, False, 1, 0):
             raise AccessError(422, "El estado debe ser activo o suspendido.")
+        active = bool(active)
         try:
             if user_id:
                 old = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
@@ -427,12 +430,20 @@ def session(cookie):
 
 
 def connection_default(service):
+    if service == 'inventarios':
+        try:
+            configured = json.loads((PRIVATE / 'inventarios-connection.json').read_text())
+        except (OSError, ValueError):
+            configured = {}
+        return {"id": service, "url": os.environ.get('INVENTARIOS_API_URL', configured.get('url', 'http://127.0.0.1:8002/api/v1')),
+                "auth_mode": 'api-key', "username": '', "secret": os.environ.get('INVENTARIOS_API_KEY', configured.get('secret', '')),
+                "version": 0, "updated_at": None}
     return {"id": service, "url": os.environ.get(f"{service.upper()}_API_URL", f"http://127.0.0.1:{8001 if service == 'forti' else 8000}/api/v1"),
             "auth_mode": "api-key", "username": "", "secret": os.environ.get(f"{service.upper()}_API_KEY", os.environ.get("APP_API_KEY", "")), "version": 0, "updated_at": None}
 
 
 def connection(service, public=False):
-    if service not in ("forti", "omni"):
+    if service not in ("forti", "omni", "inventarios"):
         raise AccessError(404, "Integración no encontrada.")
     with database() as db:
         row = db.execute("SELECT * FROM connections WHERE id=?", (service,)).fetchone()

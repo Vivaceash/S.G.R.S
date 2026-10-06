@@ -51,6 +51,12 @@ def catalog():
         rows.append({**original, **fields, 'documented': original,
                      'version': f'{revision}:{edit["version"] if edit else 0}',
                      'corrected_at': edit['updated_at'] if edit else None})
+    import dashboard_inventarios
+    if dashboard_inventarios.active():
+        remote = dashboard_inventarios.catalog()
+        if remote['revision'] != revision:
+            raise access.AccessError(409, 'Los catálogos de Inventarios y dashboard requieren sincronizar su revisión.')
+        rows = [r for r in rows if r['dataset'] not in ('cctv', 'cctv_original')] + remote['assets']
     return {**{k: v for k, v in data.items() if k != 'source_directory'}, 'assets': rows, 'revision': revision}
 
 
@@ -112,6 +118,10 @@ def save_asset(body, actor):
     if fields.get('idf_id') and fields['idf_id'] not in {r['id'] for r in data['cabinets']}:
         raise access.AccessError(422, 'Selecciona un gabinete del catálogo documental.')
     with access.database(write=True) as db:
+        # The migration holds this same lock while activating the new writer.
+        import dashboard_inventarios
+        if original['dataset'] == 'cctv' and dashboard_inventarios.active():
+            return dashboard_inventarios.save(body, actor)
         current = db.execute('SELECT * FROM inventory_edits WHERE asset_id=?', (asset_id,)).fetchone()
         version = current['version'] if current else 0
         if body.get('version') != f'{revision}:{version}':
@@ -265,6 +275,9 @@ def reconcile(assets, responses):
 
 def live_reconciliation(fetch):
     snapshot = catalog()
+    import dashboard_inventarios
+    remote = {a['id']: a['network'] for a in snapshot['assets'] if a.get('network') and a['dataset'] == 'cctv'}
+    assets = [a for a in snapshot['assets'] if a['dataset'] not in ('cctv', 'cctv_original')] if dashboard_inventarios.active() else snapshot['assets']
     def query(pair):
         provider, endpoint = pair
         try:
@@ -275,4 +288,6 @@ def live_reconciliation(fetch):
         return {'provider': provider, 'http': code, 'payload': payload, 'observed_at': datetime.now(timezone.utc).isoformat()}
     with ThreadPoolExecutor(max_workers=2) as pool:
         responses = list(pool.map(query, [('forti', '/devices?view=operational'), ('omni', '/monitoring/devices')]))
-    return {**reconcile(snapshot['assets'], responses), 'revision': snapshot['revision']}
+    result = reconcile(assets, responses)
+    result['assets'].update(remote)
+    return {**result, 'revision': snapshot['revision']}

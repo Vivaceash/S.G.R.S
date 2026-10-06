@@ -105,3 +105,10 @@ dist-ssr/
 !Dashboard/dist/**
 !requirements.txt
 
+# Configuración y respaldos de la API independiente de inventarios
+.sgrs-private/inventarios-connection.json
+.sgrs-private/inventarios-active.json
+.sgrs-private/inventarios-active.tmp
+.sgrs-private/dashboard-before-inventarios-*.sqlite3
+API Inventarios/.env
+API Inventarios/.private/

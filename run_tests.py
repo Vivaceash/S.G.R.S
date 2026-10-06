@@ -42,7 +42,8 @@ def main():
     code_forti = run_suite("API Fortinet FortiGate (Puerto 8001)", "API Forti")
     code_omni = run_suite("API Alcatel OmniVista 2500 (Puerto 8000)", "API Omni")
 
-    total_status = code_forti or code_omni
+    code_inventory = run_suite("API Inventarios (Puerto 8002)", "API Inventarios")
+    total_status = code_forti or code_omni or code_inventory
     print("#" * 60)
     if total_status == 0:
         print("[SUCCESS] RESUMEN: Todas las suites de prueba pasaron al 100%.")

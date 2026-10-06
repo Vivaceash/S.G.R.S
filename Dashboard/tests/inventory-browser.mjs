@@ -25,9 +25,11 @@ try {
     apiCalls++;
     const url = new URL(route.request().url());
     if (url.pathname === '/api/auth/session') return route.fulfill({ json: identity });
-    if (url.pathname === '/api/inventory/catalog') return route.fulfill({ status: catalogFails ? 503 : 200, json: catalogFails ? { error: 'Unavailable' } : catalog });
+    if (['/api/inventory/catalog', '/api/inventarios/cctv/catalog'].includes(url.pathname)) return route.fulfill({ status: catalogFails ? 503 : 200, json: catalogFails ? { error: 'Unavailable' } : catalog });
     if (url.pathname === '/api/inventory/reconcile') return route.fulfill({ json: { revision: 'fixture', sources: [{ provider: 'forti', available: true, count: 1, observed_at: '2026-09-17T12:00:00Z' }, { provider: 'omni', available: false, count: null, observed_at: '2026-09-17T12:00:00Z' }], assets: { 'camera-0': { comparison: 'changed', ip: '192.0.2.200', status: 'online', observations: [] } }, only_api: [], scope: 'Las ausencias no acreditan bajas.' } });
-    if (url.pathname === '/api/inventory/asset') {
+    if (url.pathname === '/api/inventarios/reconciliation/jobs') return route.fulfill({ status: 202, json: { id: '11111111-1111-1111-1111-111111111111', status: 'queued' } });
+    if (url.pathname.startsWith('/api/inventarios/reconciliation/jobs/')) return route.fulfill({ json: { status: 'partial', result: { revision: 'fixture', sources: [{ provider: 'forti', available: true, count: 1, observed_at: '2026-09-17T12:00:00Z' }, { provider: 'omni', available: false, count: null, observed_at: '2026-09-17T12:00:00Z' }], assets: { 'camera-0': { comparison: 'changed', ip: '192.0.2.200', status: 'online', observations: [] } }, only_api: [], scope: 'Las ausencias no acreditan bajas.' } } });
+    if (['/api/inventory/asset', '/api/inventarios/cctv/asset'].includes(url.pathname)) {
       posts++;
       const body = route.request().postDataJSON();
       assert.equal(route.request().headers()['x-csrf-token'], 'test-only');
@@ -67,12 +69,12 @@ try {
   await page.getByRole('button', { name: 'Limpiar búsqueda', exact: true }).click();
   await page.getByLabel('Reubicación', { exact: true }).selectOption('Reubicada');
   assert.equal(await page.locator('tbody tr').count(), 1);
-  await page.getByLabel('Fuente CCTV').selectOption('cctv_original');
+  await page.getByRole('tab', { name: /Originales/ }).click();
   await page.getByRole('cell', { name: 'Cámara original', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Ver ficha', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: 'Corregir datos físicos', exact: true }).count(), 0);
   await page.keyboard.press('Escape');
-  await page.getByLabel('Fuente CCTV').selectOption('cctv');
+  await page.getByRole('tab', { name: /Actualizadas/ }).click();
   await page.getByLabel('Reubicación', { exact: true }).selectOption('');
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile layout must not overflow');
@@ -80,8 +82,9 @@ try {
   assert.deepEqual(axe.violations.map(v => v.id), []);
   await page.screenshot({ path: `${output}/cctv-mobile.png`, fullPage: true });
   await page.getByRole('link', { name: 'Access points', exact: true }).click();
+  await page.getByRole('tab', { name: /Catálogo documental/ }).click();
   await page.getByRole('cell', { name: 'AP documental', exact: true }).waitFor();
-  await page.getByRole('link', { name: 'IDF documental', exact: true }).click();
+  await page.goto(`${base}/#catalogo`);
   await page.getByRole('cell', { name: 'Rack documental', exact: true }).waitFor();
   catalogFails = true;
   await page.getByRole('button', { name: 'Actualizar catálogo', exact: true }).click();

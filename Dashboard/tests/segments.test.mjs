@@ -25,7 +25,7 @@ test('range fallback and missing/invalid addresses never leak all devices', () =
   for (const ip of ['10.0.0.11', '10.0.0.50', '', '—', '999.0.0.5']) assert.equal(ipInSegment(ip, segment), false);
   assert.equal(ipInSegment('10.0.0.5', undefined), false);
   assert.equal(roleLabel('super-admin'), 'Admin');
-  assert.equal(roleLabel('admin'), 'admin');
+  assert.equal(roleLabel('admin'), 'Administrador');
 });
 
 test('getSegmentDevices returns only matching devices for a segment', () => {

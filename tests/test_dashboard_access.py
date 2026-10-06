@@ -245,6 +245,7 @@ def test_admin_hierarchy_permissions(local_store):
 
 
 def test_hidden_users_and_super_admin_projection(local_store):
+    import json
     admin = access.save_user({"username": "admin.hidden", "name": "Admin Operativo", "role": "admin",
                               "password": "Ejemplo-local-2026"}, local_store["id"])
     super_user = access.save_user({"username": "root.visible", "name": "Admin Interno", "role": "super-admin",
@@ -252,12 +253,69 @@ def test_hidden_users_and_super_admin_projection(local_store):
     hidden = access.save_user({"username": "cuenta.oculta", "name": "Cuenta Reservada", "role": "soporte",
                                "password": "Ejemplo-local-2026", "is_hidden": True}, local_store["id"])
 
+    # 1. Admin view: super-admin accounts are projected as 'admin', hidden accounts are omitted
     ordinary = access.list_users(admin["id"])
     projected = next(user for user in ordinary if user["id"] == super_user["id"])
     assert projected["role"] == "admin"
     assert "allowed_pages" not in projected and "is_hidden" not in projected
     assert hidden["id"] not in {user["id"] for user in ordinary}
+    # Ensure no admin view item leaks internal roles, modular pages, or hidden status
+    for u in ordinary:
+        assert u["role"] != "super-admin"
+        assert "allowed_pages" not in u
+        assert "is_hidden" not in u
+        assert "password" not in u and "password_hash" not in u
+    assert "super-admin" not in json.dumps(ordinary).lower()
 
+    # 2. Super-admin view: all accounts retain their real roles, allowed_pages, and visibility flags
+    super_view = access.list_users(local_store["id"])
+    real_super = next(u for u in super_view if u["id"] == super_user["id"])
+    assert real_super["role"] == "super-admin"
+    assert isinstance(real_super["allowed_pages"], list)
+    assert real_super["is_hidden"] is False
+    real_hidden = next(u for u in super_view if u["id"] == hidden["id"])
+    assert real_hidden["role"] == "soporte"
+    assert real_hidden["is_hidden"] is True
+
+    # 3. Admin cannot modify projected super-admin account even when sending role='admin'
+    with pytest.raises(access.AccessError) as error:
+        access.save_user({
+            "id": projected["id"],
+            "username": projected["username"],
+            "name": "Intento Modificar",
+            "role": "admin",
+            "version": projected["version"],
+            "confirmed": True,
+        }, admin["id"])
+    assert error.value.status == 403
+    assert "No tienes permiso para modificar esta cuenta" in str(error.value)
+
+    # 4. Admin cannot change password or suspend super-admin account
+    with pytest.raises(access.AccessError) as error:
+        access.save_user({
+            "id": projected["id"],
+            "username": projected["username"],
+            "name": projected["name"],
+            "role": "admin",
+            "password": "Nueva-password-2026",
+            "version": projected["version"],
+            "confirmed": True,
+        }, admin["id"])
+    assert error.value.status == 403
+
+    with pytest.raises(access.AccessError) as error:
+        access.save_user({
+            "id": projected["id"],
+            "username": projected["username"],
+            "name": projected["name"],
+            "role": "admin",
+            "active": False,
+            "version": projected["version"],
+            "confirmed": True,
+        }, admin["id"])
+    assert error.value.status == 403
+
+    # 5. Hidden account handling
     with pytest.raises(access.AccessError) as error:
         access.save_user({**{key: value for key, value in hidden.items() if key not in ("is_hidden", "active")}, "active": True}, admin["id"])
     assert error.value.status == 404
@@ -365,7 +423,47 @@ def test_routes_access_control(local_store):
     status, payload = handler.response
     assert status == 403
 
-    # 5. Soporte CANNOT access /api/admin/users
+    # 5. Super-admin accessing /api/admin/users sees real roles, allowed_pages and is_hidden
+    handler.identity = {"user": local_store, "capabilities": access.capabilities("super-admin"), "csrf": "csrf"}
+    handler.path = "/api/admin/users"
+    assert handler.access_get() is True
+    status, payload = handler.response
+    assert status == 200
+    root_row = next(row for row in payload["users"] if row["id"] == local_store["id"])
+    assert root_row["role"] == "super-admin"
+    assert "allowed_pages" in root_row and isinstance(root_row["allowed_pages"], list)
+    assert "is_hidden" in root_row and isinstance(root_row["is_hidden"], bool)
+
+    # 6. Admin CANNOT modify a super-admin via /api/admin/users/save
+    handler.identity = {"user": admin, "capabilities": access.capabilities("admin"), "csrf": "csrf"}
+    handler.path = "/api/admin/users/save"
+    handler._body = lambda: {
+        "id": local_store["id"],
+        "username": local_store["username"],
+        "name": "Intento Modificar Root",
+        "role": "admin",
+        "version": local_store["version"],
+        "confirmed": True,
+    }
+    assert handler.access_post() is True
+    status, payload = handler.response
+    assert status == 403
+    assert "No tienes permiso para modificar esta cuenta" in payload.get("error", "")
+
+    # 7. Admin CANNOT create a super-admin via /api/admin/users/save
+    handler.path = "/api/admin/users/save"
+    handler._body = lambda: {
+        "username": "hack.super",
+        "name": "Hack Super",
+        "role": "super-admin",
+        "password": "Ejemplo-local-2026",
+        "confirmed": True,
+    }
+    assert handler.access_post() is True
+    status, payload = handler.response
+    assert status == 403
+
+    # 8. Soporte CANNOT access /api/admin/users
     handler.identity = {"user": {"id": "sup-1", "role": "soporte"}, "capabilities": access.capabilities("soporte"), "csrf": "csrf"}
     handler.path = "/api/admin/users"
     assert handler.access_get() is True
@@ -415,3 +513,118 @@ def test_wildcard_origin_is_ignored(monkeypatch):
     routes.headers = {"Host": "any-host.lan", "Origin": "http://any-host.lan"}
     with pytest.raises(access.AccessError):
         routes._boundary(mutation=False)
+
+
+def test_data_contract_users_and_privileges_projection(local_store):
+    import json
+    # Seed multiple user types
+    super2 = access.save_user({"username": "super2.ops", "name": "Super Ops", "role": "super-admin",
+                               "password": "Ejemplo-local-2026", "allowed_pages": ["resumen", "conexiones"]}, local_store["id"])
+    super_hidden = access.save_user({"username": "super.hidden", "name": "Super Secreto", "role": "super-admin",
+                                     "password": "Ejemplo-local-2026", "is_hidden": True}, local_store["id"])
+    admin_user = access.save_user({"username": "admin.viewer", "name": "Admin Visualizador", "role": "admin",
+                                   "password": "Ejemplo-local-2026"}, local_store["id"])
+    soporte_user = access.save_user({"username": "soporte.tech", "name": "Soporte Tecnico", "role": "soporte",
+                                     "password": "Ejemplo-local-2026"}, local_store["id"])
+
+    # --- 1. Unit Contract: user_for_actor ---
+    with access.database() as db:
+        row_super = db.execute("SELECT * FROM users WHERE id=?", (super2["id"],)).fetchone()
+        row_hidden = db.execute("SELECT * FROM users WHERE id=?", (super_hidden["id"],)).fetchone()
+        row_admin = db.execute("SELECT * FROM users WHERE id=?", (admin_user["id"],)).fetchone()
+        row_soporte = db.execute("SELECT * FROM users WHERE id=?", (soporte_user["id"],)).fetchone()
+
+    # Projection for super-admin:
+    super_view_super = access.user_for_actor(row_super, "super-admin")
+    assert super_view_super["role"] == "super-admin"
+    assert super_view_super["is_hidden"] is False
+    assert super_view_super["allowed_pages"] == ["resumen", "conexiones"]
+    assert "password_hash" not in super_view_super and "password" not in super_view_super
+
+    super_view_hidden = access.user_for_actor(row_hidden, "super-admin")
+    assert super_view_hidden["role"] == "super-admin"
+    assert super_view_hidden["is_hidden"] is True
+
+    # Projection for admin:
+    admin_view_super = access.user_for_actor(row_super, "admin")
+    assert admin_view_super["role"] == "admin"  # Projected
+    assert "allowed_pages" not in admin_view_super  # Redacted
+    assert "is_hidden" not in admin_view_super  # Redacted
+    assert set(admin_view_super.keys()) == {"id", "username", "name", "role", "active", "version", "created_at"}
+
+    admin_view_admin = access.user_for_actor(row_admin, "admin")
+    assert admin_view_admin["role"] == "admin"
+    assert "allowed_pages" not in admin_view_admin
+    assert "is_hidden" not in admin_view_admin
+
+    admin_view_soporte = access.user_for_actor(row_soporte, "admin")
+    assert admin_view_soporte["role"] == "soporte"
+    assert "allowed_pages" not in admin_view_soporte
+    assert "is_hidden" not in admin_view_soporte
+
+    # --- 2. Directory Contract: list_users ---
+    # Super-admin directory listing
+    dir_super = access.list_users(local_store["id"])
+    assert len(dir_super) == 5  # local_store + super2 + super_hidden + admin_user + soporte_user
+    assert any(u["id"] == super_hidden["id"] for u in dir_super)
+    assert sum(1 for u in dir_super if u["role"] == "super-admin") == 3
+    assert sum(1 for u in dir_super if u["role"] == "admin") == 1
+    assert sum(1 for u in dir_super if u["role"] == "soporte") == 1
+    for u in dir_super:
+        assert isinstance(u["allowed_pages"], list)
+        assert isinstance(u["is_hidden"], bool)
+
+    # Admin directory listing
+    dir_admin = access.list_users(admin_user["id"])
+    assert len(dir_admin) == 4  # super_hidden is excluded
+    assert not any(u["id"] == super_hidden["id"] for u in dir_admin)
+    # No user has role super-admin; super-admin accounts are projected as admin
+    assert all(u["role"] != "super-admin" for u in dir_admin)
+    assert sum(1 for u in dir_admin if u["role"] == "admin") == 3  # local_store + super2 + admin_user
+    assert sum(1 for u in dir_admin if u["role"] == "soporte") == 1
+    for u in dir_admin:
+        assert "allowed_pages" not in u
+        assert "is_hidden" not in u
+    assert "super-admin" not in json.dumps(dir_admin).lower()
+
+    # --- 3. Mutation & Security Control ---
+    # Admin cannot touch super-admin even using the projected 'admin' structure
+    proj = next(u for u in dir_admin if u["id"] == super2["id"])
+    assert proj["role"] == "admin"
+    with pytest.raises(access.AccessError) as err:
+        access.save_user({**proj, "name": "Intento de Admin", "confirmed": True}, admin_user["id"])
+    assert err.value.status == 403
+    assert "No tienes permiso para modificar esta cuenta" in str(err.value)
+
+    # Admin cannot create super-admin
+    with pytest.raises(access.AccessError) as err:
+        access.save_user({"username": "nuevo.super", "name": "Super", "role": "super-admin",
+                          "password": "Ejemplo-local-2026"}, admin_user["id"])
+    assert err.value.status == 403
+
+    # Admin cannot set is_hidden flag
+    with pytest.raises(access.AccessError) as err:
+        access.save_user({"username": "nuevo.adm", "name": "Admin", "role": "admin",
+                          "password": "Ejemplo-local-2026", "is_hidden": True}, admin_user["id"])
+    assert err.value.status == 403
+
+    # Admin creating user with custom allowed_pages: custom pages are ignored, defaults applied
+    created_soporte = access.save_user({
+        "username": "soporte.clean", "name": "Soporte Limpio", "role": "soporte",
+        "password": "Ejemplo-local-2026", "allowed_pages": ["conexiones", "usuarios"]
+    }, admin_user["id"])
+    assert "allowed_pages" not in created_soporte
+    with access.database() as db:
+        stored = db.execute("SELECT allowed_pages FROM users WHERE id=?", (created_soporte["id"],)).fetchone()[0]
+    assert stored == json.dumps(access.ROLE_PAGE_DEFAULTS["soporte"])
+
+    # Soporte cannot list or save users
+    with pytest.raises(access.AccessError) as err:
+        access.list_users(soporte_user["id"])
+    assert err.value.status == 403
+
+    with pytest.raises(access.AccessError) as err:
+        access.save_user({"username": "hacker.user", "name": "Hacker", "role": "admin",
+                          "password": "Ejemplo-local-2026"}, soporte_user["id"])
+    assert err.value.status == 403
+
