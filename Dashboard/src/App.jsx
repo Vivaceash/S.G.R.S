@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Bell, Building2, ChevronDown, ChevronRight, CircleHelp, Clock, FileText, Home, Menu, RefreshCw, Server, ShieldCheck, Wifi, X, ArrowRight, Eye, CheckCircle2, Copy, Printer, Users, PlugZap, LogOut, Download, Monitor, Globe2, Radio, Camera, Headset } from 'lucide-react';
+import { Bell, Building2, ChevronDown, ChevronRight, CircleHelp, Clock, FileText, Home, Menu, RefreshCw, Server, ShieldAlert, ShieldCheck, Wifi, X, ArrowRight, Eye, CheckCircle2, Copy, Printer, Users, PlugZap, LogOut, Download, Monitor, Globe2, Radio, Camera, Headset } from 'lucide-react';
 import { Badge, Button, Dialog, Empty, IconButton, Loading, Notice, SearchField } from './components.jsx';
-import { Addresses, AuditLog, Devices, Overview, PageHeading, Requests, SupportDashboard } from './pages.jsx';
+import { Addresses, AuditLog, Devices, MeztliManagement, Overview, PageHeading, Requests, SupportDashboard } from './pages.jsx';
 import { EditForm, EntryForm, ResolveReport } from './forms.jsx';
 import { ApiError, roleLabel, dateTime, formatUptime, inventoryFromIdfs, reportsFromData, request, formatDeviceType, formatLocation, statusNames } from './domain.mjs';
 import { createDemo } from './demo.mjs';
@@ -11,7 +11,7 @@ import { TelemetryNav, TelemetryPage, useTelemetryCatalog } from './telemetry.js
 import { generateSvg } from '../qrcode.js';
 import { DocumentaryInventory } from './inventory.jsx';
 
-const emptyData = () => ({ segments: [], ips: [], devices: [], resources: [], requests: [], idfs: [], reports: {}, health: null, updatedAt: null });
+const emptyData = () => ({ segments: [], ips: [], devices: [], meztliLeases: [], resources: [], requests: [], idfs: [], reports: {}, health: null, updatedAt: null });
 const navItems = [
   ['resumen', 'Dashboard', Home],
   ['soporte', 'Dashboard Soporte', Headset],
@@ -22,6 +22,7 @@ const navItems = [
   ['aps', 'Access Points', Radio],
   ['cctv', 'CCTV', Camera],
   ['altas', 'Gestión de altas', Wifi],
+  ['gestion-meztli', 'Gestión Meztli', ShieldAlert],
 ];
 const adminItems = [['usuarios', 'Usuarios y privilegios', Users], ['conexiones', 'Conexiones API', PlugZap]];
 const titles = {
@@ -30,6 +31,7 @@ const titles = {
   altas: 'Gestión de Altas de Red',
   inventario: 'Recursos Disponibles',
   disponibilidad: 'Direcciones IP',
+  'gestion-meztli': 'Gestión Meztli',
   dispositivos: 'Dispositivos de Red',
   idf: 'Registro IDF',
   entrada: 'Registro IDF',
@@ -88,9 +90,9 @@ function Nav({ route, navigate, administration = false, data, records = [], canV
     return <nav className="main-nav" aria-label="Administración">{adminVisible.map(link)}</nav>;
   }
 
-  const group1 = navItems.slice(0, 5).filter(([path]) => canViewPage(path));
-  const group2 = navItems.slice(5, 8).filter(([path]) => canViewPage(path));
-  const group3 = navItems.slice(8).filter(([path]) => canViewPage(path));
+  const group1 = navItems.filter(([path]) => ['resumen', 'soporte', 'dispositivos', 'disponibilidad', 'bitacora'].includes(path) && canViewPage(path));
+  const group2 = navItems.filter(([path]) => ['idf', 'aps', 'cctv'].includes(path) && canViewPage(path));
+  const group3 = navItems.filter(([path]) => ['altas', 'gestion-meztli'].includes(path) && canViewPage(path));
 
   return (
     <nav className="main-nav" aria-label="Navegación principal">
@@ -112,7 +114,11 @@ function ServiceStatus({ health, demo }) {
 function QrCard({ row, demo, toast, host, compact = false, size = 300 }) {
   const storedHost = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('sgrs_qr_host') : null;
   const base = host?.trim() || storedHost || location.host;
-  const url = new URL(/^https?:\/\//i.test(base) ? base : `${location.protocol}//${base}`);
+  // A manually saved malformed address must not make the entire QR panel fail.
+  // Fall back to the address that loaded the dashboard so an operator can edit it.
+  let url;
+  try { url = new URL(/^https?:\/\//i.test(base) ? base : `${location.protocol}//${base}`); }
+  catch { url = new URL(`${location.protocol}//${location.host}`); }
   url.hash = `reporte?idf=${encodeURIComponent(row.id)}${row.mobile_token ? `&token=${encodeURIComponent(row.mobile_token)}` : ''}`;
   if (demo) url.searchParams.set('demo', '1');
   const value = url.toString();
@@ -284,17 +290,23 @@ function IdfHub({ data, records, navigate, openEditor, canWrite, canEditInventor
   const [host, setHost] = useState(() => (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('sgrs_qr_host')) || location.host);
   const [detectingHost, setDetectingHost] = useState(false);
   const selected = data.idfs.find(idf => idf.id === selectedId) || data.idfs[0];
-  const selectedRecords = selected ? records.filter(record => record.idfId === selected.id) : [];
+  const selectedRecords = selected ? records.filter(record => record.idfId === selected.id).sort((a, b) => (Date.parse(b.date) || -Infinity) - (Date.parse(a.date) || -Infinity)) : [];
   const unresolved = idf => records.filter(record => record.idfId === idf.id && record.status !== 'resolved').length;
-  const choose = id => { setSelectedId(id); setTab('inventory'); };
+  // Keep the operator's current task while switching between IDFs.
+  const choose = id => setSelectedId(id);
   const detectHost = async () => {
     setDetectingHost(true);
     try {
       const response = await fetch('/api/ip', { credentials: 'same-origin' });
       const result = await response.json();
       if (!response.ok || !result.ip || result.ip.startsWith('127.')) throw new Error('No se detectó una IP de red.');
-      setHost(result.ip);
-      try { sessionStorage.setItem('sgrs_qr_host', result.ip); } catch {}
+      // Older gateways return an address alone; the current endpoint includes
+      // its port. Never add it twice or the QR URL becomes invalid.
+      const reportedHost = String(result.ip).trim();
+      const hasPort = /^\[[^\]]+\]:\d+$/.test(reportedHost) || /^[^:]+:\d+$/.test(reportedHost);
+      const detectedHost = hasPort ? reportedHost : `${reportedHost}${location.port ? `:${location.port}` : ''}`;
+      setHost(detectedHost);
+      try { sessionStorage.setItem('sgrs_qr_host', detectedHost); } catch {}
       notify('IP de red detectada. El QR se actualizó para el teléfono.');
     } catch {
       notify('No se pudo detectar la IP de red. Configúrala manualmente antes de escanear.');
@@ -307,9 +319,9 @@ function IdfHub({ data, records, navigate, openEditor, canWrite, canEditInventor
       detectHost();
     }
   }, []);
-  useEffect(() => {
-    if (tab === 'qr' && /^(localhost|127(?:\.\d{1,3}){3})(?::|$)/i.test(host)) detectHost();
-  }, [tab]);
+  // Refresh the generated address whenever QR is opened, including a stale
+  // invalid value that may have been saved in this browser before an update.
+  useEffect(() => { if (tab === 'qr') detectHost(); }, [tab]);
   if (!selected) return <><PageHeading eyebrow="Distribución y gabinetes" title="Registro IDF" description="Consulta de inventario, incidencias y acceso móvil por código QR" updatedAt={data.updatedAt} /><Loading label="Cargando gabinetes IDF…" /></>;
   const devices = data.resources.filter(resource => resource.idfId === selected.id);
   return <><PageHeading eyebrow="Distribución y gabinetes" title="Registro IDF" description="Inventario físico, incidencias y reportes móviles por gabinete" updatedAt={data.updatedAt} />
@@ -354,7 +366,7 @@ function IdfHub({ data, records, navigate, openEditor, canWrite, canEditInventor
   </>;
 }
 export default function App() {
-  const { demo, setDemo, user, can, signOut, roles: roleInfo, allowedPages, canViewPage, switchDemoRole } = useSession();
+  const { demo, setDemo, user, can, signOut, allowedPages, canViewPage } = useSession();
   const catalog = useTelemetryCatalog(!demo && can('traffic.read'));
   const [demoUsers, setDemoUsers] = useState(initialDemoUsers);
   const [demoConnections, setDemoConnections] = useState(initialDemoConnections);
@@ -409,7 +421,7 @@ export default function App() {
     const version = ++generation.current;
     setLoading(true);
     const timer = setTimeout(() => controller.abort(), 12000);
-    const endpoints = { idfs: '/api/idfs', ips: '/api/ips', devices: '/api/devices', reports: '/api/reports', health: '/api/health', segments: '/api/forti/network/dhcp-pools' };
+    const endpoints = { idfs: '/api/idfs', ips: '/api/ips', devices: '/api/devices', meztliLeases: '/api/forti/network/dhcp-leases', reports: '/api/reports', health: '/api/health', segments: '/api/forti/network/dhcp-pools' };
     const results = await Promise.allSettled(Object.values(endpoints).map(path => request(path, { signal: controller.signal })));
     clearTimeout(timer);
     if (version !== generation.current) return;
@@ -417,8 +429,8 @@ export default function App() {
     Object.keys(endpoints).forEach((key, index) => {
       const result = results[index];
       if (result.status === 'fulfilled') {
-        const value = key === 'segments' ? result.value.data?.pools : result.value;
-        if (['idfs', 'ips', 'devices', 'segments'].includes(key) && !Array.isArray(value)) failures[key] = 'El servicio devolvió un formato no reconocido.';
+        const value = key === 'segments' ? result.value.data?.pools : key === 'meztliLeases' ? result.value.data : result.value;
+        if (['idfs', 'ips', 'devices', 'meztliLeases', 'segments'].includes(key) && !Array.isArray(value)) failures[key] = 'El servicio devolvió un formato no reconocido.';
         else next[key] = value;
       } else failures[key] = result.reason.name === 'AbortError' ? 'Se agotó el tiempo de consulta. Vuelve a intentar.' : result.reason.message;
     });
@@ -590,6 +602,8 @@ export default function App() {
     page = <EntryForm key={route.raw} {...shared} user={user} canRegister={can('idf.visits.write')} idfId={route.params.get('idf')} save={saveEntry} onDirty={setDirty} />;
   } else if (route.path === 'bitacora') {
     page = <AuditLog {...shared} records={records} canResolve={can('idf.visits.write')} />;
+  } else if (route.path === 'gestion-meztli') {
+    page = <MeztliManagement data={data} openEditor={openEditor} loading={loading} errors={errors} refresh={refresh} canExport={can('inventory.export')} />;
   } else if (route.path === 'usuarios') {
     page = !canViewPage?.('usuarios') ? (
       <>
@@ -681,9 +695,7 @@ export default function App() {
         </div>
       )}
     </aside>
-    <main className="main-content" id="main-content" tabIndex={-1}>{route.path === 'resumen' && <div className="mode-bar">
-      <div className={`operation-status ${Object.keys(errors).length ? 'degraded' : ''}`}><span className="status-light" /><div><strong>{demo ? 'Escenario de demostración' : Object.keys(errors).length ? 'Información parcial' : loading ? 'Consultando servicios' : 'Consulta completada'}</strong><small>{demo ? 'Datos de ejemplo para revisar el diseño' : 'El estado físico requiere telemetría actualizada'}</small></div></div>
-    </div>}
+    <main className="main-content" id="main-content" tabIndex={-1}>
       {Object.keys(errors).length > 0 && <Notice title="No se pudo actualizar toda la información" tone="warning" action={<Button onClick={refresh} busy={loading}>Reintentar</Button>}>Los datos conservados pueden estar desactualizados. Consultas pendientes: {Object.keys(errors).map(k => ({ idfs: 'IDFs', ips: 'direcciones IP', devices: 'dispositivos', reports: 'bitácora', health: 'servicios', segments: 'segmentos DHCP' })[k]).join(', ')}.</Notice>}
       {!can('inventory.write') && user.role !== 'soporte' && <Notice title="Perfil viewer · Solo consulta">Puedes revisar la información operativa. El registro y la edición requieren un perfil administrador.</Notice>}{page}
     </main>
@@ -709,38 +721,16 @@ export default function App() {
       {modal?.kind === 'report-resolve' && <ResolveReport row={modal.row} save={resolveReport} />}
       {modal?.kind === 'report-detail' && modal.row.status !== 'resolved' && can('idf.visits.write') && (demo || modal.row.record_key) && <ResolveReport row={modal.row} save={resolveReport} />}
       {modal?.kind === 'access' && <>
-        <Notice title={demo ? 'Identidad de demostración' : user.name}>
-          {demo ? `Perfil de demostración (${roleLabel(user.role)}) · Datos ficticios.` : `Usuario: ${user.username} · Rol: ${roleLabel(user.role)}`}
-        </Notice>
-        {demo && (
-          <div className="demo-role-selector">
-            <p className="eyebrow">Probar rol en la demostración</p>
-            <div className="demo-role-buttons">
-              {roleInfo.map(r => (
-                <Button
-                  key={r.id}
-                  variant={user.role === r.id ? 'primary' : 'secondary'}
-                  onClick={() => switchDemoRole?.(r.id)}
-                >
-                  {roleLabel(r.id)}
-                </Button>
-              ))}
-            </div>
+        <section className="access-profile" aria-label="Resumen de sesión">
+          <div className="access-profile-main"><span className="access-profile-avatar">{user.name.split(' ').map(part => part[0]).slice(0, 2).join('')}</span><div><p>{demo ? 'SESION DE DEMOSTRACIÓN' : 'CUENTA INSTITUCIONAL'}</p><h3>{user.name}</h3><small>{user.username}</small></div><span className="access-online"><i /> En línea</span></div>
+          <div className="access-profile-grid">
+            <article><span className="access-profile-icon"><ShieldCheck size={21} /></span><div><strong>Sesión protegida</strong><small>Acceso institucional verificado.</small></div></article>
+            <article><span className="access-profile-icon"><FileText size={21} /></span><div><strong>Operación IDF</strong><small>{can('idf.visits.write') ? 'Registro y atención de incidencias.' : 'Consulta de registros e incidencias.'}</small></div></article>
           </div>
-        )}
-        <div className="role-list">
-          {roleInfo.map(role => (
-            <div key={role.id}>
-              <ShieldCheck size={25} />
-              <div>
-                <strong>{roleLabel(role.id)}</strong>
-                <p>{role.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+          <p className="access-profile-note"><CheckCircle2 size={15} /> Tu sesión está lista para trabajar en el Centro Operativo.</p>
+        </section>
         {logoutError && <Notice title="No se pudo cerrar la sesión" tone="danger">{logoutError}</Notice>}
-        {!demo && <Button icon={LogOut} busy={logoutBusy} onClick={async () => { const exit = async () => { setLogoutBusy(true); setLogoutError(''); try { await signOut(); } catch (e) { setLogoutError(e.message); } finally { setLogoutBusy(false); } }; if (dirty) { setModal(null); setPendingNavigation(() => exit); } else await exit(); }}>Cerrar sesión</Button>}
+        {!demo && <div className="access-session-actions"><Button icon={LogOut} busy={logoutBusy} onClick={async () => { const exit = async () => { setLogoutBusy(true); setLogoutError(''); try { await signOut(); } catch (e) { setLogoutError(e.message); } finally { setLogoutBusy(false); } }; if (dirty) { setModal(null); setPendingNavigation(() => exit); } else await exit(); }}>Cerrar sesión</Button></div>}
       </>}
     </Dialog>
     <div className="toast-region" role="status" aria-live="polite" aria-atomic="true">{toast && <div className="toast"><CheckCircle2 size={21} /><span>{toast}</span><IconButton icon={X} label="Cerrar notificación" onClick={() => setToast('')} /></div>}</div>

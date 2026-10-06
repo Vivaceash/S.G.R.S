@@ -33,6 +33,19 @@
   "idf-1": {
     "incidents": [
       {
+        "id": "IDF-0d382ca0-ceb0-460a-ace9-6cfab7f70143",
+        "date": "2026-10-05T21:07:08.977889+00:00",
+        "severity": "medium",
+        "device": "Gabinete",
+        "temp": 20.0,
+        "title": "Reporte de incidencia",
+        "description": "Temperatura normal",
+        "status": "open",
+        "tech": "Luis Fernando Casillas Flores",
+        "actor_id": "mobile:27f3ce91c6bb1e78caa3e23e",
+        "evidence": "IDF-0d382ca0-ceb0-460a-ace9-6cfab7f70143.jpg"
+      },
+      {
         "id": "FOL-IDF1-FMP0P",
         "date": "08/09/2026 19:40",
         "severity": "medium",
@@ -76,8 +89,8 @@
       }
     ],
     "telemetry": {
-      "date": "2026-10-01T21:59:57.327813+00:00",
-      "temp": 22.5,
+      "date": "2026-10-05T21:07:08.977889+00:00",
+      "temp": 20.0,
       "status": "normal"
     }
   },

@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, ArrowRight, ArrowUpDown, Building2, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Download, FileText, Info, Layers3, Monitor, Network, Package, Plus, Printer, Headset, Router, Server, ShieldCheck, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { Activity, ArrowRight, ArrowUpDown, Building2, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Copy, Download, FileText, Grid, HardDrive, Headset, Info, Laptop, Layers3, List, Monitor, Network, Package, Plus, Printer, Radio, RotateCcw, Router, Server, ShieldCheck, Smartphone, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { Badge, Button, DataTable, Dialog, Empty, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, downloadExcel, useListState } from './components.jsx';
 import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getSegmentDevices, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, getSupportSegments, normalizeText } from './domain.mjs';
 
 export function PageHeading({ eyebrow, title, description, updatedAt, children, headingId = 'page-title' }) {
-  const hasActions = Boolean(children || updatedAt);
+  const hasActions = Boolean(children);
   return <div className={`page-heading ${hasActions ? 'has-actions' : 'empty-heading'}`}>
     <div className="sr-only">
       {eyebrow && <p>{eyebrow}</p>}
@@ -13,7 +13,6 @@ export function PageHeading({ eyebrow, title, description, updatedAt, children, 
     </div>
     {hasActions && <div className="page-heading-actions">
       {children}
-      {updatedAt && <div className="update-stamp"><CalendarDays size={23} aria-hidden="true" /><div><span>Última consulta</span><strong>{dateTime(updatedAt)}</strong></div></div>}
     </div>}
   </div>;
 }
@@ -76,9 +75,7 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
     setChosen(draft); setAll(false); setEditing(false);
   };
   return <>
-    <PageHeading eyebrow="Centro operativo" title="Dashboard Operativo" description="Métricas generales y estado de la infraestructura de red" updatedAt={data.updatedAt}>
-      <div className={`operation-status ${errors.length ? 'degraded' : ''}`}><span className="status-light" /><div><strong>{demo ? 'Escenario de demostración' : errors.length ? 'Información parcial' : loading ? 'Consultando servicios' : 'Consulta completada'}</strong><small>{demo ? 'Datos de ejemplo para revisar el diseño' : 'El estado físico requiere telemetría actualizada'}</small></div></div>
-    </PageHeading>
+    <PageHeading eyebrow="Centro operativo" title="Dashboard Operativo" description="Métricas generales y estado de la infraestructura de red" updatedAt={data.updatedAt} />
     <section className="overview-metrics" aria-label="Indicadores de infraestructura">
       <Metric icon={Network} label={demo ? 'Disponibilidad de red' : 'Direcciones disponibles'} value={demo ? '98.7%' : loading ? '—' : number(available)} caption={demo ? '+2.3% vs. mes anterior · Ejemplo' : 'Sin asignar en el inventario IP'} />
       <Metric icon={Monitor} tone="success" label="Dispositivos activos" value={loading ? '—' : number(online)} caption={`De ${number(devices.length)} equipos consultados`} />
@@ -144,15 +141,109 @@ export function Requests({ demo }) {
     return () => { alive = false; controller.abort(); };
   }, [demo, revision]);
   const deviceCount = snapshot.users.reduce((total, user) => total + (Array.isArray(user.devices) ? user.devices.length : 0), 0);
-  const userColumns = [{ key: 'username', label: 'Cuenta' }, { key: 'fullName', label: 'Nombre' }, { key: 'department', label: 'Departamento' }, { key: 'position', label: 'Puesto' }, { key: 'accessRoleProfile', label: 'Perfil de acceso' }, { key: 'status', label: 'Estado', render: row => <Badge status={row.status} /> }, { key: 'devices', label: 'Dispositivos', sortable: false, render: row => <Button onClick={() => setSelectedUser(row)}>{Array.isArray(row.devices) ? row.devices.length : 0} · Ver</Button> }];
-  return <><PageHeading eyebrow="Gestión de altas · Consulta" title="Gestión de Altas de Red" description="Consulta de cuentas y dispositivos registrados en OmniVista. Esta pantalla no crea, aprueba ni modifica altas." updatedAt={snapshot.updatedAt}><Button icon={RefreshCw} busy={snapshot.loading} onClick={() => setRevision(value => value + 1)}>Actualizar consulta</Button></PageHeading>
-    <Notice title="Modo solo consulta">La información proviene de OmniVista. No hay botones de alta, aprobación, asignación ni escritura en esta pantalla.</Notice>
-    {demo && <Notice title="Vista de demostración">Para consultar OmniVista cambia a datos del sistema e inicia sesión con una cuenta autorizada.</Notice>}
-    {snapshot.error && <Notice title="No se pudo consultar OmniVista" tone="danger" action={<Button onClick={() => setRevision(value => value + 1)}>Reintentar</Button>}>{snapshot.error}</Notice>}
-    <div className="metric-grid"><Metric icon={Users} label="Cuentas cotejadas" value={snapshot.loading ? '—' : number(snapshot.users.length)} caption={snapshot.sources.users?.complete ? 'Total recorrido en OmniVista' : 'Total no confirmado'} /><Metric icon={Monitor} tone="success" label="Dispositivos asociados" value={snapshot.loading ? '—' : number(deviceCount)} caption={snapshot.sources.company_properties?.complete ? `${number(snapshot.sources.company_properties?.unassociated || 0)} sin cuenta coincidente` : 'Cotejo parcial'} /><Metric icon={Network} tone="info" label="Coincidencias FortiGate" value={snapshot.loading ? '—' : number(snapshot.sources.fortigate?.matches || 0)} caption={snapshot.sources.fortigate?.status === 200 ? 'MAC asociada encontrada en FortiGate' : 'Fuente no disponible'}/></div>
-    <DataTable title="Cuentas de usuarios OmniVista" rows={snapshot.users} columns={userColumns} state={usersState} noun="cuentas" loading={snapshot.loading} error={snapshot.error} onRetry={() => setRevision(value => value + 1)} exportable={!demo} emptyText="OmniVista no devolvió cuentas en esta consulta." toolbar={<SearchField value={usersState.query} onChange={usersState.setQuery} placeholder="Buscar cuenta, nombre o departamento…" />} />
+  const accountsWithDevices = useMemo(
+    () => snapshot.users.filter(user => Array.isArray(user.devices) && user.devices.length > 0).length,
+    [snapshot.users]
+  );
+  const accountsCoverage = snapshot.users.length ? Math.round((accountsWithDevices / snapshot.users.length) * 100) : 0;
+
+  const userColumns = [
+    { key: 'username', label: 'Cuenta' },
+    { key: 'fullName', label: 'Nombre' },
+    { key: 'department', label: 'Departamento' },
+    { key: 'position', label: 'Puesto' },
+    { key: 'accessRoleProfile', label: 'Perfil de acceso' },
+    { key: 'status', label: 'Estado', render: row => <Badge status={row.status} /> },
+    {
+      key: 'devices',
+      label: 'Dispositivos',
+      sortable: false,
+      render: row => (Array.isArray(row.devices) && row.devices.length > 0) ? (
+        <Button variant="secondary" onClick={() => setSelectedUser(row)}>
+          {row.devices.length} {row.devices.length === 1 ? 'equipo' : 'equipos'} · Ver
+        </Button>
+      ) : (
+        <span className="text-muted text-xs">Sin equipos</span>
+      )
+    }
+  ];
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="Gestión de altas · Consulta"
+        title="Gestión de Altas de Red"
+        description="Consulta de cuentas y dispositivos registrados en OmniVista. Esta pantalla no crea, aprueba ni modifica altas."
+        updatedAt={snapshot.updatedAt}
+      />
+
+      <div className="altas-banner-strip">
+        <div className="altas-badge-readonly">
+          <Info size={14} aria-hidden="true" />
+          <span>Modo solo consulta · OmniVista</span>
+        </div>
+        <p className="altas-readonly-desc">
+          Consulta de cuentas y terminales en OmniVista con cotejo en FortiGate. Las altas y asignaciones se gestionan en las consolas centrales.
+        </p>
+        {snapshot.updatedAt && (
+          <span className="altas-sync-time">
+            Actualizado: {dateTime(snapshot.updatedAt)}
+          </span>
+        )}
+      </div>
+
+      {demo && <Notice title="Vista de demostración">Para consultar OmniVista cambia a datos del sistema e inicia sesión con una cuenta autorizada.</Notice>}
+      {snapshot.error && <Notice title="No se pudo consultar OmniVista" tone="danger" action={<Button onClick={() => setRevision(value => value + 1)}>Reintentar</Button>}>{snapshot.error}</Notice>}
+
+      <div className="metric-grid">
+        <Metric
+          icon={Users}
+          label="Cuentas cotejadas"
+          value={snapshot.loading ? '—' : number(snapshot.users.length)}
+          caption={snapshot.sources.users?.complete ? 'Total recorrido en OmniVista' : 'Total no confirmado'}
+        />
+        <Metric
+          icon={Monitor}
+          tone="success"
+          label="Dispositivos asociados"
+          value={snapshot.loading ? '—' : number(deviceCount)}
+          caption={snapshot.sources.company_properties?.complete ? `${number(snapshot.sources.company_properties?.unassociated || 0)} sin cuenta coincidente` : 'Cotejo parcial'}
+        />
+        <Metric
+          icon={ShieldCheck}
+          tone="gold"
+          label="Cuentas con equipo"
+          value={snapshot.loading ? '—' : number(accountsWithDevices)}
+          caption={`${accountsCoverage}% con terminal vinculada`}
+        />
+        <Metric
+          icon={Network}
+          tone="info"
+          label="Coincidencias FortiGate"
+          value={snapshot.loading ? '—' : number(snapshot.sources.fortigate?.matches || 0)}
+          caption={snapshot.sources.fortigate?.status === 200 ? 'MAC asociada encontrada en FortiGate' : 'Fuente no disponible'}
+        />
+      </div>
+
+      <DataTable
+        title="Cuentas de usuarios OmniVista"
+        rows={snapshot.users}
+        columns={userColumns}
+        state={usersState}
+        noun="cuentas"
+        loading={snapshot.loading}
+        error={snapshot.error}
+        onRetry={() => setRevision(value => value + 1)}
+        exportable={!demo}
+        emptyText="OmniVista no devolvió cuentas en esta consulta."
+        toolbar={
+          <SearchField value={usersState.query} onChange={usersState.setQuery} placeholder="Buscar cuenta, nombre o departamento…" />
+        }
+      />
     <Dialog open={Boolean(selectedUser)} title={`Dispositivos de ${selectedUser?.username || 'la cuenta'}`} onClose={() => setSelectedUser(null)} wide><p className="muted">Cotejo entre Company Property de OmniVista y el inventario observado por FortiGate.</p>{selectedUser?.devices?.length ? <div className="detail-list">{selectedUser.devices.map((device, index) => <article className="panel" key={`${device.deviceMac || device.id || index}`}><div className="flex items-center justify-between gap-3"><strong>{device.deviceName || device.deviceMac || 'Dispositivo sin nombre'}</strong><Badge status={device.forti?.status || device.status} /></div><dl className="detail-grid"><div><dt>MAC</dt><dd>{device.deviceMac || '—'}</dd></div><div><dt>Equipo OmniVista</dt><dd>{device.lastAccessDeviceName || '—'}</dd></div><div><dt>Categoría / familia</dt><dd>{[device.deviceCategory, device.deviceFamily].filter(Boolean).join(' · ') || '—'}</dd></div><div><dt>Sistema operativo</dt><dd>{device.deviceOS || '—'}</dd></div><div><dt>Cotejo</dt><dd>{device.cotejo}</dd></div>{device.forti && <><div><dt>FortiGate · IP</dt><dd>{device.forti.ip || '—'}</dd></div><div><dt>FortiGate · tipo / interfaz</dt><dd>{[device.forti.type, device.forti.interface].filter(Boolean).join(' · ') || '—'}</dd></div><div><dt>FortiGate · última detección</dt><dd>{device.forti.last_seen || '—'}</dd></div></>}</dl></article>)}</div> : <Empty title="Sin dispositivos asociados">OmniVista no tiene terminales asociadas a esta cuenta en la consulta actual.</Empty>}</Dialog>
-    <Note title="Alcance de la consulta">La tabla principal contiene cuentas; los dispositivos aparecen al seleccionar “Ver”. La información FortiGate es una coincidencia por MAC (y no modifica ningún equipo).</Note></>;
+      <Note title="Alcance de la consulta">La tabla principal contiene cuentas; los dispositivos aparecen al seleccionar “Ver”. La información FortiGate es una coincidencia por MAC (y no modifica ningún equipo).</Note>
+    </>
+  );
 }
 export function Inventory({ data, demo, navigate, openEditor, errors, loading, refresh, canWrite, canExport }) {
   const state = useListState('recursos');
@@ -192,6 +283,77 @@ export function Addresses({ data, navigate, openEditor, loading, errors, refresh
     {view === 'matrix' ? <section className="ip-matrix" aria-label="Matriz de direcciones IP">{loading ? <div className="loading-state">Cargando direcciones IP…</div> : errors.ips ? <Notice title="No se pudieron cargar las direcciones" tone="warning" action={<Button onClick={refresh}>Reintentar</Button>}>{errors.ips}</Notice> : Object.entries(filteredBySegment).map(([segment, ips]) => <section key={segment} className="ip-segment"><div><h2>{segment}</h2><span>{ips.length} IPs</span></div><article>{ips.map(ip => <button key={ip.ip} type="button" className={`ip-cell ip-cell-${ip.status}`} onClick={() => openEditor('ip', ip)} title={`${ip.ip} · ${labelForStatus(ip.status)}${ip.hostname ? ` · ${ip.hostname}` : ''}`}><strong>{displayIp(ip.ip)}</strong><small><i />{labelForStatus(ip.status)}</small></button>)}</article></section>)}{!loading && !errors.ips && !filtered.length && <Empty title="Sin direcciones coincidentes">Modifica los filtros o busca otra dirección.</Empty>}</section> : <DataTable title="Direcciones IP" rows={rows} columns={columns} state={state} noun="direcciones" loading={loading} error={errors.ips} onRetry={refresh} />}
     <Note>Las asignaciones modifican el inventario local. No cambian reservas DHCP ni aplican configuraciones al firewall.</Note></>;
 }
+export function CopyButton({ text, title = 'Copiar', className = '' }) {
+  const [copied, setCopied] = useState(false);
+  if (!text || text === '—' || text === 'Pendiente de confirmar') return null;
+
+  const handleCopy = async e => {
+    e.stopPropagation();
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      // ignore
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      className={`inline-copy-btn ${copied ? 'is-copied' : ''} ${className}`}
+      onClick={handleCopy}
+      title={copied ? '¡Copiado!' : title}
+      aria-label={copied ? '¡Copiado!' : title}
+    >
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+      {copied && <span className="copy-tooltip">Copiado</span>}
+    </button>
+  );
+}
+
+export function DeviceTypeBadge({ type }) {
+  let Icon = HardDrive;
+  let label = type || 'Dispositivo';
+  let theme = 'type-other';
+
+  if (type === 'Computadora') {
+    Icon = Monitor;
+    label = 'Computadora';
+    theme = 'type-computer';
+  } else if (type === 'Impresora') {
+    Icon = Printer;
+    label = 'Impresora';
+    theme = 'type-printer';
+  } else if (type === 'Teléfono') {
+    Icon = Smartphone;
+    label = 'Teléfono';
+    theme = 'type-phone';
+  } else if (['Equipo de red', 'Router', 'Switch', 'Access Point'].includes(type)) {
+    Icon = Router;
+    label = type;
+    theme = 'type-network';
+  }
+
+  return (
+    <span className={`device-type-badge ${theme}`}>
+      <Icon size={12} aria-hidden="true" />
+      <span>{label}</span>
+    </span>
+  );
+}
+
 export function Devices({ data, navigate, openEditor, loading, errors, refresh, canExport, selectedSegment }) {
   const state = useListState('equipos');
   const segment = data.segments.find(item => segmentKey(item) === selectedSegment);
@@ -208,11 +370,15 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
       value: r => r.omnivista?.device_name || r.name,
       render: r => (
         <div className="cell-detail">
-          <div className="flex items-center gap-2">
-            <strong>{r.omnivista?.device_name || r.name}</strong>
+          <div className="flex items-center gap-2 flex-wrap">
+            <strong className="device-name-text">{r.omnivista?.device_name || r.name}</strong>
             {r.omnivista?.matched && <span className="network-tag omni-tag" title="Cotejado con Company Property de OmniVista 2500">OmniVista</span>}
           </div>
-          <small>{[r.vendor, r.omnivista?.account && `Cuenta: ${r.omnivista.account}`, r.name !== r.omnivista?.device_name && r.name].filter(Boolean).join(' · ')}</small>
+          <div className="device-vendor-line">
+            {r.vendor && <span className="vendor-pill">{r.vendor}</span>}
+            {r.omnivista?.account && <small className="text-muted">Cuenta: {r.omnivista.account}</small>}
+            {r.name !== r.omnivista?.device_name && r.name && <small className="text-muted">Forti: {r.name}</small>}
+          </div>
         </div>
       )
     },
@@ -220,37 +386,57 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
       key: 'ip',
       label: 'Dirección IP',
       value: r => r.ip_source === 'unconfirmed' ? 'Pendiente de confirmar' : (r.ip || '—'),
-      render: r => (
-        <div className="cell-detail">
-          <span className="ip-address">{r.ip_source === 'unconfirmed' ? 'Pendiente de confirmar' : (r.ip || '—')}</span>
-          {r.is_reserved && <small>IP reservada{r.reserved_ip && r.reserved_ip !== r.ip ? `: ${r.reserved_ip}` : ''}</small>}
-        </div>
-      )
+      render: r => {
+        const isConfirmed = r.ip_source !== 'unconfirmed' && r.ip && r.ip !== '—';
+        const ipText = isConfirmed ? r.ip : (r.ip_source === 'unconfirmed' ? 'Pendiente de confirmar' : '—');
+        return (
+          <div className="cell-detail">
+            <div className="flex items-center gap-1.5">
+              <span className={`ip-address ${!isConfirmed ? 'ip-unconfirmed' : ''}`}>{ipText}</span>
+              {isConfirmed && <CopyButton text={r.ip} title="Copiar dirección IP" />}
+            </div>
+            {r.is_reserved && (
+              <small className="ip-reserved-tag">
+                IP reservada{r.reserved_ip && r.reserved_ip !== r.ip ? `: ${r.reserved_ip}` : ''}
+              </small>
+            )}
+          </div>
+        );
+      }
     },
     {
       key: 'mac',
       label: 'MAC',
       value: r => r.mac || '—',
-      render: r => <span className="font-mono text-muted">{r.mac || '—'}</span>
+      render: r => (
+        <div className="flex items-center gap-1.5 font-mono text-muted text-xs">
+          <span>{r.mac || '—'}</span>
+          {r.mac && r.mac !== '—' && <CopyButton text={r.mac} title="Copiar dirección MAC" />}
+        </div>
+      )
     },
     {
       key: 'type',
       label: 'Tipo',
       value: r => formatDeviceType(r.type, r.os || r.omnivista?.os || r.raw?.os_name, r.omnivista?.device_name || r.name, r.vendor),
-      render: r => formatDeviceType(r.type, r.os || r.omnivista?.os || r.raw?.os_name, r.omnivista?.device_name || r.name, r.vendor)
+      render: r => <DeviceTypeBadge type={formatDeviceType(r.type, r.os || r.omnivista?.os || r.raw?.os_name, r.omnivista?.device_name || r.name, r.vendor)} />
     },
     {
       key: 'location',
       label: 'Ubicación',
       value: r => r.omnivista?.location || formatLocation(r.location, r.vendor, segment?.name || r.interface),
-      render: r => r.omnivista?.location ? (
-        <div className="cell-detail">
-          <strong className="text-location">{r.omnivista.location}</strong>
-          {r.omnivista.ap_name && <small className="text-muted">AP: {r.omnivista.ap_name}</small>}
-        </div>
-      ) : (
-        formatLocation(r.location, r.vendor, segment?.name || r.interface)
-      )
+      render: r => {
+        if (r.omnivista?.location) {
+          return (
+            <div className="cell-detail">
+              <strong className="text-location">{r.omnivista.location}</strong>
+              {r.omnivista.ap_name && <small className="text-muted">AP: {r.omnivista.ap_name}</small>}
+            </div>
+          );
+        }
+        const loc = formatLocation(r.location, r.vendor, segment?.name || r.interface);
+        return (!loc || loc === '—') ? <span className="location-empty">Sin ubicación</span> : <span className="location-text">{loc}</span>;
+      }
     },
     {
       key: 'status',
@@ -262,7 +448,7 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
       key: 'activity',
       label: 'Última actividad',
       value: r => r.activity || r.last_seen || 'Reciente',
-      render: r => r.activity || r.last_seen || 'Reciente'
+      render: r => <span className="text-muted text-xs">{r.activity || r.last_seen || 'Reciente'}</span>
     }
   ];
 
@@ -277,14 +463,123 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
     _search_mac: d.mac || '',
   }));
 
-  return <><PageHeading eyebrow="Inventario de infraestructura" title="Dispositivos de Red" description="Equipos detectados y consulta de información técnica" updatedAt={data.updatedAt}>
-    {omniMatchedCount > 0 && <span className="network-tag omni-badge">{number(omniMatchedCount)} cotejados en OmniVista</span>}
-    {canExport && <Button icon={Download} disabled={!devices.length} onClick={() => downloadCsv('Dispositivos-de-Red', columns, rows)}>Exportar</Button>}
-  </PageHeading>
-    {selectedSegment && <Notice title={segment ? `Segmento: ${segment.name || segment.interface}` : 'Segmento no disponible'} action={<Button onClick={() => { state.setPage(1); navigate('dispositivos'); }}>Ver todos los segmentos</Button>}>{segment ? [segment.subnet, segment.default_gateway && `Gateway ${segment.default_gateway}`, segment.netmask && `Máscara ${segment.netmask}`].filter(Boolean).join(' · ') || segment.ip_ranges?.join(', ') : 'Actualiza la consulta para cargar este segmento.'}</Notice>}
-    <div className="toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar por equipo, IP, MAC o fabricante…" /><Select label="Estado" value={state.filters.status || ''} onChange={e => state.setFilter('status', e.target.value)}><option value="">Todos los estados</option><option value="online">En servicio</option><option value="offline">Reservados fuera de línea</option></Select><Select label="Dispositivos por página" value={sizeChoice} onChange={e => state.setPageSize(e.target.value)}><option value="25">25 dispositivos</option><option value="50">50 dispositivos</option><option value="100">100 dispositivos</option><option value="all">Todos los dispositivos</option></Select><div className="segment-devices-hint"><Info size={16} aria-hidden="true" /><span>Selecciona cualquier fila para abrir el detalle técnico</span></div></div>
-    <DataTable title="Dispositivos de red" rows={rows} columns={columns} state={state} pageSize={pageSize} noun="dispositivos" exportable={false} loading={loading} error={errors.devices || (selectedSegment && errors.segments)} onRetry={refresh} onRowClick={r => openEditor('device-detail', r)} rowClassName={r => r.status === 'offline' ? 'segment-device-row device-row-offline' : 'segment-device-row'} />
-    <Note>Se muestran equipos en línea y equipos con reserva DHCP, aunque estén desconectados. El estado en línea proviene de FortiGate. Las IP se actualizan por MAC con DHCP y ARP; los equipos sin dirección confirmada permanecen visibles en su interfaz. Los registros históricos sin reserva se excluyen.</Note></>;
+  return (
+    <>
+      <PageHeading eyebrow="Inventario de infraestructura" title="Dispositivos de Red" description="Equipos detectados y consulta de información técnica" updatedAt={data.updatedAt} />
+
+      {selectedSegment && (
+        <Notice
+          title={segment ? `Segmento: ${segment.name || segment.interface}` : 'Segmento no disponible'}
+          action={<Button onClick={() => { state.setPage(1); navigate('dispositivos'); }}>Ver todos los segmentos</Button>}
+        >
+          {segment ? [segment.subnet, segment.default_gateway && `Gateway ${segment.default_gateway}`, segment.netmask && `Máscara ${segment.netmask}`].filter(Boolean).join(' · ') || segment.ip_ranges?.join(', ') : 'Actualiza la consulta para cargar este segmento.'}
+        </Notice>
+      )}
+
+      <div className="toolbar devices-toolbar">
+        <SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar por equipo, IP, MAC o fabricante…" />
+        <Select label="Estado" value={state.filters.status || ''} onChange={e => state.setFilter('status', e.target.value)}>
+          <option value="">Todos los estados</option>
+          <option value="online">En servicio</option>
+          <option value="offline">Reservados fuera de línea</option>
+        </Select>
+        <Select label="Dispositivos por página" value={sizeChoice} onChange={e => state.setPageSize(e.target.value)}>
+          <option value="25">25 dispositivos</option>
+          <option value="50">50 dispositivos</option>
+          <option value="100">100 dispositivos</option>
+          <option value="all">Todos los dispositivos</option>
+        </Select>
+        {canExport && (
+          <Button
+            icon={Download}
+            disabled={!devices.length}
+            onClick={() => downloadCsv('Dispositivos-de-Red', columns, rows)}
+          >
+            Exportar
+          </Button>
+        )}
+        <div className="devices-toolbar-right">
+          {omniMatchedCount > 0 && <span className="network-tag omni-badge">{number(omniMatchedCount)} cotejados en OmniVista</span>}
+          <div className="segment-devices-hint">
+            <Info size={16} aria-hidden="true" />
+            <span>Selecciona cualquier fila para abrir el detalle técnico</span>
+          </div>
+        </div>
+      </div>
+
+      <DataTable
+        title="Dispositivos de red"
+        rows={rows}
+        columns={columns}
+        state={state}
+        pageSize={pageSize}
+        noun="dispositivos"
+        exportable={false}
+        loading={loading}
+        error={errors.devices || (selectedSegment && errors.segments)}
+        onRetry={refresh}
+        onRowClick={r => openEditor('device-detail', r)}
+        rowClassName={r => r.status === 'offline' ? 'segment-device-row device-row-offline' : 'segment-device-row'}
+      />
+
+      <Note>
+        Se muestran equipos en línea y equipos con reserva DHCP, aunque estén desconectados. El estado en línea proviene de FortiGate. Las IP se actualizan por MAC con DHCP y ARP; los equipos sin dirección confirmada permanecen visibles en su interfaz. Los registros históricos sin reserva se excluyen.
+      </Note>
+    </>
+  );
+}
+
+export function MeztliManagement({ data, openEditor, loading, errors, refresh, canExport }) {
+  const state = useListState('gestion-meztli');
+  const [admissionFilter, setAdmissionFilter] = useState('not-admitted');
+  const [deviceTypeFilter, setDeviceTypeFilter] = useState('');
+  const directLeases = Array.isArray(data.meztliLeases) ? data.meztliLeases : [];
+  const meztliSegment = data.segments.find(segment => normalizeText(`${segment.name || ''} ${segment.interface || ''} ${segment.vlan || ''}`).includes('meztli') || /\b94\b/.test(String(segment.vlan || '')));
+  const looksLikeMeztli = device => normalizeText([device.interface, device.vlan, device.ssid, device.network, device.omnivista?.ssid, device.omnivista?.profile].filter(Boolean).join(' ')).includes('meztli') || /\b94\b/.test(String(device.vlan || ''));
+  const belongsToMeztli = device => (meztliSegment && deviceInSegment(device, meztliSegment)) || looksLikeMeztli(device);
+  const meztliDevices = data.devices.filter(belongsToMeztli);
+  const directMeztliLeases = directLeases.filter(lease => normalizeText(lease.interface).includes('meztli'));
+  // DHCP leases are the source of truth when available; device inventory is only
+  // retained as a visual fallback for demo/offline integrations.
+  const connected = directMeztliLeases.length ? directMeztliLeases.map(lease => ({ ...lease, name: lease.device_name || lease.hostname || lease.mac || 'Sin identificar', status: lease.is_online === false ? 'offline' : 'online', activity: lease.is_online === false ? 'Sin conexión' : 'En línea' })) : meztliDevices.filter(device => device.status === 'online' || device.is_online === true);
+  const reserved = connected.filter(device => device.is_reserved === true);
+  const unmanaged = connected.filter(device => device.is_reserved !== true);
+  const getDeviceType = device => {
+    const identity = normalizeText([device.name, device.hostname, device.type, device.detected_device, device.vendor, device.os].filter(Boolean).join(' '));
+    if (/iphone|android|pixel|samsung|redmi|moto|huawei|ipad/.test(identity)) return 'Móvil';
+    if (/espressif|\besp[ -]?\d|iot/.test(identity)) return 'IoT';
+    if (/poco|laptop|notebook|macbook|windows|desktop|workstation/.test(identity)) return 'Equipo de usuario';
+    return device.type || device.detected_device || formatDeviceType(device.type, device.os, device.name || device.hostname, device.vendor) || 'No identificado';
+  };
+  const allRows = connected.map((device, index) => ({
+    ...device,
+    id: device.id || `${device.interface || 'meztli'}:${device.mac || device.ip || index}`,
+    admission: device.is_reserved === true ? 'admitted' : 'not-admitted',
+    deviceType: getDeviceType(device),
+  }));
+  const rows = allRows.filter(device => (admissionFilter === 'all' || device.admission === admissionFilter) && (!deviceTypeFilter || device.deviceType === deviceTypeFilter));
+  const elapsedSinceLease = timestamp => {
+    const seconds = Math.max(0, Math.floor(Date.now() / 1000 - Number(timestamp)));
+    if (!timestamp || !Number.isFinite(seconds)) return 'No disponible';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return hours ? `${hours} h ${minutes} min` : `${Math.max(1, minutes)} min`;
+  };
+  const columns = [
+    { key: 'name', label: 'Dispositivo', value: row => row.device_name || row.omnivista?.device_name || row.name || row.hostname || 'Sin identificar', render: row => detailText(row.device_name || row.omnivista?.device_name || row.name || row.hostname || 'Sin identificar', row.deviceType || row.vendor || 'Detectado por FortiGate') },
+    { key: 'ip', label: 'Dirección IP', value: row => row.ip || '—', render: row => <span className="ip-address">{row.ip || '—'}</span> },
+    { key: 'mac', label: 'MAC', value: row => row.mac || '—', render: row => <span className="font-mono text-muted text-xs">{row.mac || '—'}</span> },
+    { key: 'online', label: 'Estado', value: row => row.is_online === false ? 'offline' : 'online', render: row => <Badge status={row.is_online === false ? 'offline' : 'online'}>{row.is_online === false ? 'Sin conexión' : 'En línea'}</Badge> },
+    { key: 'uptime', label: 'Tiempo en línea', value: row => row.lease_started_at || 0, render: row => row.is_online === false ? detailText('Sin conexión', 'Concesión DHCP vigente') : detailText(elapsedSinceLease(row.lease_started_at), 'desde la última renovación DHCP') },
+    { key: 'admission', label: 'Admisión', value: row => row.admission, render: row => row.admission === 'admitted' ? <span className="meztli-reservation-mark meztli-table-mark"><ShieldCheck size={13} /> Admitido</span> : <span className="meztli-unapproved-mark"><TriangleAlert size={13} /> No admitido</span> },
+  ];
+  return <>
+    <PageHeading eyebrow="Supervisión de red inalámbrica" title="Gestión Meztli" description="Dispositivos conectados a Meztli sin reserva DHCP" updatedAt={data.updatedAt} />
+    {unmanaged.length > 0 && <Notice title="Aviso: conexiones no admitidas detectadas">Hay <strong>{number(unmanaged.length)} dispositivo{unmanaged.length === 1 ? '' : 's'}</strong> conectado{unmanaged.length === 1 ? '' : 's'} a <strong>SSID-Meztli</strong> sin reserva DHCP. Revísalos antes de realizar una acción en la red.</Notice>}
+    <section className="metric-grid meztli-metrics"><Metric icon={Wifi} label="Conectados a Meztli" value={number(connected.length)} caption="actividad detectada en este momento" /><Metric icon={ShieldCheck} tone="success" label="Con reserva DHCP" value={number(reserved.length)} caption="autorizados para permanecer conectados" ><span className="meztli-reservation-mark"><ShieldCheck size={12} /> Reserva activa</span></Metric><Metric icon={TriangleAlert} tone="danger" label="No deberían estar conectados" value={number(unmanaged.length)} caption="sin reserva DHCP · requieren revisión" /></section>
+    <DataTable title="Conexiones de SSID-Meztli" rows={rows} columns={columns} state={state} pageSize={25} noun={admissionFilter === 'not-admitted' ? 'dispositivos por revisar' : 'dispositivos'} toolbar={<div className="toolbar meztli-table-toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar dispositivo, IP o MAC…" /><Select label="Admisión" value={admissionFilter} onChange={event => setAdmissionFilter(event.target.value)}><option value="not-admitted">No admitidos</option><option value="admitted">Admitidos (reserva DHCP)</option><option value="all">Todos</option></Select><Select label="Tipo de dispositivo" value={deviceTypeFilter} onChange={event => setDeviceTypeFilter(event.target.value)}><option value="">Todos los tipos</option>{options(allRows.map(row => row.deviceType))}</Select></div>} exportable={canExport} loading={loading} error={errors.meztliLeases || errors.devices} onRetry={refresh} onRowClick={row => openEditor('device-detail', row)} emptyText={connected.length ? admissionFilter === 'not-admitted' ? 'Todos los dispositivos conectados a Meztli tienen una reserva DHCP.' : 'No hay dispositivos que coincidan con los filtros seleccionados.' : 'FortiGate no devolvió concesiones DHCP activas para SSID-Meztli.'} />
+    <Note title="Alcance de Gestión Meztli">La vista es de supervisión: no modifica reservas DHCP ni desconecta equipos. Abre un registro para revisar sus datos técnicos antes de realizar cualquier acción en la red.</Note>
+  </>;
 }
 export function AuditLog({ data, records, navigate, openEditor, loading, errors, refresh, idfView = false, canWrite, canExport }) {
   const state = useListState(idfView ? 'reportes-idf' : 'bitacora');
@@ -573,11 +868,42 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
         title="Dashboard de Soporte"
         description="Monitoreo operativo de segmentos de red, computadoras e impresoras en servicio"
         updatedAt={data.updatedAt}
-      >
-        <div className="support-heading-metrics">
-          <span className="network-tag">{number(supportSegments.length)} redes</span>
-          <span className="network-tag text-success">{number(computers.length)} computadoras en línea</span>
-          <span className="network-tag text-info">{number(printers.length)} impresoras en línea</span>
+      />
+
+      <div className="support-kpi-bar" role="region" aria-label="Resumen de telemetría de soporte">
+        <div className="support-kpi-group">
+          <div className="support-kpi-card kpi-network">
+            <div className="support-kpi-icon"><Network size={18} aria-hidden="true" /></div>
+            <div className="support-kpi-info">
+              <span className="support-kpi-count">{number(supportSegments.length)}</span>
+              <span className="support-kpi-label">Redes de soporte</span>
+            </div>
+          </div>
+
+          <div className="support-kpi-divider" aria-hidden="true" />
+
+          <div className="support-kpi-card kpi-computers">
+            <div className="support-kpi-icon"><Monitor size={18} aria-hidden="true" /></div>
+            <div className="support-kpi-info">
+              <span className="support-kpi-count">{number(computers.length)}</span>
+              <span className="support-kpi-label">Computadoras en línea</span>
+            </div>
+            <span className="support-kpi-pulse pulse-success" title="En servicio" />
+          </div>
+
+          <div className="support-kpi-divider" aria-hidden="true" />
+
+          <div className="support-kpi-card kpi-printers">
+            <div className="support-kpi-icon"><Printer size={18} aria-hidden="true" /></div>
+            <div className="support-kpi-info">
+              <span className="support-kpi-count">{number(printers.length)}</span>
+              <span className="support-kpi-label">Impresoras en línea</span>
+            </div>
+            <span className="support-kpi-pulse pulse-info" title="En servicio" />
+          </div>
+        </div>
+
+        <div className="support-kpi-actions">
           <Button
             icon={Download}
             variant="primary"
@@ -588,7 +914,7 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
           </Button>
           <Button icon={RefreshCw} busy={loading} onClick={refresh}>Actualizar</Button>
         </div>
-      </PageHeading>
+      </div>
 
       <section className="support-dashboard-grid" aria-label="Tablero de 3 columnas para soporte">
         {/* Columna 1: Listado de redes y estados */}

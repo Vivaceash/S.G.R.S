@@ -13,7 +13,7 @@ const demoSession = {
     username: 'admin.demo',
     role: 'super-admin',
     active: true,
-    allowed_pages: ['resumen', 'dispositivos', 'disponibilidad', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
+    allowed_pages: ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
   },
   capabilities: [
     'dashboard.read', 'inventory.read', 'idf.read', 'activity.read',
@@ -25,7 +25,7 @@ const demoSession = {
     { id: 'admin', title: 'admin', description: 'Administra la operación: inventario, visitas e incidencias de IDF y gestión de usuarios.' },
     { id: 'super-admin', title: 'Admin', description: 'Gestiona cuentas, privilegios modulares, conexiones y consultas técnicas.' },
   ],
-  allowed_pages: ['resumen', 'dispositivos', 'disponibilidad', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
+  allowed_pages: ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
 };
 
 function Login({ onLogin, onBootstrap, setup, error, retry, expired }) {
@@ -132,6 +132,8 @@ export function SessionProvider({ children }) {
   const canViewPage = pageId => {
     if (!Array.isArray(allowedPages)) return false;
     if (pageId === 'entrada') return allowedPages.includes('idf');
+    // Existing accounts that can consult IPs inherit this operational view.
+    if (pageId === 'gestion-meztli') return allowedPages.includes(pageId) || allowedPages.includes('disponibilidad');
     return allowedPages.includes(pageId);
   };
 

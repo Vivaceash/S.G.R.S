@@ -28,15 +28,15 @@ SESSION_SECONDS = 8 * 3600
 IDLE_SECONDS = 30 * 60
 
 AVAILABLE_PAGES = (
-    "resumen", "dispositivos", "disponibilidad", "bitacora", "idf",
+    "resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf",
     "aps", "cctv", "altas", "soporte", "usuarios", "conexiones"
 )
 
 ROLE_PAGE_DEFAULTS = {
     "soporte": ["soporte"],
-    "admin": ["resumen", "dispositivos", "disponibilidad", "bitacora", "idf", "aps", "cctv", "altas", "usuarios"],
-    "super-admin": ["resumen", "dispositivos", "disponibilidad", "bitacora", "idf", "aps", "cctv", "altas", "soporte", "usuarios", "conexiones"],
-    "viewer": ["resumen", "dispositivos", "disponibilidad", "bitacora", "idf", "aps", "cctv", "altas"],
+    "admin": ["resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf", "aps", "cctv", "altas", "usuarios"],
+    "super-admin": ["resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf", "aps", "cctv", "altas", "soporte", "usuarios", "conexiones"],
+    "viewer": ["resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf", "aps", "cctv", "altas"],
 }
 
 ROLE_CATALOG = {
