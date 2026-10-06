@@ -1,3 +1,5 @@
+from datetime import datetime
+from pathlib import Path
 """Same-origin HTTP boundary for the local dashboard (used by server.Handler)."""
 import hmac
 import ipaddress
@@ -283,6 +285,67 @@ class AccessRoutes:
                 self._manage()
                 self._send_json({"connections": [connection(name, public=True) for name in ("forti", "omni", "inventarios")]})
                 return True
+            if path == "/api/audit":
+                reports_file = Path("data/reports.json")
+                reports_data = {}
+                if reports_file.is_file():
+                    try:
+                        reports_data = json.loads(reports_file.read_text(encoding="utf-8"))
+                    except Exception:
+                        pass
+                with database() as db:
+                    user_map = {r['id']: (r['name'] or r['username']) for r in db.execute('SELECT id, name, username FROM users').fetchall()}
+                    rows = db.execute("""
+                        SELECT a.id, a.actor, COALESCE(u.name, u.username, a.actor) as actor_name,
+                               COALESCE(u.username, '') as username, COALESCE(u.role, '') as user_role,
+                               a.action, a.target, a.created_at
+                        FROM audit a
+                        LEFT JOIN users u ON u.id = a.actor
+                        ORDER BY a.id DESC LIMIT 300
+                    """).fetchall()
+                    events = []
+                    for r in rows:
+                        item = dict(r)
+                        target = item.get("target") or ""
+                        action = item.get("action") or ""
+                        if action.startswith("user.") and target in user_map:
+                            item["target_label"] = f"Usuario {user_map[target]}"
+                        elif action.startswith("session.") and target in user_map:
+                            item["target_label"] = f"Sesión {user_map[target]}"
+                        elif action.startswith("connection."):
+                            item["target_label"] = f"Servicio {target.upper()}"
+                        else:
+                            item["target_label"] = target
+                        events.append(item)
+
+                    audit_targets = {e.get("target") for e in events}
+                    for idf_id, group in reports_data.items():
+                        incidents = group if isinstance(group, list) else group.get("incidents", [])
+                        for inc in incidents:
+                            inc_id = inc.get("id") or ""
+                            target_ref = f"{idf_id}:{inc_id}"
+                            if target_ref not in audit_targets and inc_id not in audit_targets:
+                                dt = inc.get("date")
+                                try:
+                                    ts = int(datetime.fromisoformat(dt.replace("Z", "+00:00")).timestamp()) if dt else int(time.time())
+                                except Exception:
+                                    ts = int(time.time())
+                                is_res = inc.get("status") == "resolved"
+                                events.append({
+                                    "id": f"rep-{inc_id or idf_id}",
+                                    "actor": inc.get("actor_id") or "operativo",
+                                    "actor_name": inc.get("tech") or "Técnico de campo",
+                                    "username": "",
+                                    "user_role": "operativo",
+                                    "action": "idf.report.resolved" if is_res else "idf.report.created",
+                                    "target": target_ref,
+                                    "target_label": f"{idf_id.upper()} · {inc.get('title') or inc_id}",
+                                    "created_at": ts,
+                                    "details": inc.get("description") or "",
+                                })
+                    events.sort(key=lambda x: x.get("created_at") or 0, reverse=True)
+                self._send_json({"events": events[:400]})
+                return True
             if path == "/api/support/longest-connected":
                 if self.identity["user"]["role"] not in ("soporte", "admin", "super-admin"):
                     raise AccessError(403, "No tienes permiso para acceder a esta sección.")
@@ -298,7 +361,7 @@ class AccessRoutes:
                 devices = get_longest_connected_devices(device_type=dtype, limit=limit, only_online=only_online)
                 self._send_json(devices)
                 return True
-            normal = {"/api/idfs", "/api/reports", "/api/ips", "/api/devices", "/api/devices/summary", "/api/devices/export", "/api/health", "/api/ip", "/api/forti/network/dhcp-pools", "/api/altas/omnivista", "/api/aps/omnivista"}
+            normal = {"/api/idfs", "/api/reports", "/api/ips", "/api/devices", "/api/devices/summary", "/api/devices/export", "/api/health", "/api/ip", "/api/forti/network/dhcp-pools", "/api/forti/network/dhcp-leases", "/api/altas/omnivista", "/api/aps/omnivista"}
             if path in normal:
                 return False
             if path.startswith("/api/reports/evidence/"):

@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, ArrowRight, ArrowUpDown, Building2, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Download, FileText, Info, Layers3, Monitor, Network, Package, Plus, Printer, Headset, Router, Server, ShieldCheck, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { Activity, ArrowRight, ArrowUpDown, Building2, Camera, Check, CheckCircle2, Eye, Thermometer, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Copy, Download, FileText, Grid, HardDrive, Headset, Info, Laptop, Layers3, List, Monitor, Network, Package, Plus, Printer, Radio, RotateCcw, Router, Server, ShieldCheck, Smartphone, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X, LogIn, LogOut, UserPlus, KeyRound, PlugZap, MapPin, MapPinOff } from 'lucide-react';
 import { Badge, Button, DataTable, Dialog, Empty, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, downloadExcel, useListState } from './components.jsx';
 import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getOverviewSegmentDevices, isMeztliSegment, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, getSupportSegments, normalizeText } from './domain.mjs';
 
 export function PageHeading({ eyebrow, title, description, updatedAt, children, headingId = 'page-title' }) {
-  const hasActions = Boolean(children || updatedAt);
+  const hasActions = Boolean(children);
   return <div className={`page-heading ${hasActions ? 'has-actions' : 'empty-heading'}`}>
     <div className="sr-only">
       {eyebrow && <p>{eyebrow}</p>}
@@ -13,7 +13,6 @@ export function PageHeading({ eyebrow, title, description, updatedAt, children, 
     </div>
     {hasActions && <div className="page-heading-actions">
       {children}
-      {updatedAt && <div className="update-stamp"><CalendarDays size={23} aria-hidden="true" /><div><span>Última consulta</span><strong>{dateTime(updatedAt)}</strong></div></div>}
     </div>}
   </div>;
 }
@@ -76,9 +75,7 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
     setChosen(draft); setAll(false); setEditing(false);
   };
   return <>
-    <PageHeading eyebrow="Centro operativo" title="Dashboard Operativo" description="Métricas generales y estado de la infraestructura de red" updatedAt={data.updatedAt}>
-      <div className={`operation-status ${errors.length ? 'degraded' : ''}`}><span className="status-light" /><div><strong>{demo ? 'Escenario de demostración' : errors.length ? 'Información parcial' : loading ? 'Consultando servicios' : 'Consulta completada'}</strong><small>{demo ? 'Datos de ejemplo para revisar el diseño' : 'El estado físico requiere telemetría actualizada'}</small></div></div>
-    </PageHeading>
+    <PageHeading eyebrow="Centro operativo" title="Dashboard Operativo" description="Métricas generales y estado de la infraestructura de red" updatedAt={data.updatedAt} />
     <section className="overview-metrics" aria-label="Indicadores de infraestructura">
       <Metric icon={Network} label={demo ? 'Disponibilidad de red' : 'Direcciones disponibles'} value={demo ? '98.7%' : loading ? '—' : number(available)} caption={demo ? '+2.3% vs. mes anterior · Ejemplo' : 'Sin asignar en el inventario IP'} />
       <Metric icon={Monitor} tone="success" label="Dispositivos activos" value={loading ? '—' : number(online)} caption={`De ${number(devices.length)} equipos consultados`} />
@@ -144,15 +141,109 @@ export function Requests({ demo }) {
     return () => { alive = false; controller.abort(); };
   }, [demo, revision]);
   const deviceCount = snapshot.users.reduce((total, user) => total + (Array.isArray(user.devices) ? user.devices.length : 0), 0);
-  const userColumns = [{ key: 'username', label: 'Cuenta' }, { key: 'fullName', label: 'Nombre' }, { key: 'department', label: 'Departamento' }, { key: 'position', label: 'Puesto' }, { key: 'accessRoleProfile', label: 'Perfil de acceso' }, { key: 'status', label: 'Estado', render: row => <Badge status={row.status} /> }, { key: 'devices', label: 'Dispositivos', sortable: false, render: row => <Button onClick={() => setSelectedUser(row)}>{Array.isArray(row.devices) ? row.devices.length : 0} · Ver</Button> }];
-  return <><PageHeading eyebrow="Gestión de altas · Consulta" title="Gestión de Altas de Red" description="Consulta de cuentas y dispositivos registrados en OmniVista. Esta pantalla no crea, aprueba ni modifica altas." updatedAt={snapshot.updatedAt}><Button icon={RefreshCw} busy={snapshot.loading} onClick={() => setRevision(value => value + 1)}>Actualizar consulta</Button></PageHeading>
-    <Notice title="Modo solo consulta">La información proviene de OmniVista. No hay botones de alta, aprobación, asignación ni escritura en esta pantalla.</Notice>
-    {demo && <Notice title="Vista de demostración">Para consultar OmniVista cambia a datos del sistema e inicia sesión con una cuenta autorizada.</Notice>}
-    {snapshot.error && <Notice title="No se pudo consultar OmniVista" tone="danger" action={<Button onClick={() => setRevision(value => value + 1)}>Reintentar</Button>}>{snapshot.error}</Notice>}
-    <div className="metric-grid"><Metric icon={Users} label="Cuentas cotejadas" value={snapshot.loading ? '—' : number(snapshot.users.length)} caption={snapshot.sources.users?.complete ? 'Total recorrido en OmniVista' : 'Total no confirmado'} /><Metric icon={Monitor} tone="success" label="Dispositivos asociados" value={snapshot.loading ? '—' : number(deviceCount)} caption={snapshot.sources.company_properties?.complete ? `${number(snapshot.sources.company_properties?.unassociated || 0)} sin cuenta coincidente` : 'Cotejo parcial'} /><Metric icon={Network} tone="info" label="Coincidencias FortiGate" value={snapshot.loading ? '—' : number(snapshot.sources.fortigate?.matches || 0)} caption={snapshot.sources.fortigate?.status === 200 ? 'MAC asociada encontrada en FortiGate' : 'Fuente no disponible'}/></div>
-    <DataTable title="Cuentas de usuarios OmniVista" rows={snapshot.users} columns={userColumns} state={usersState} noun="cuentas" loading={snapshot.loading} error={snapshot.error} onRetry={() => setRevision(value => value + 1)} exportable={!demo} emptyText="OmniVista no devolvió cuentas en esta consulta." toolbar={<SearchField value={usersState.query} onChange={usersState.setQuery} placeholder="Buscar cuenta, nombre o departamento…" />} />
+  const accountsWithDevices = useMemo(
+    () => snapshot.users.filter(user => Array.isArray(user.devices) && user.devices.length > 0).length,
+    [snapshot.users]
+  );
+  const accountsCoverage = snapshot.users.length ? Math.round((accountsWithDevices / snapshot.users.length) * 100) : 0;
+
+  const userColumns = [
+    { key: 'username', label: 'Cuenta' },
+    { key: 'fullName', label: 'Nombre' },
+    { key: 'department', label: 'Departamento' },
+    { key: 'position', label: 'Puesto' },
+    { key: 'accessRoleProfile', label: 'Perfil de acceso' },
+    { key: 'status', label: 'Estado', render: row => <Badge status={row.status} /> },
+    {
+      key: 'devices',
+      label: 'Dispositivos',
+      sortable: false,
+      render: row => (Array.isArray(row.devices) && row.devices.length > 0) ? (
+        <Button variant="secondary" onClick={() => setSelectedUser(row)}>
+          {row.devices.length} {row.devices.length === 1 ? 'equipo' : 'equipos'} · Ver
+        </Button>
+      ) : (
+        <span className="text-muted text-xs">Sin equipos</span>
+      )
+    }
+  ];
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="Gestión de altas · Consulta"
+        title="Gestión de Altas de Red"
+        description="Consulta de cuentas y dispositivos registrados en OmniVista. Esta pantalla no crea, aprueba ni modifica altas."
+        updatedAt={snapshot.updatedAt}
+      />
+
+      <div className="altas-banner-strip">
+        <div className="altas-badge-readonly">
+          <Info size={14} aria-hidden="true" />
+          <span>Modo solo consulta · OmniVista</span>
+        </div>
+        <p className="altas-readonly-desc">
+          Consulta de cuentas y terminales en OmniVista con cotejo en FortiGate. Las altas y asignaciones se gestionan en las consolas centrales.
+        </p>
+        {snapshot.updatedAt && (
+          <span className="altas-sync-time">
+            Actualizado: {dateTime(snapshot.updatedAt)}
+          </span>
+        )}
+      </div>
+
+      {demo && <Notice title="Vista de demostración">Para consultar OmniVista cambia a datos del sistema e inicia sesión con una cuenta autorizada.</Notice>}
+      {snapshot.error && <Notice title="No se pudo consultar OmniVista" tone="danger" action={<Button onClick={() => setRevision(value => value + 1)}>Reintentar</Button>}>{snapshot.error}</Notice>}
+
+      <div className="metric-grid">
+        <Metric
+          icon={Users}
+          label="Cuentas cotejadas"
+          value={snapshot.loading ? '—' : number(snapshot.users.length)}
+          caption={snapshot.sources.users?.complete ? 'Total recorrido en OmniVista' : 'Total no confirmado'}
+        />
+        <Metric
+          icon={Monitor}
+          tone="success"
+          label="Dispositivos asociados"
+          value={snapshot.loading ? '—' : number(deviceCount)}
+          caption={snapshot.sources.company_properties?.complete ? `${number(snapshot.sources.company_properties?.unassociated || 0)} sin cuenta coincidente` : 'Cotejo parcial'}
+        />
+        <Metric
+          icon={ShieldCheck}
+          tone="gold"
+          label="Cuentas con equipo"
+          value={snapshot.loading ? '—' : number(accountsWithDevices)}
+          caption={`${accountsCoverage}% con terminal vinculada`}
+        />
+        <Metric
+          icon={Network}
+          tone="info"
+          label="Coincidencias FortiGate"
+          value={snapshot.loading ? '—' : number(snapshot.sources.fortigate?.matches || 0)}
+          caption={snapshot.sources.fortigate?.status === 200 ? 'MAC asociada encontrada en FortiGate' : 'Fuente no disponible'}
+        />
+      </div>
+
+      <DataTable
+        title="Cuentas de usuarios OmniVista"
+        rows={snapshot.users}
+        columns={userColumns}
+        state={usersState}
+        noun="cuentas"
+        loading={snapshot.loading}
+        error={snapshot.error}
+        onRetry={() => setRevision(value => value + 1)}
+        exportable={!demo}
+        emptyText="OmniVista no devolvió cuentas en esta consulta."
+        toolbar={
+          <SearchField value={usersState.query} onChange={usersState.setQuery} placeholder="Buscar cuenta, nombre o departamento…" />
+        }
+      />
     <Dialog open={Boolean(selectedUser)} title={`Dispositivos de ${selectedUser?.username || 'la cuenta'}`} onClose={() => setSelectedUser(null)} wide><p className="muted">Cotejo entre Company Property de OmniVista y el inventario observado por FortiGate.</p>{selectedUser?.devices?.length ? <div className="detail-list">{selectedUser.devices.map((device, index) => <article className="panel" key={`${device.deviceMac || device.id || index}`}><div className="flex items-center justify-between gap-3"><strong>{device.deviceName || device.deviceMac || 'Dispositivo sin nombre'}</strong><Badge status={device.forti?.status || device.status} /></div><dl className="detail-grid"><div><dt>MAC</dt><dd>{device.deviceMac || '—'}</dd></div><div><dt>Equipo OmniVista</dt><dd>{device.lastAccessDeviceName || '—'}</dd></div><div><dt>Categoría / familia</dt><dd>{[device.deviceCategory, device.deviceFamily].filter(Boolean).join(' · ') || '—'}</dd></div><div><dt>Sistema operativo</dt><dd>{device.deviceOS || '—'}</dd></div><div><dt>Cotejo</dt><dd>{device.cotejo}</dd></div>{device.forti && <><div><dt>FortiGate · IP</dt><dd>{device.forti.ip || '—'}</dd></div><div><dt>FortiGate · tipo / interfaz</dt><dd>{[device.forti.type, device.forti.interface].filter(Boolean).join(' · ') || '—'}</dd></div><div><dt>FortiGate · última detección</dt><dd>{device.forti.last_seen || '—'}</dd></div></>}</dl></article>)}</div> : <Empty title="Sin dispositivos asociados">OmniVista no tiene terminales asociadas a esta cuenta en la consulta actual.</Empty>}</Dialog>
-    <Note title="Alcance de la consulta">La tabla principal contiene cuentas; los dispositivos aparecen al seleccionar “Ver”. La información FortiGate es una coincidencia por MAC (y no modifica ningún equipo).</Note></>;
+      <Note title="Alcance de la consulta">La tabla principal contiene cuentas; los dispositivos aparecen al seleccionar “Ver”. La información FortiGate es una coincidencia por MAC (y no modifica ningún equipo).</Note>
+    </>
+  );
 }
 export function Inventory({ data, demo, navigate, openEditor, errors, loading, refresh, canWrite, canExport }) {
   const state = useListState('recursos');
@@ -184,7 +275,7 @@ export function Addresses({ data, navigate, openEditor, loading, errors, refresh
   const filteredBySegment = filtered.reduce((groups, row) => { const key = row.vlan || 'Sin segmento'; (groups[key] ||= []).push(row); return groups; }, {});
   const chooseStatus = status => state.setFilter('status', status === 'all' ? '' : status);
   const labelForStatus = status => ({ available: 'Libre', occupied: 'Ocupada', reserved: 'Reservada' }[status] || 'Sin estado');
-  return <><PageHeading eyebrow="Inventario de infraestructura" title="Direcciones IP" description="Consulta de direcciones disponibles y asignadas por segmento de red" updatedAt={data.updatedAt}><Button icon={Download} disabled={!filtered.length || !canExport} onClick={() => downloadCsv('Direcciones-IP', columns.filter(c => c.key !== 'actions'), filtered)}>Exportar</Button></PageHeading>
+  return <><PageHeading eyebrow="Inventario de infraestructura" title="Direcciones IP" description="Consulta de direcciones disponibles y asignadas por segmento de red" updatedAt={data.updatedAt} />
     <section className="ip-kpi-grid" aria-label="Resumen de direcciones IP">{[
       ['all', 'Total direcciones', counts.all, 'Todos los segmentos'], ['available', 'Libres disponibles', counts.available, 'Listas para asignación'], ['occupied', 'IPs ocupadas', counts.occupied, 'Asignadas en producción'], ['reserved', 'Reservadas / gateways', counts.reserved, 'Gateways y VIPs de enlace'],
     ].map(([status, label, value, caption]) => <button key={status} type="button" className={`ip-kpi ip-kpi-${status} ${(!state.filters.status && status === 'all') || state.filters.status === status ? 'is-active' : ''}`} onClick={() => chooseStatus(status)}><span>{label}</span><strong>{number(value)}</strong><i style={{ width: `${counts.all ? Math.round(value / counts.all * 100) : 0}%` }} /><small>{caption}</small></button>)}</section>
@@ -192,6 +283,77 @@ export function Addresses({ data, navigate, openEditor, loading, errors, refresh
     {view === 'matrix' ? <section className="ip-matrix" aria-label="Matriz de direcciones IP">{loading ? <div className="loading-state">Cargando direcciones IP…</div> : errors.ips ? <Notice title="No se pudieron cargar las direcciones" tone="warning" action={<Button onClick={refresh}>Reintentar</Button>}>{errors.ips}</Notice> : Object.entries(filteredBySegment).map(([segment, ips]) => <section key={segment} className="ip-segment"><div><h2>{segment}</h2><span>{ips.length} IPs</span></div><article>{ips.map(ip => <button key={ip.ip} type="button" className={`ip-cell ip-cell-${ip.status}`} onClick={() => openEditor('ip', ip)} title={`${ip.ip} · ${labelForStatus(ip.status)}${ip.hostname ? ` · ${ip.hostname}` : ''}`}><strong>{displayIp(ip.ip)}</strong><small><i />{labelForStatus(ip.status)}</small></button>)}</article></section>)}{!loading && !errors.ips && !filtered.length && <Empty title="Sin direcciones coincidentes">Modifica los filtros o busca otra dirección.</Empty>}</section> : <DataTable title="Direcciones IP" rows={rows} columns={columns} state={state} noun="direcciones" loading={loading} error={errors.ips} onRetry={refresh} />}
     <Note>Las asignaciones modifican el inventario local. No cambian reservas DHCP ni aplican configuraciones al firewall.</Note></>;
 }
+export function CopyButton({ text, title = 'Copiar', className = '' }) {
+  const [copied, setCopied] = useState(false);
+  if (!text || text === '—' || text === 'Pendiente de confirmar') return null;
+
+  const handleCopy = async e => {
+    e.stopPropagation();
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      // ignore
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      className={`inline-copy-btn ${copied ? 'is-copied' : ''} ${className}`}
+      onClick={handleCopy}
+      title={copied ? '¡Copiado!' : title}
+      aria-label={copied ? '¡Copiado!' : title}
+    >
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+      {copied && <span className="copy-tooltip">Copiado</span>}
+    </button>
+  );
+}
+
+export function DeviceTypeBadge({ type }) {
+  let Icon = HardDrive;
+  let label = type || 'Dispositivo';
+  let theme = 'type-other';
+
+  if (type === 'Computadora') {
+    Icon = Monitor;
+    label = 'Computadora';
+    theme = 'type-computer';
+  } else if (type === 'Impresora') {
+    Icon = Printer;
+    label = 'Impresora';
+    theme = 'type-printer';
+  } else if (type === 'Teléfono') {
+    Icon = Smartphone;
+    label = 'Teléfono';
+    theme = 'type-phone';
+  } else if (['Equipo de red', 'Router', 'Switch', 'Access Point'].includes(type)) {
+    Icon = Router;
+    label = type;
+    theme = 'type-network';
+  }
+
+  return (
+    <span className={`device-type-badge ${theme}`}>
+      <Icon size={12} aria-hidden="true" />
+      <span>{label}</span>
+    </span>
+  );
+}
+
 export function Devices({ data, navigate, openEditor, loading, errors, refresh, canExport, selectedSegment }) {
   const state = useListState('equipos');
   const segment = data.segments.find(item => segmentKey(item) === selectedSegment);
@@ -208,11 +370,15 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
       value: r => r.omnivista?.device_name || r.name,
       render: r => (
         <div className="cell-detail">
-          <div className="flex items-center gap-2">
-            <strong>{r.omnivista?.device_name || r.name}</strong>
+          <div className="flex items-center gap-2 flex-wrap">
+            <strong className="device-name-text">{r.omnivista?.device_name || r.name}</strong>
             {r.omnivista?.matched && <span className="network-tag omni-tag" title="Cotejado con Company Property de OmniVista 2500">OmniVista</span>}
           </div>
-          <small>{[r.vendor, r.omnivista?.account && `Cuenta: ${r.omnivista.account}`, r.name !== r.omnivista?.device_name && r.name].filter(Boolean).join(' · ')}</small>
+          <div className="device-vendor-line">
+            {r.vendor && <span className="vendor-pill">{r.vendor}</span>}
+            {r.omnivista?.account && <small className="text-muted">Cuenta: {r.omnivista.account}</small>}
+            {r.name !== r.omnivista?.device_name && r.name && <small className="text-muted">Forti: {r.name}</small>}
+          </div>
         </div>
       )
     },
@@ -220,37 +386,57 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
       key: 'ip',
       label: 'Dirección IP',
       value: r => r.ip_source === 'unconfirmed' ? 'Pendiente de confirmar' : (r.ip || '—'),
-      render: r => (
-        <div className="cell-detail">
-          <span className="ip-address">{r.ip_source === 'unconfirmed' ? 'Pendiente de confirmar' : (r.ip || '—')}</span>
-          {r.is_reserved && <small>IP reservada{r.reserved_ip && r.reserved_ip !== r.ip ? `: ${r.reserved_ip}` : ''}</small>}
-        </div>
-      )
+      render: r => {
+        const isConfirmed = r.ip_source !== 'unconfirmed' && r.ip && r.ip !== '—';
+        const ipText = isConfirmed ? r.ip : (r.ip_source === 'unconfirmed' ? 'Pendiente de confirmar' : '—');
+        return (
+          <div className="cell-detail">
+            <div className="flex items-center gap-1.5">
+              <span className={`ip-address ${!isConfirmed ? 'ip-unconfirmed' : ''}`}>{ipText}</span>
+              {isConfirmed && <CopyButton text={r.ip} title="Copiar dirección IP" />}
+            </div>
+            {r.is_reserved && (
+              <small className="ip-reserved-tag">
+                IP reservada{r.reserved_ip && r.reserved_ip !== r.ip ? `: ${r.reserved_ip}` : ''}
+              </small>
+            )}
+          </div>
+        );
+      }
     },
     {
       key: 'mac',
       label: 'MAC',
       value: r => r.mac || '—',
-      render: r => <span className="font-mono text-muted">{r.mac || '—'}</span>
+      render: r => (
+        <div className="flex items-center gap-1.5 font-mono text-muted text-xs">
+          <span>{r.mac || '—'}</span>
+          {r.mac && r.mac !== '—' && <CopyButton text={r.mac} title="Copiar dirección MAC" />}
+        </div>
+      )
     },
     {
       key: 'type',
       label: 'Tipo',
       value: r => formatDeviceType(r.type, r.os || r.omnivista?.os || r.raw?.os_name, r.omnivista?.device_name || r.name, r.vendor),
-      render: r => formatDeviceType(r.type, r.os || r.omnivista?.os || r.raw?.os_name, r.omnivista?.device_name || r.name, r.vendor)
+      render: r => <DeviceTypeBadge type={formatDeviceType(r.type, r.os || r.omnivista?.os || r.raw?.os_name, r.omnivista?.device_name || r.name, r.vendor)} />
     },
     {
       key: 'location',
       label: 'Ubicación',
       value: r => r.omnivista?.location || formatLocation(r.location, r.vendor, segment?.name || r.interface),
-      render: r => r.omnivista?.location ? (
-        <div className="cell-detail">
-          <strong className="text-location">{r.omnivista.location}</strong>
-          {r.omnivista.ap_name && <small className="text-muted">AP: {r.omnivista.ap_name}</small>}
-        </div>
-      ) : (
-        formatLocation(r.location, r.vendor, segment?.name || r.interface)
-      )
+      render: r => {
+        if (r.omnivista?.location) {
+          return (
+            <div className="cell-detail">
+              <strong className="text-location">{r.omnivista.location}</strong>
+              {r.omnivista.ap_name && <small className="text-muted">AP: {r.omnivista.ap_name}</small>}
+            </div>
+          );
+        }
+        const loc = formatLocation(r.location, r.vendor, segment?.name || r.interface);
+        return (!loc || loc === '—') ? <span className="location-empty">Sin ubicación</span> : <span className="location-text">{loc}</span>;
+      }
     },
     {
       key: 'status',
@@ -262,7 +448,7 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
       key: 'activity',
       label: 'Última actividad',
       value: r => r.activity || r.last_seen || 'Reciente',
-      render: r => r.activity || r.last_seen || 'Reciente'
+      render: r => <span className="text-muted text-xs">{r.activity || r.last_seen || 'Reciente'}</span>
     }
   ];
 
@@ -277,26 +463,521 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
     _search_mac: d.mac || '',
   }));
 
-  return <><PageHeading eyebrow="Inventario de infraestructura" title="Dispositivos de Red" description="Equipos detectados y consulta de información técnica" updatedAt={data.updatedAt}>
-    {omniMatchedCount > 0 && <span className="network-tag omni-badge">{number(omniMatchedCount)} cotejados en OmniVista</span>}
-    {canExport && <Button icon={Download} disabled={!devices.length} onClick={() => downloadCsv('Dispositivos-de-Red', columns, rows)}>Exportar</Button>}
-  </PageHeading>
-    {selectedSegment && <Notice title={segment ? `Segmento: ${segment.name || segment.interface}` : 'Segmento no disponible'} action={<Button onClick={() => { state.setPage(1); navigate('dispositivos'); }}>Ver todos los segmentos</Button>}>{segment ? [segment.subnet, segment.default_gateway && `Gateway ${segment.default_gateway}`, segment.netmask && `Máscara ${segment.netmask}`].filter(Boolean).join(' · ') || segment.ip_ranges?.join(', ') : 'Actualiza la consulta para cargar este segmento.'}</Notice>}
-    <div className="toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar por equipo, IP, MAC o fabricante…" /><Select label="Estado" value={state.filters.status || ''} onChange={e => state.setFilter('status', e.target.value)}><option value="">Todos los estados</option><option value="online">En servicio</option><option value="offline">Reservados fuera de línea</option></Select><Select label="Dispositivos por página" value={sizeChoice} onChange={e => state.setPageSize(e.target.value)}><option value="25">25 dispositivos</option><option value="50">50 dispositivos</option><option value="100">100 dispositivos</option><option value="all">Todos los dispositivos</option></Select><div className="segment-devices-hint"><Info size={16} aria-hidden="true" /><span>Selecciona cualquier fila para abrir el detalle técnico</span></div></div>
-    <DataTable title="Dispositivos de red" rows={rows} columns={columns} state={state} pageSize={pageSize} noun="dispositivos" exportable={false} loading={loading} error={errors.devices || (selectedSegment && errors.segments)} onRetry={refresh} onRowClick={r => openEditor('device-detail', r)} rowClassName={r => r.status === 'offline' ? 'segment-device-row device-row-offline' : 'segment-device-row'} />
-    <Note>Se muestran equipos en línea y equipos con reserva DHCP, aunque estén desconectados. El estado en línea proviene de FortiGate. Las IP se actualizan por MAC con DHCP y ARP; los equipos sin dirección confirmada permanecen visibles en su interfaz. Los registros históricos sin reserva se excluyen.</Note></>;
-}
-export function AuditLog({ data, records, navigate, openEditor, loading, errors, refresh, idfView = false, canWrite, canExport }) {
-  const state = useListState(idfView ? 'reportes-idf' : 'bitacora');
-  const columns = [{ key: 'id', label: 'Folio', render: r => <span className="folio">{r.id}</span> }, { key: 'idf', label: 'IDF' }, { key: 'title', label: 'Actividad', render: r => detailText(r.title, r.description) }, { key: 'actor', label: 'Responsable' }, { key: 'temp', label: 'Temperatura', render: r => r.temp == null ? '—' : `${r.temp} °C` }, { key: 'status', label: 'Estado', render: r => <Badge status={r.status} /> }, { key: 'date', label: 'Fecha y hora', render: r => dateTime(r.date) }, { key: 'actions', label: 'Acciones', sortable: false, render: r => <Button onClick={() => openEditor('report-detail', r)}>Ver</Button> }];
-  return <><PageHeading eyebrow={idfView ? 'Registro IDF · Supervisión' : 'Trazabilidad operativa'} title={idfView ? 'Reportes e incidencias de IDF' : 'Bitácora de Registros'} description={idfView ? 'Consulta los registros enviados desde dispositivos móviles' : 'Historial de inspecciones e incidencias en cuartos de telecomunicaciones'} updatedAt={data.updatedAt} />
-    {idfView && <><section className="metric-grid"><Metric icon={FileText} label="Reportes recibidos" value={number(records.length)} caption="registros en la bitácora" /><Metric icon={TriangleAlert} tone="danger" label="Con incidencias" value={number(records.filter(r => r.status === 'open').length)} caption="inconvenientes reportados" /><Metric icon={CheckCircle2} tone="success" label="Sin pendientes" value={number(records.filter(r => r.status === 'resolved').length)} caption="visitas sin incidencias abiertas" /><Metric icon={Building2} tone="gold" label="IDFs con registros" value={number(new Set(records.map(r => r.idfId)).size)} caption="cuartos con actividad documentada" /></section><Notice title="Vista de consulta en escritorio">Las entradas se registran desde Registro IDF en el móvil. Desde el detalle puedes consultar una incidencia y registrar su resolución; el reporte original se conserva.</Notice></>}
-    <div className="toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar folio, responsable o actividad…" /><Select label="IDF" value={state.filters.idf || ''} onChange={e => state.setFilter('idf', e.target.value)}><option value="">Todos los IDFs</option>{options(records.map(r => r.idf))}</Select><Select label="Tipo de reporte" value={state.filters.status || ''} onChange={e => state.setFilter('status', e.target.value)}><option value="">Todos los reportes</option><option value="open">Con incidencias abiertas</option><option value="resolved">Sin pendientes</option></Select><Button icon={RefreshCw} busy={loading} onClick={refresh}>Actualizar reportes</Button></div>
-    <DataTable title={idfView ? 'Reportes enviados desde móvil' : 'Bitácora de visitas'} rows={records} rowKey="key" columns={columns} state={state} noun="registros" exportable={canExport} loading={loading} error={errors.reports || errors.idfs} onRetry={refresh} />
-    {!idfView && canWrite && <div className="idf-mobile"><Button icon={Plus} onClick={() => navigate('idf')}>Registrar otra entrada</Button></div>}
-    <Note>Horarios de Ciudad de México. Los registros nuevos incluyen la identidad de la cuenta y la fecha asignadas por el servidor. Los registros históricos conservan la información declarada originalmente.</Note></>;
+  return (
+    <>
+      <PageHeading eyebrow="Inventario de infraestructura" title="Dispositivos de Red" description="Equipos detectados y consulta de información técnica" updatedAt={data.updatedAt} />
+
+      {selectedSegment && (
+        <Notice
+          title={segment ? `Segmento: ${segment.name || segment.interface}` : 'Segmento no disponible'}
+          action={<Button onClick={() => { state.setPage(1); navigate('dispositivos'); }}>Ver todos los segmentos</Button>}
+        >
+          {segment ? [segment.subnet, segment.default_gateway && `Gateway ${segment.default_gateway}`, segment.netmask && `Máscara ${segment.netmask}`].filter(Boolean).join(' · ') || segment.ip_ranges?.join(', ') : 'Actualiza la consulta para cargar este segmento.'}
+        </Notice>
+      )}
+
+      <div className="toolbar devices-toolbar">
+        <SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar por equipo, IP, MAC o fabricante…" />
+        <Select label="Estado" value={state.filters.status || ''} onChange={e => state.setFilter('status', e.target.value)}>
+          <option value="">Todos los estados</option>
+          <option value="online">En servicio</option>
+          <option value="offline">Reservados fuera de línea</option>
+        </Select>
+        <Select label="Dispositivos por página" value={sizeChoice} onChange={e => state.setPageSize(e.target.value)}>
+          <option value="25">25 dispositivos</option>
+          <option value="50">50 dispositivos</option>
+          <option value="100">100 dispositivos</option>
+          <option value="all">Todos los dispositivos</option>
+        </Select>
+        {canExport && (
+          <Button
+            icon={Download}
+            disabled={!devices.length}
+            onClick={() => downloadCsv('Dispositivos-de-Red', columns, rows)}
+          >
+            Exportar
+          </Button>
+        )}
+        <div className="devices-toolbar-right">
+          {omniMatchedCount > 0 && <span className="network-tag omni-badge">{number(omniMatchedCount)} cotejados en OmniVista</span>}
+          <div className="segment-devices-hint">
+            <Info size={16} aria-hidden="true" />
+            <span>Selecciona cualquier fila para abrir el detalle técnico</span>
+          </div>
+        </div>
+      </div>
+
+      <DataTable
+        title="Dispositivos de red"
+        rows={rows}
+        columns={columns}
+        state={state}
+        pageSize={pageSize}
+        noun="dispositivos"
+        exportable={false}
+        loading={loading}
+        error={errors.devices || (selectedSegment && errors.segments)}
+        onRetry={refresh}
+        onRowClick={r => openEditor('device-detail', r)}
+        rowClassName={r => r.status === 'offline' ? 'segment-device-row device-row-offline' : 'segment-device-row'}
+      />
+
+      <Note>
+        Se muestran equipos en línea y equipos con reserva DHCP, aunque estén desconectados. El estado en línea proviene de FortiGate. Las IP se actualizan por MAC con DHCP y ARP; los equipos sin dirección confirmada permanecen visibles en su interfaz. Los registros históricos sin reserva se excluyen.
+      </Note>
+    </>
+  );
 }
 
+export function MeztliManagement({ data, openEditor, loading, errors, refresh, canExport }) {
+  const state = useListState('gestion-meztli');
+  // La vista no debe iniciar ocultando los equipos admitidos: cuando todos
+  // tienen reserva DHCP, el filtro "No admitidos" hacía parecer que la tabla
+  // no se actualizaba aunque FortiGate hubiera devuelto concesiones vigentes.
+  const [admissionFilter, setAdmissionFilter] = useState('all');
+  const [deviceTypeFilter, setDeviceTypeFilter] = useState('');
+  const directLeases = Array.isArray(data.meztliLeases) ? data.meztliLeases : [];
+  const meztliSegment = data.segments.find(segment => normalizeText(`${segment.name || ''} ${segment.interface || ''} ${segment.vlan || ''}`).includes('meztli') || /\b94\b/.test(String(segment.vlan || '')));
+  const looksLikeMeztli = device => normalizeText([device.interface, device.vlan, device.ssid, device.network, device.omnivista?.ssid, device.omnivista?.profile].filter(Boolean).join(' ')).includes('meztli') || /\b94\b/.test(String(device.vlan || ''));
+  const belongsToMeztli = device => (meztliSegment && deviceInSegment(device, meztliSegment)) || looksLikeMeztli(device);
+  const meztliDevices = data.devices.filter(belongsToMeztli);
+  const directMeztliLeases = directLeases.filter(lease => normalizeText(lease.interface).includes('meztli'));
+  // DHCP leases are the source of truth when available; device inventory is only
+  // retained as a visual fallback for demo/offline integrations.
+  const connected = directMeztliLeases.length ? directMeztliLeases.map(lease => ({ ...lease, name: lease.device_name || lease.hostname || lease.mac || 'Sin identificar', status: lease.is_online === false ? 'offline' : 'online', activity: lease.is_online === false ? 'Sin conexión' : 'En línea' })) : meztliDevices.filter(device => device.status === 'online' || device.is_online === true);
+  const reserved = connected.filter(device => device.is_reserved === true);
+  const unmanaged = connected.filter(device => device.is_reserved !== true);
+  const getDeviceType = device => {
+    const identity = normalizeText([device.name, device.hostname, device.type, device.detected_device, device.vendor, device.os].filter(Boolean).join(' '));
+    if (/iphone|android|pixel|samsung|redmi|moto|huawei|ipad/.test(identity)) return 'Móvil';
+    if (/espressif|\besp[ -]?\d|iot/.test(identity)) return 'IoT';
+    if (/poco|laptop|notebook|macbook|windows|desktop|workstation/.test(identity)) return 'Equipo de usuario';
+    return device.type || device.detected_device || formatDeviceType(device.type, device.os, device.name || device.hostname, device.vendor) || 'No identificado';
+  };
+  const allRows = connected.map((device, index) => ({
+    ...device,
+    id: device.id || `${device.interface || 'meztli'}:${device.mac || device.ip || index}`,
+    admission: device.is_reserved === true ? 'admitted' : 'not-admitted',
+    deviceType: getDeviceType(device),
+  }));
+  const rows = allRows.filter(device => (admissionFilter === 'all' || device.admission === admissionFilter) && (!deviceTypeFilter || device.deviceType === deviceTypeFilter));
+  const elapsedSinceLease = timestamp => {
+    const seconds = Math.max(0, Math.floor(Date.now() / 1000 - Number(timestamp)));
+    if (!timestamp || !Number.isFinite(seconds)) return 'No disponible';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return hours ? `${hours} h ${minutes} min` : `${Math.max(1, minutes)} min`;
+  };
+  const columns = [
+    { key: 'name', label: 'Dispositivo', value: row => row.device_name || row.omnivista?.device_name || row.name || row.hostname || 'Sin identificar', render: row => detailText(row.device_name || row.omnivista?.device_name || row.name || row.hostname || 'Sin identificar', row.deviceType || row.vendor || 'Detectado por FortiGate') },
+    { key: 'ip', label: 'Dirección IP', value: row => row.ip || '—', render: row => <span className="ip-address">{row.ip || '—'}</span> },
+    { key: 'mac', label: 'MAC', value: row => row.mac || '—', render: row => <span className="font-mono text-muted text-xs">{row.mac || '—'}</span> },
+    { key: 'online', label: 'Estado', value: row => row.is_online === false ? 'offline' : 'online', render: row => <Badge status={row.is_online === false ? 'offline' : 'online'}>{row.is_online === false ? 'Sin conexión' : 'En línea'}</Badge> },
+    { key: 'uptime', label: 'Tiempo en línea', value: row => row.lease_started_at || 0, render: row => row.is_online === false ? detailText('Sin conexión', 'Concesión DHCP vigente') : detailText(elapsedSinceLease(row.lease_started_at), 'desde la última renovación DHCP') },
+    { key: 'admission', label: 'Admisión', value: row => row.admission, render: row => row.admission === 'admitted' ? <span className="meztli-reservation-mark meztli-table-mark"><ShieldCheck size={13} /> Admitido</span> : <span className="meztli-unapproved-mark"><TriangleAlert size={13} /> No admitido</span> },
+  ];
+  return <>
+    <PageHeading eyebrow="Supervisión de red inalámbrica" title="Gestión Meztli" description="Dispositivos conectados a Meztli sin reserva DHCP" updatedAt={data.updatedAt} />
+    {unmanaged.length > 0 && <Notice title="Aviso: conexiones no admitidas detectadas">Hay <strong>{number(unmanaged.length)} dispositivo{unmanaged.length === 1 ? '' : 's'}</strong> conectado{unmanaged.length === 1 ? '' : 's'} a <strong>SSID-Meztli</strong> sin reserva DHCP. Revísalos antes de realizar una acción en la red.</Notice>}
+    <section className="metric-grid meztli-metrics"><Metric icon={Wifi} label="Conectados a Meztli" value={number(connected.length)} caption="actividad detectada en este momento" /><Metric icon={ShieldCheck} tone="success" label="Con reserva DHCP" value={number(reserved.length)} caption="autorizados para permanecer conectados" ><span className="meztli-reservation-mark"><ShieldCheck size={12} /> Reserva activa</span></Metric><Metric icon={TriangleAlert} tone="danger" label="No deberían estar conectados" value={number(unmanaged.length)} caption="sin reserva DHCP · requieren revisión" /></section>
+    <DataTable title="Conexiones de SSID-Meztli" rows={rows} columns={columns} state={state} pageSize={25} noun={admissionFilter === 'not-admitted' ? 'dispositivos por revisar' : 'dispositivos'} toolbar={<div className="toolbar meztli-table-toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar dispositivo, IP o MAC…" /><Select label="Admisión" value={admissionFilter} onChange={event => setAdmissionFilter(event.target.value)}><option value="not-admitted">No admitidos</option><option value="admitted">Admitidos (reserva DHCP)</option><option value="all">Todos</option></Select><Select label="Tipo de dispositivo" value={deviceTypeFilter} onChange={event => setDeviceTypeFilter(event.target.value)}><option value="">Todos los tipos</option>{options(allRows.map(row => row.deviceType))}</Select></div>} exportable={canExport} loading={loading} error={errors.meztliLeases || errors.devices} onRetry={refresh} onRowClick={row => openEditor('device-detail', row)} emptyText={connected.length ? admissionFilter === 'not-admitted' ? 'Todos los dispositivos conectados a Meztli tienen una reserva DHCP.' : 'No hay dispositivos que coincidan con los filtros seleccionados.' : 'FortiGate no devolvió concesiones DHCP activas para SSID-Meztli.'} />
+    <Note title="Alcance de Gestión Meztli">La vista es de supervisión: no modifica reservas DHCP ni desconecta equipos. Abre un registro para revisar sus datos técnicos antes de realizar cualquier acción en la red.</Note>
+  </>;
+}
+export function AuditLog({
+  data,
+  records,
+  navigate,
+  openEditor,
+  loading,
+  errors,
+  refresh,
+  idfView = false,
+  filterIdf = null,
+  canWrite,
+  canExport,
+  canResolve,
+  onResolve,
+}) {
+  const state = useListState(idfView ? 'reportes-idf' : 'bitacora');
+  const [resolvingId, setResolvingId] = useState(null);
+
+  useEffect(() => {
+    if (filterIdf) {
+      state.setFilter('idf', filterIdf);
+    }
+  }, [filterIdf]);
+
+  const enrichedRecords = useMemo(() => {
+    return (records || []).map(r => {
+      const hasEvidence = Boolean(r.evidence || r.evidenceDemo);
+      const isTempAlert = r.temp != null && Number(r.temp) >= 25;
+      return {
+        ...r,
+        hasEvidence: hasEvidence ? 'yes' : 'no',
+        tempAlert: isTempAlert ? 'alert' : 'normal',
+        evidenceLabel: hasEvidence ? 'Con foto' : 'Sin foto',
+        statusLabel: r.status === 'resolved' ? 'Resuelto' : 'Abierto',
+        formattedDate: dateTime(r.date),
+        temperatureValue: r.temp != null ? `${r.temp} °C` : '—',
+      };
+    });
+  }, [records]);
+
+  const counts = useMemo(() => {
+    const total = enrichedRecords.length;
+    const open = enrichedRecords.filter(r => r.status === 'open').length;
+    const resolved = enrichedRecords.filter(r => r.status === 'resolved').length;
+    const evidence = enrichedRecords.filter(r => r.hasEvidence === 'yes').length;
+    const tempAlert = enrichedRecords.filter(r => r.tempAlert === 'alert').length;
+    const idfsCount = new Set(enrichedRecords.map(r => r.idfId || r.idf)).size;
+    return { total, open, resolved, evidence, tempAlert, idfsCount };
+  }, [enrichedRecords]);
+
+  const handleResolve = async (record) => {
+    if (!onResolve) return;
+    setResolvingId(record.id || record.key);
+    try {
+      await onResolve(record);
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
+  const auditKpis = [
+    {
+      id: 'all',
+      label: 'Total registros',
+      value: counts.total,
+      caption: `${counts.idfsCount} IDFs con visitas`,
+      icon: FileText,
+      tone: 'total',
+      pct: 100,
+      isActive: !state.filters.status && !state.filters.hasEvidence && !state.filters.tempAlert,
+      onClick: () => {
+        state.setFilter('status', '');
+        state.setFilter('hasEvidence', '');
+        state.setFilter('tempAlert', '');
+      },
+    },
+    {
+      id: 'open',
+      label: 'Incidencias pendientes',
+      value: counts.open,
+      caption: 'Inconvenientes por resolver',
+      icon: TriangleAlert,
+      tone: 'occupied',
+      pct: counts.total ? Math.round((counts.open / counts.total) * 100) : 0,
+      isActive: state.filters.status === 'open',
+      onClick: () => {
+        state.setFilter('hasEvidence', '');
+        state.setFilter('tempAlert', '');
+        state.setFilter('status', state.filters.status === 'open' ? '' : 'open');
+      },
+    },
+    {
+      id: 'resolved',
+      label: 'Sin pendientes / Conformes',
+      value: counts.resolved,
+      caption: 'Inspecciones atendidas',
+      icon: CheckCircle2,
+      tone: 'available',
+      pct: counts.total ? Math.round((counts.resolved / counts.total) * 100) : 0,
+      isActive: state.filters.status === 'resolved',
+      onClick: () => {
+        state.setFilter('hasEvidence', '');
+        state.setFilter('tempAlert', '');
+        state.setFilter('status', state.filters.status === 'resolved' ? '' : 'resolved');
+      },
+    },
+    {
+      id: 'evidence',
+      label: 'Con evidencia fotográfica',
+      value: counts.evidence,
+      caption: 'Inspecciones con fotografía',
+      icon: Camera,
+      tone: 'evidence',
+      pct: counts.total ? Math.round((counts.evidence / counts.total) * 100) : 0,
+      isActive: state.filters.hasEvidence === 'yes',
+      onClick: () => {
+        state.setFilter('status', '');
+        state.setFilter('tempAlert', '');
+        state.setFilter('hasEvidence', state.filters.hasEvidence === 'yes' ? '' : 'yes');
+      },
+    },
+    {
+      id: 'temp',
+      label: 'Alertas térmicas',
+      value: counts.tempAlert,
+      caption: 'Temperatura ≥ 25 °C',
+      icon: Thermometer,
+      tone: 'reserved',
+      pct: counts.total ? Math.round((counts.tempAlert / counts.total) * 100) : 0,
+      isActive: state.filters.tempAlert === 'alert',
+      onClick: () => {
+        state.setFilter('status', '');
+        state.setFilter('hasEvidence', '');
+        state.setFilter('tempAlert', state.filters.tempAlert === 'alert' ? '' : 'alert');
+      },
+    },
+  ];
+
+  // 6 perfectly proportioned columns: generous width for Actions so NO buttons are cut off
+  const columns = [
+    {
+      key: 'idf',
+      label: 'IDF / Folio',
+      value: r => `${r.idf} ${r.id}`,
+      render: r => (
+        <div className="audit-cell-group">
+          <span className="audit-idf-tag">
+            <Building2 size={13} aria-hidden="true" />
+            <b>{r.idf || 'IDF'}</b>
+          </span>
+          <span className="audit-folio-pill" title={r.id}>
+            {r.id}
+          </span>
+          {r.device && <small className="audit-device-subtext">{r.device}</small>}
+        </div>
+      ),
+    },
+    {
+      key: 'title',
+      label: 'Actividad e incidencia',
+      value: r => `${r.title || ''} ${r.description || ''}`,
+      render: r => (
+        <div className="audit-activity-content">
+          <strong>{r.title || 'Inspección técnica'}</strong>
+          <p className="audit-desc-text" title={r.description}>
+            {r.description || 'Sin notas adicionales.'}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: 'actor',
+      label: 'Responsable y fecha',
+      value: r => `${r.actor} ${r.date}`,
+      render: r => (
+        <div className="audit-actor-group">
+          <div className="audit-actor-line">
+            <span className="audit-actor-avatar" aria-hidden="true">
+              {(r.actor || 'T').charAt(0).toUpperCase()}
+            </span>
+            <span className="audit-actor-name">{r.actor || 'Sin responsable'}</span>
+          </div>
+          <span className="audit-date-subtext">{dateTime(r.date)}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'temp',
+      label: 'Temperatura / Foto',
+      value: r => (r.temp != null ? Number(r.temp) : -999),
+      render: r => {
+        const isHot = r.temp != null && Number(r.temp) >= 25;
+        const hasPhoto = r.hasEvidence === 'yes';
+        return (
+          <div className="audit-conditions-group">
+            {r.temp != null ? (
+              <span className={`audit-temp-pill ${isHot ? 'is-hot' : 'is-normal'}`}>
+                <Thermometer size={12} aria-hidden="true" />
+                <b>{r.temp} °C</b>
+              </span>
+            ) : (
+              <span className="text-muted text-xs">—</span>
+            )}
+            {hasPhoto && (
+              <button
+                type="button"
+                className="audit-photo-badge"
+                onClick={e => {
+                  e.stopPropagation();
+                  openEditor('report-detail', r);
+                }}
+                title="Ver fotografía adjunta"
+              >
+                <Camera size={12} aria-hidden="true" />
+                <span>Foto</span>
+              </button>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'status',
+      label: 'Estado',
+      value: r => r.status,
+      render: r => (
+        <div className="audit-status-cell">
+          <Badge status={r.status}>
+            {r.status === 'resolved' ? 'Resuelto' : 'Abierto'}
+          </Badge>
+          {r.severity && r.status !== 'resolved' && (
+            <span className={`severity-tag severity-${r.severity}`}>
+              {r.severity === 'high' ? 'Alta' : r.severity === 'medium' ? 'Media' : 'Baja'}
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'actions',
+      label: 'Acciones',
+      sortable: false,
+      render: r => (
+        <div className="audit-actions-group" onClick={e => e.stopPropagation()}>
+          <Button
+            icon={Eye}
+            onClick={() => openEditor('report-detail', r)}
+            title="Ver detalle completo"
+          >
+            Ver
+          </Button>
+          {r.status !== 'resolved' && (canResolve || canWrite) && onResolve && (
+            <Button
+              variant="primary"
+              icon={Check}
+              busy={resolvingId === (r.id || r.key)}
+              onClick={() => handleResolve(r)}
+              title="Resolver incidencia"
+            >
+              Resolver
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+  const exportColumns = [
+    { key: 'id', label: 'Folio' },
+    { key: 'idf', label: 'IDF' },
+    { key: 'device', label: 'Equipo / Componente' },
+    { key: 'title', label: 'Actividad' },
+    { key: 'description', label: 'Descripción' },
+    { key: 'actor', label: 'Responsable' },
+    { key: 'temperatureValue', label: 'Temperatura' },
+    { key: 'evidenceLabel', label: 'Evidencia fotográfica' },
+    { key: 'statusLabel', label: 'Estado' },
+    { key: 'severity', label: 'Severidad' },
+    { key: 'formattedDate', label: 'Fecha de inspección' },
+  ];
+
+  const hasActiveFilters = Boolean(
+    state.query ||
+    state.filters.idf ||
+    state.filters.status ||
+    state.filters.hasEvidence ||
+    state.filters.tempAlert
+  );
+
+  return (
+    <>
+      {!idfView && (
+        <PageHeading
+          eyebrow="Trazabilidad operativa · Cuartos de telecomunicaciones"
+          title="Bitácora de Visitas e Incidencias en IDF"
+          description="Historial de inspecciones, bitácora de visitas técnicas, telemetría y resolución de incidencias en IDFs"
+          updatedAt={data.updatedAt}
+        />
+      )}
+
+
+
+      {!idfView && (
+        <section className="audit-kpi-grid" aria-label="Resumen de la bitácora IDF">
+          {auditKpis.map(({ id, label, value, caption, icon: Icon, tone, pct, isActive, onClick }) => (
+            <button
+              key={id}
+              type="button"
+              className={`audit-kpi audit-kpi-${tone} ${isActive ? 'is-active' : ''}`}
+              onClick={onClick}
+            >
+              <span className="audit-kpi-heading">
+                <i><Icon size={19} /></i>
+                {label}
+              </span>
+              <strong>{number(value)}</strong>
+              <div className="audit-kpi-meter"><i style={{ width: `${pct}%` }} /></div>
+              <small>{caption}<b>{pct}%</b></small>
+            </button>
+          ))}
+        </section>
+      )}
+
+      <DataTable
+        title={idfView ? 'Reportes enviados desde móvil' : 'Bitácora institucional de visitas a IDFs'}
+        className="audit-table"
+        rows={enrichedRecords}
+        rowKey="key"
+        columns={columns}
+        state={state}
+        noun="registros"
+        exportable={false}
+        loading={loading}
+        error={errors.reports || errors.idfs}
+        onRetry={refresh}
+        onRowClick={row => openEditor('report-detail', row)}
+        toolbar={
+          <div className="audit-toolbar">
+            <SearchField
+              value={state.query}
+              onChange={state.setQuery}
+              placeholder="Buscar folio, responsable, IDF, equipo o nota…"
+            />
+            <Select
+              label="IDF / Cuarto"
+              value={state.filters.idf || ''}
+              onChange={e => state.setFilter('idf', e.target.value)}
+            >
+              <option value="">Todos los IDFs</option>
+              {options(records.map(r => r.idf))}
+            </Select>
+            <Select
+              label="Estado"
+              value={state.filters.status || ''}
+              onChange={e => state.setFilter('status', e.target.value)}
+            >
+              <option value="">Todos los estados</option>
+              <option value="open">Con incidencias abiertas</option>
+              <option value="resolved">Sin pendientes / Resueltos</option>
+            </Select>
+            <Select
+              label="Evidencia fotográfica"
+              value={state.filters.hasEvidence || ''}
+              onChange={e => state.setFilter('hasEvidence', e.target.value)}
+            >
+              <option value="">Toda la bitácora</option>
+              <option value="yes">Con foto adjunta</option>
+              <option value="no">Sin fotografía</option>
+            </Select>
+            <Select
+              label="Temperatura"
+              value={state.filters.tempAlert || ''}
+              onChange={e => state.setFilter('tempAlert', e.target.value)}
+            >
+              <option value="">Cualquier temperatura</option>
+              <option value="alert">Alerta térmica (≥ 25 °C)</option>
+              <option value="normal">Normal (&lt; 25 °C)</option>
+            </Select>
+            {hasActiveFilters && (
+              <Button onClick={state.reset} variant="secondary">
+                Limpiar filtros
+              </Button>
+            )}
+          </div>
+        }
+      />
+
+
+      <Note title="Trazabilidad y normativa técnica">
+        Horarios referenciados a la Ciudad de México. Las visitas y reportes nuevos incorporan sello temporal e identidad validados por el servidor. Las entradas registradas son inmutables para garantizar auditoría institucional y cumplimiento técnico.
+      </Note>
+    </>
+  );
+}
 
 export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, openEditor }) {
   const [query, setQuery] = useState('');
@@ -573,11 +1254,42 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
         title="Dashboard de Soporte"
         description="Monitoreo operativo de segmentos de red, computadoras e impresoras en servicio"
         updatedAt={data.updatedAt}
-      >
-        <div className="support-heading-metrics">
-          <span className="network-tag">{number(supportSegments.length)} redes</span>
-          <span className="network-tag text-success">{number(computers.length)} computadoras en línea</span>
-          <span className="network-tag text-info">{number(printers.length)} impresoras en línea</span>
+      />
+
+      <div className="support-kpi-bar" role="region" aria-label="Resumen de telemetría de soporte">
+        <div className="support-kpi-group">
+          <div className="support-kpi-card kpi-network">
+            <div className="support-kpi-icon"><Network size={18} aria-hidden="true" /></div>
+            <div className="support-kpi-info">
+              <span className="support-kpi-count">{number(supportSegments.length)}</span>
+              <span className="support-kpi-label">Redes de soporte</span>
+            </div>
+          </div>
+
+          <div className="support-kpi-divider" aria-hidden="true" />
+
+          <div className="support-kpi-card kpi-computers">
+            <div className="support-kpi-icon"><Monitor size={18} aria-hidden="true" /></div>
+            <div className="support-kpi-info">
+              <span className="support-kpi-count">{number(computers.length)}</span>
+              <span className="support-kpi-label">Computadoras en línea</span>
+            </div>
+            <span className="support-kpi-pulse pulse-success" title="En servicio" />
+          </div>
+
+          <div className="support-kpi-divider" aria-hidden="true" />
+
+          <div className="support-kpi-card kpi-printers">
+            <div className="support-kpi-icon"><Printer size={18} aria-hidden="true" /></div>
+            <div className="support-kpi-info">
+              <span className="support-kpi-count">{number(printers.length)}</span>
+              <span className="support-kpi-label">Impresoras en línea</span>
+            </div>
+            <span className="support-kpi-pulse pulse-info" title="En servicio" />
+          </div>
+        </div>
+
+        <div className="support-kpi-actions">
           <Button
             icon={Download}
             variant="primary"
@@ -588,7 +1300,7 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
           </Button>
           <Button icon={RefreshCw} busy={loading} onClick={refresh}>Actualizar</Button>
         </div>
-      </PageHeading>
+      </div>
 
       <section className="support-dashboard-grid" aria-label="Tablero de 3 columnas para soporte">
         {/* Columna 1: Listado de redes y estados */}
@@ -947,6 +1659,409 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
           </div>
         </div>
       </Dialog>
+    </>
+  );
+}
+
+
+export function resolveActionMetadata(action = '') {
+  if (action === 'session.login') {
+    return {
+      category: 'session',
+      categoryLabel: 'Sesión',
+      categoryTone: 'info',
+      title: 'Inicio de sesión',
+      icon: LogIn,
+      description: 'Acceso autenticado al centro operativo S.G.R.S.',
+    };
+  }
+  if (action === 'session.logout') {
+    return {
+      category: 'session',
+      categoryLabel: 'Sesión',
+      categoryTone: 'secondary',
+      title: 'Cierre de sesión',
+      icon: LogOut,
+      description: 'Finalización de sesión de usuario.',
+    };
+  }
+  if (action === 'user.created') {
+    return {
+      category: 'users',
+      categoryLabel: 'Usuarios',
+      categoryTone: 'brand',
+      title: 'Alta de usuario',
+      icon: UserPlus,
+      description: 'Registro de nueva cuenta de usuario institucional.',
+    };
+  }
+  if (action === 'user.updated') {
+    return {
+      category: 'users',
+      categoryLabel: 'Usuarios',
+      categoryTone: 'brand',
+      title: 'Modificación de usuario',
+      icon: Users,
+      description: 'Actualización de datos, rol o permisos de usuario.',
+    };
+  }
+  if (action === 'user.password.reset') {
+    return {
+      category: 'users',
+      categoryLabel: 'Usuarios',
+      categoryTone: 'warning',
+      title: 'Restablecimiento de clave',
+      icon: KeyRound,
+      description: 'Reinicio de contraseña para acceso al sistema.',
+    };
+  }
+  if (action === 'inventory.physical.update') {
+    return {
+      category: 'inventory',
+      categoryLabel: 'Inventario',
+      categoryTone: 'success',
+      title: 'Cambio en inventario físico',
+      icon: Server,
+      description: 'Modificación física o documental de equipo / rack.',
+    };
+  }
+  if (action === 'ap.map.position.saved') {
+    return {
+      category: 'maps',
+      categoryLabel: 'Plano y APs',
+      categoryTone: 'info',
+      title: 'AP posicionado en plano',
+      icon: MapPin,
+      description: 'Punto de acceso ubicado en el mapa arquitectónico.',
+    };
+  }
+  if (action === 'ap.map.position.removed') {
+    return {
+      category: 'maps',
+      categoryLabel: 'Plano y APs',
+      categoryTone: 'secondary',
+      title: 'AP retirado de plano',
+      icon: MapPinOff,
+      description: 'Ubicación del punto de acceso retirada del plano.',
+    };
+  }
+  if (action === 'connection.test') {
+    return {
+      category: 'connections',
+      categoryLabel: 'Conexiones API',
+      categoryTone: 'info',
+      title: 'Prueba de enlace API',
+      icon: Activity,
+      description: 'Verificación de conectividad e integración con servicio externo.',
+    };
+  }
+  if (action === 'connection.updated') {
+    return {
+      category: 'connections',
+      categoryLabel: 'Conexiones API',
+      categoryTone: 'warning',
+      title: 'Actualización de API',
+      icon: PlugZap,
+      description: 'Actualización de configuración o credenciales de API.',
+    };
+  }
+  if (action === 'idf.report.created') {
+    return {
+      category: 'idf',
+      categoryLabel: 'Registro IDF',
+      categoryTone: 'warning',
+      title: 'Visita / Incidencia en IDF',
+      icon: Building2,
+      description: 'Inspección técnica o alerta reportada en cuarto IDF.',
+    };
+  }
+  if (action === 'idf.report.resolved') {
+    return {
+      category: 'idf',
+      categoryLabel: 'Registro IDF',
+      categoryTone: 'success',
+      title: 'Incidencia resuelta en IDF',
+      icon: CheckCircle2,
+      description: 'Atención y resolución técnica de inconveniente en cuarto IDF.',
+    };
+  }
+  return {
+    category: 'general',
+    categoryLabel: 'Sistema',
+    categoryTone: 'secondary',
+    title: action.replace(/\./g, ' '),
+    icon: Activity,
+    description: 'Movimiento registrado en la base de datos del sistema.',
+  };
+}
+
+export function ProjectAuditLog({
+  data,
+  navigate,
+  openEditor,
+  loading,
+  errors,
+  refresh,
+  canExport,
+}) {
+  const state = useListState('bitacora-general');
+  const rawAudit = data.audit || [];
+
+  const enrichedEvents = useMemo(() => {
+    return rawAudit.map((e, idx) => {
+      const meta = resolveActionMetadata(e.action);
+      const ts = typeof e.created_at === 'number' && e.created_at < 1e12
+        ? e.created_at * 1000
+        : Number(e.created_at) || Date.now();
+      return {
+        ...e,
+        key: `audit-${e.id || idx}`,
+        meta,
+        formattedDate: dateTime(ts),
+        category: meta.category,
+        categoryLabel: meta.categoryLabel,
+        categoryTone: meta.categoryTone,
+        title: meta.title,
+        description: meta.description,
+        targetDisplay: e.target_label || e.target || '—',
+        actorDisplay: e.actor_name || e.actor || 'Sistema',
+      };
+    });
+  }, [rawAudit]);
+
+  const counts = useMemo(() => {
+    const total = enrichedEvents.length;
+    const session = enrichedEvents.filter(e => e.category === 'session').length;
+    const users = enrichedEvents.filter(e => e.category === 'users').length;
+    const inventory = enrichedEvents.filter(e => e.category === 'inventory' || e.category === 'maps').length;
+    const connections = enrichedEvents.filter(e => e.category === 'connections').length;
+    const idf = enrichedEvents.filter(e => e.category === 'idf').length;
+    return { total, session, users, inventory, connections, idf };
+  }, [enrichedEvents]);
+
+  const auditKpis = [
+    {
+      id: 'all',
+      label: 'Total movimientos',
+      value: counts.total,
+      caption: 'Histórico registrado',
+      pct: 100,
+      icon: Activity,
+      tone: 'brand',
+      isActive: !state.filters.category,
+      onClick: () => state.setFilter('category', ''),
+    },
+    {
+      id: 'session',
+      label: 'Sesiones y accesos',
+      value: counts.session,
+      caption: 'Inicios de sesión',
+      pct: counts.total ? Math.round((counts.session / counts.total) * 100) : 0,
+      icon: LogIn,
+      tone: 'info',
+      isActive: state.filters.category === 'session',
+      onClick: () => state.setFilter('category', state.filters.category === 'session' ? '' : 'session'),
+    },
+    {
+      id: 'users',
+      label: 'Gestión de usuarios',
+      value: counts.users,
+      caption: 'Cuentas y privilegios',
+      pct: counts.total ? Math.round((counts.users / counts.total) * 100) : 0,
+      icon: Users,
+      tone: 'purple',
+      isActive: state.filters.category === 'users',
+      onClick: () => state.setFilter('category', state.filters.category === 'users' ? '' : 'users'),
+    },
+    {
+      id: 'inventory',
+      label: 'Inventario y mapas',
+      value: counts.inventory,
+      caption: 'Cambios físicos y APs',
+      pct: counts.total ? Math.round((counts.inventory / counts.total) * 100) : 0,
+      icon: Server,
+      tone: 'success',
+      isActive: state.filters.category === 'inventory',
+      onClick: () => state.setFilter('category', state.filters.category === 'inventory' ? '' : 'inventory'),
+    },
+    {
+      id: 'idf',
+      label: 'Registros IDF',
+      value: counts.idf,
+      caption: 'Visitas e incidencias',
+      pct: counts.total ? Math.round((counts.idf / counts.total) * 100) : 0,
+      icon: Building2,
+      tone: 'warning',
+      isActive: state.filters.category === 'idf',
+      onClick: () => state.setFilter('category', state.filters.category === 'idf' ? '' : 'idf'),
+    },
+  ];
+
+  const columns = [
+    {
+      key: 'created_at',
+      label: 'Fecha y hora',
+      width: '18%',
+      value: r => r.created_at,
+      render: r => (
+        <div className="audit-actor-line" title={`Timestamp unix: ${r.created_at}`}>
+          <Clock size={13} className="text-muted" aria-hidden="true" />
+          <span className="font-mono text-xs">{r.formattedDate}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'category',
+      label: 'Categoría',
+      width: '13%',
+      value: r => r.categoryLabel,
+      render: r => (
+        <Badge tone={r.categoryTone}>
+          {r.categoryLabel}
+        </Badge>
+      ),
+    },
+    {
+      key: 'action',
+      label: 'Movimiento / Acción',
+      width: '29%',
+      value: r => `${r.title} ${r.description} ${r.action}`,
+      render: r => {
+        const Icon = r.meta.icon || Activity;
+        return (
+          <div className="project-audit-action-cell">
+            <span className="project-audit-icon-wrap" aria-hidden="true">
+              <Icon size={14} />
+            </span>
+            <div className="project-audit-action-info">
+              <strong>{r.title}</strong>
+              <small title={r.description}>{r.details || r.description}</small>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'actor',
+      label: 'Responsable',
+      width: '20%',
+      value: r => `${r.actorDisplay} ${r.username || ''}`,
+      render: r => (
+        <div className="audit-actor-group">
+          <div className="audit-actor-line">
+            <span className="audit-actor-avatar" aria-hidden="true">
+              {(r.actorDisplay || 'S').charAt(0).toUpperCase()}
+            </span>
+            <strong className="audit-actor-name">{r.actorDisplay}</strong>
+          </div>
+          {r.user_role && <span className="audit-date-subtext">Rol: {r.user_role}</span>}
+        </div>
+      ),
+    },
+    {
+      key: 'target',
+      label: 'Recurso / Objetivo',
+      width: '20%',
+      value: r => r.targetDisplay,
+      render: r => (
+        <div className="project-audit-target-cell">
+          <span className="project-audit-target-pill" title={r.targetDisplay}>
+            {r.targetDisplay}
+          </span>
+        </div>
+      ),
+    },
+  ];
+
+  const hasActiveFilters = Boolean(state.query || state.filters.category || state.filters.actor);
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="Auditoría global · Trazabilidad del sistema"
+        title="Bitácora General de Movimientos"
+        description="Registro integral de cualquier evento o cambio en el proyecto: sesiones, usuarios, inventario, planos de red, conexiones y cuartos IDF"
+        updatedAt={data.updatedAt}
+      />
+
+      <section className="audit-kpi-grid" aria-label="Indicadores globales de la bitácora">
+        {auditKpis.map(({ id, label, value, caption, icon: Icon, tone, pct, isActive, onClick }) => (
+          <button
+            key={id}
+            type="button"
+            className={`audit-kpi audit-kpi-${tone} ${isActive ? 'is-active' : ''}`}
+            onClick={onClick}
+          >
+            <span className="audit-kpi-heading">
+              <i>
+                <Icon size={18} />
+              </i>
+              {label}
+            </span>
+            <strong>{number(value)}</strong>
+            <div className="audit-kpi-meter">
+              <i style={{ width: `${pct}%` }} />
+            </div>
+            <small>
+              {caption}
+              <b>{pct}%</b>
+            </small>
+          </button>
+        ))}
+      </section>
+
+      <DataTable
+        title="Historial de movimientos y eventos registrados"
+        className="project-audit-table"
+        rows={enrichedEvents}
+        rowKey="key"
+        columns={columns}
+        state={state}
+        noun="movimientos"
+        exportable={false}
+        loading={loading}
+        error={errors.audit}
+        onRetry={refresh}
+        toolbar={
+          <div className="audit-toolbar">
+            <SearchField
+              value={state.query}
+              onChange={state.setQuery}
+              placeholder="Buscar responsable, acción, objetivo o detalle…"
+            />
+            <Select
+              label="Categoría"
+              value={state.filters.category || ''}
+              onChange={e => state.setFilter('category', e.target.value)}
+            >
+              <option value="">Todas las categorías</option>
+              <option value="session">Sesiones y accesos</option>
+              <option value="users">Gestión de usuarios</option>
+              <option value="inventory">Inventario físico</option>
+              <option value="maps">Plano y APs</option>
+              <option value="connections">Conexiones API</option>
+              <option value="idf">Registros IDF</option>
+            </Select>
+            <Select
+              label="Responsable"
+              value={state.filters.actor || ''}
+              onChange={e => state.setFilter('actor', e.target.value)}
+            >
+              <option value="">Todos los responsables</option>
+              {options(enrichedEvents.map(e => e.actorDisplay))}
+            </Select>
+            {hasActiveFilters && (
+              <Button onClick={state.reset} variant="secondary">
+                Limpiar filtros
+              </Button>
+            )}
+          </div>
+        }
+      />
+
+      <Note title="Inmutabilidad y seguridad de auditoría">
+        Todos los movimientos registrados en la bitácora son firmados por el servidor y almacenados en SQLite institucional con sellos de tiempo unix inmutables.
+      </Note>
     </>
   );
 }

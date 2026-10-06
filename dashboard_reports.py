@@ -12,7 +12,7 @@ import hmac
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from dashboard_access import AccessError, PRIVATE
+from dashboard_access import AccessError, PRIVATE, database, audit
 from dashboard_inventory import cabinets_with_documentary
 
 
@@ -113,6 +113,11 @@ class ReportRoutes:
             finally:
                 if temp_path and os.path.exists(temp_path):
                     os.unlink(temp_path)
+        try:
+            with database(write=True) as db:
+                audit(db, self.identity['user']['id'], 'idf.report.resolved', f"{idf_id}:{target.get('id') or key}")
+        except Exception:
+            pass
         self._send_json({'incident': {**saved, 'record_key': report_key(saved)}})
 
     def save_report(self, body):
@@ -190,6 +195,11 @@ class ReportRoutes:
                 if image:
                     (PRIVATE / "evidence" / saved["evidence"]).unlink(missing_ok=True)
                 raise
+        try:
+            with database(write=True) as db:
+                audit(db, actor.get('id') or 'mobile', 'idf.report.created', f"{idf_id}:{report_id}")
+        except Exception:
+            pass
         self._send_json({"status": "success", "incident": {**saved, 'record_key': report_key(saved)}, "telemetry": telemetry})
 
     def send_evidence(self, identifier, inline=False):

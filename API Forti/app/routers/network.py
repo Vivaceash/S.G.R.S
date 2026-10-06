@@ -1,3 +1,4 @@
+import asyncio
 import ipaddress
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
@@ -208,21 +209,70 @@ async def get_dhcp_leases(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-
     """
     Obtiene las asignaciones dinámicas de direcciones IP entregadas por el servidor DHCP del FortiGate.
     """
-    raw = await fortios_client.get_dhcp_leases(vdom=vdom)
+    raw, servers_raw, addresses_raw, latest_devices_raw = await asyncio.gather(
+        fortios_client.get_dhcp_leases(vdom=vdom),
+        fortios_client.request("GET", "api/v2/cmdb/system.dhcp/server", params={"vdom": vdom or "root"}),
+        fortios_client.request("GET", "api/v2/cmdb/firewall/address", params={"vdom": vdom or "root"}),
+        fortios_client.get_connected_devices(params={"query_type": "unified_latest", "count": 5000}, vdom=vdom),
+    )
     results = raw.get("results", [])
     leases_raw = results if isinstance(results, list) else (results.get("leases", []) if isinstance(results, dict) else [])
+    configured = servers_raw.get("results", [])
+    servers = configured if isinstance(configured, list) else (configured.get("servers", []) if isinstance(configured, dict) else [])
+    normalize_mac = lambda value: ''.join(char for char in str(value or '').lower() if char.isalnum())
+    reservations = {}
+    lease_times = {}
+    for server in servers:
+        if not isinstance(server, dict) or server.get("status", "enable") != "enable":
+            continue
+        interface = server.get("interface") or server.get("intf")
+        if interface and isinstance(server.get("lease-time"), int):
+            lease_times[interface] = server["lease-time"]
+        for reservation in server.get("reserved-address", []) or []:
+            if not isinstance(reservation, dict) or reservation.get("action", "reserved") != "reserved":
+                continue
+            key = (interface, normalize_mac(reservation.get("mac")))
+            if key[0] and key[1]: reservations[key] = reservation.get("ip")
+
+    addresses = addresses_raw.get("results", [])
+    if isinstance(addresses, dict):
+        addresses = addresses.get("addresses", [])
+    address_names = {}
+    for address in addresses if isinstance(addresses, list) else []:
+        if not isinstance(address, dict) or address.get("type") != "mac":
+            continue
+        for item in address.get("macaddr", []) or []:
+            mac = normalize_mac(item.get("macaddr") if isinstance(item, dict) else item)
+            if mac and address.get("name"):
+                address_names[mac] = address["name"]
+
+    latest_results = latest_devices_raw.get("results", [])
+    latest_items = latest_results if isinstance(latest_results, list) else (latest_results.get("devices", []) if isinstance(latest_results, dict) else [])
+    live_macs = {normalize_mac(item.get("mac")) for item in latest_items if isinstance(item, dict) and item.get("mac") and item.get("is_online") is not False}
 
     leases: List[DHCPLeaseItem] = []
     for item in leases_raw:
         if isinstance(item, dict):
+            interface = item.get("interface") or item.get("intf")
+            mac = normalize_mac(item.get("mac"))
+            reserved_ip = reservations.get((interface, mac))
+            expires = item.get("expire_time") or item.get("expire") or item.get("expiry")
+            lease_seconds = lease_times.get(interface)
+            started_at = expires - lease_seconds if isinstance(expires, int) and isinstance(lease_seconds, int) else None
             leases.append(
                 DHCPLeaseItem(
                     ip=item.get("ip") or item.get("ipv4"),
                     mac=item.get("mac"),
                     hostname=item.get("hostname") or item.get("host"),
-                    interface=item.get("interface") or item.get("intf"),
-                    expires=str(item.get("expire", "")) or item.get("expiry"),
+                    device_name=address_names.get(mac) or item.get("hostname") or item.get("host"),
+                    interface=interface,
+                    expires=expires,
                     status=item.get("status", "bound"),
+                    is_reserved=bool(item.get("reserved") is True or reserved_ip is not None),
+                    reserved_ip=reserved_ip,
+                    is_online=mac in live_macs,
+                    lease_started_at=started_at,
+                    lease_duration_seconds=lease_seconds,
                 )
             )
 
