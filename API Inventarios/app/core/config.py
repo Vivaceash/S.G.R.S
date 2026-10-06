@@ -4,10 +4,11 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE = Path(__file__).resolve().parents[2]
+PRIVATE_ENV = BASE / '.private/.env'
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=BASE / '.env', env_prefix='INVENTARIOS_', extra='ignore')
+    model_config = SettingsConfigDict(env_file=(PRIVATE_ENV, BASE / '.env'), env_prefix='INVENTARIOS_', extra='ignore')
     APP_NAME: str = 'SGRS - API Inventarios'
     APP_VERSION: str = '1.0.0'
     HOST: str = '127.0.0.1'

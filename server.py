@@ -1015,8 +1015,8 @@ if __name__ == "__main__":
         parsed_origin = urlsplit(public_origin)
         if parsed_origin.scheme != "https" or not parsed_origin.hostname or parsed_origin.username or parsed_origin.password or parsed_origin.path not in ("", "/") or parsed_origin.query or parsed_origin.fragment:
             raise SystemExit("SGRS_PUBLIC_ORIGIN debe ser un origen HTTPS, sin ruta ni credenciales.")
-    bind_host = os.environ.get("DASHBOARD_HOST", "127.0.0.1")
     lan_origin = os.environ.get("SGRS_LAN_ORIGIN", "").strip()
+    bind_host = os.environ.get("DASHBOARD_HOST") or ("0.0.0.0" if lan_origin else "127.0.0.1")
     if public_origin and bind_host not in ("127.0.0.1", "localhost", "::1"):
         raise SystemExit("Con SGRS_PUBLIC_ORIGIN el gateway debe escuchar en loopback; el proxy HTTPS publica el servicio.")
     if bind_host not in ("127.0.0.1", "localhost", "::1") and not public_origin.startswith("https://") and not lan_origin:
@@ -1035,9 +1035,12 @@ if __name__ == "__main__":
         try:
             server = ThreadedHTTPServer((bind_host, p), Handler)
             PORT = p
+            display_host = "localhost" if bind_host in ("127.0.0.1", "0.0.0.0", "") else bind_host
             print("====================================================")
             print(f"  S.G.R.S Servidor Multi-hilo Activo en Puerto {PORT}")
-            print(f"  Dashboard disponible en: http://localhost:{PORT}")
+            print(f"  Dashboard disponible en: http://{display_host}:{PORT}")
+            if lan_origin:
+                print(f"  Acceso LAN habilitado para: {lan_origin}")
             print("  Base de datos conectada en ./data/")
             print("====================================================")
             started = True

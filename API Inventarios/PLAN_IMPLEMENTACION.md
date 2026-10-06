@@ -1,6 +1,10 @@
 # Plan de implementación — API Inventarios
 
-Fecha: 2026-10-06. Estado: diseño para implementar; esta carpeta contiene el plan, no una API ejecutable todavía.
+Fecha: 2026-10-06. Estado: API implementada; catálogo CCTV importado y servicio local en `127.0.0.1:8002`.
+
+La API, contratos Scalar, autenticación, SQLite, clientes Forti/Omni, rutas CCTV, consulta de VLAN en Forti, aprovisionamiento local, runner raíz y proxy del dashboard ya están implementados. Se importaron 150 cámaras actualizadas y 149 históricas; el dry-run encontró cero correcciones legacy pendientes y la importación creó respaldo. El corte reversible está activo: CCTV usa API Inventarios para lectura y escritura, con proxy de sesión/CSRF del dashboard. El runner reinició los servicios registrados y dejó la nueva API en el puerto 8002.
+
+Validado: 20 pruebas de API Inventarios, 85 pruebas de catálogo/inventario/acceso, 4 pruebas del contrato VLAN y build Vite. La consulta conectada amplia de Forti tuvo un fallo de entorno al leer políticas (`UnicodeDecodeError`); el contrato VLAN pasó. Playwright no se pudo ejecutar porque `/opt/brave-bin/brave` falta en este entorno. La cobertura de cámaras en proveedores reales aún requiere medición.
 
 ## Objetivo y alcance
 

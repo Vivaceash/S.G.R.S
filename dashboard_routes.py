@@ -64,15 +64,52 @@ class AccessRoutes:
             return  # Existing public QR flow; never accepts account credentials.
         if self._secure_transport():
             return
-        host = urlsplit("//" + self.headers.get("Host", "")).hostname
-        origin = urlsplit(self.headers.get("Origin", ""))
-        local = (not os.environ.get("SGRS_PUBLIC_ORIGIN")
-                 and ipaddress.ip_address(self.client_address[0]).is_loopback
-                 and host in ("localhost", "127.0.0.1", "::1")
-                 and (not self.headers.get("Origin") or
-                      (origin.scheme == "http" and origin.hostname in ("localhost", "127.0.0.1", "::1"))))
-        if not local:
+        if os.environ.get("SGRS_PUBLIC_ORIGIN"):
             raise AccessError(403, "Abre el dashboard mediante HTTPS para proteger las credenciales y la sesión.")
+
+        try:
+            client_ip = ipaddress.ip_address(self.client_address[0])
+            client_ip = getattr(client_ip, 'ipv4_mapped', None) or client_ip
+        except (ValueError, TypeError):
+            client_ip = None
+
+        if not client_ip:
+            raise AccessError(403, "Abre el dashboard mediante HTTPS para proteger las credenciales y la sesión.")
+
+        req_host = self.headers.get("Host", "")
+        host = urlsplit("//" + req_host).hostname
+        raw_origin = self.headers.get("Origin")
+        if not raw_origin and self.headers.get("Referer"):
+            ref = urlsplit(self.headers.get("Referer"))
+            raw_origin = f"{ref.scheme}://{ref.netloc}"
+        origin = urlsplit(raw_origin) if raw_origin else None
+
+        # 1. Desarrollo local en loopback
+        if (client_ip.is_loopback
+                and host in ("localhost", "127.0.0.1", "::1")
+                and (not origin or (origin.scheme == "http" and origin.hostname in ("localhost", "127.0.0.1", "::1")))):
+            return
+
+        # 2. Acceso LAN privado permitido (IP privada o loopback con host/origin en SGRS_LAN_ORIGIN / interfaces)
+        if client_ip.is_private or client_ip.is_loopback:
+            origins = self._origins()
+            lan_origins = {orig for orig in origins if orig != "*" and urlsplit(orig).hostname not in ("localhost", "127.0.0.1", "::1")}
+            lan_hosts = {urlsplit(orig).netloc for orig in lan_origins}
+            lan_hostnames = {urlsplit(orig).hostname for orig in lan_origins if urlsplit(orig).hostname}
+
+            host_allowed = (req_host in lan_hosts) or (host in lan_hostnames)
+            origin_allowed = (not origin) or (
+                origin.scheme == "http" and (
+                    raw_origin.rstrip("/") in origins
+                    or origin.netloc in lan_hosts
+                    or origin.hostname in lan_hostnames
+                )
+            )
+
+            if host_allowed and origin_allowed:
+                return
+
+        raise AccessError(403, "Abre el dashboard mediante HTTPS para proteger las credenciales y la sesión.")
 
     def _origins(self):
         # Explicit deployments must set the public HTTPS origin and use a reverse proxy.
@@ -162,6 +199,8 @@ class AccessRoutes:
             raise AccessError(400, "La solicitud no contiene un objeto JSON válido.") from None
 
     def _cookie(self, token, clear=False):
+        # En conexiones HTTP LAN o desarrollo local sin proxy HTTPS, no exigir
+        # '; Secure' para que los navegadores no descarten la cookie sgrs_session.
         secure = "; Secure" if self._secure_transport() else ""
         self._session_cookie = f"sgrs_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={0 if clear else SESSION_SECONDS}{secure}"
 

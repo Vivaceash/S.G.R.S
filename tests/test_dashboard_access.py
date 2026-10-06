@@ -515,6 +515,27 @@ def test_wildcard_origin_is_ignored(monkeypatch):
         routes._boundary(mutation=False)
 
 
+def test_lan_origin_boundary_and_direct_http_access(monkeypatch):
+    from email.message import Message
+    from dashboard_routes import AccessRoutes
+    routes = AccessRoutes()
+
+    monkeypatch.setenv("SGRS_LAN_ORIGIN", "http://192.168.38.250:3000")
+    routes.client_address = ("192.168.38.50", 54321)
+    routes.path = "/api/auth/session"
+    msg = Message()
+    msg["Host"] = "192.168.38.250:3000"
+    msg["Origin"] = "http://192.168.38.250:3000"
+    routes.headers = msg
+
+    # El límite de acceso no debe lanzar excepción para tráfico HTTP en la LAN autorizada
+    routes._boundary(mutation=False)
+    routes._cookie("lan-access-test-token")
+    assert "; Secure" not in routes._session_cookie
+    assert "; HttpOnly" in routes._session_cookie
+
+
+
 def test_data_contract_users_and_privileges_projection(local_store):
     import json
     # Seed multiple user types

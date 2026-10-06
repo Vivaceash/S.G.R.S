@@ -191,6 +191,13 @@ def get_inventory_port():
     return int(os.environ.get("INVENTARIOS_PORT", "8002"))
 
 
+def ensure_inventory_config(py_exe):
+    script = ROOT_DIR / "API Inventarios" / "scripts" / "configure_local.py"
+    private_env = ROOT_DIR / "API Inventarios" / ".private" / ".env"
+    if not private_env.exists():
+        subprocess.run([py_exe, str(script)], cwd=str(ROOT_DIR), check=True)
+
+
 def status_services():
     """Muestra el estado actual de los 3 servicios de S.G.R.S."""
     omni_ok = is_port_in_use(8000)
@@ -264,7 +271,6 @@ def stop_services():
 
     # Garantizar que todos los puertos queden liberados
     dash_port = get_dashboard_port()
-    free_ports_if_busy([8000, 8001, dash_port], silent=True)
     print("[SGRS] [OK] Todos los servicios detenidos y puertos liberados correctamente.\n")
 
 
@@ -430,6 +436,8 @@ def start_services(detached: bool = True):
     dash_port = get_dashboard_port()
     env["PORT"] = str(dash_port)
 
+    ensure_inventory_config(py_exe)
+
     # Si todos los servicios ya están activos, mostrar estado y no duplicar
     if is_port_in_use(8000) and is_port_in_use(8001) and is_port_in_use(get_inventory_port()) and is_port_in_use(dash_port):
         print("\n[SGRS] Los servicios ya están en ejecución:")
@@ -440,8 +448,11 @@ def start_services(detached: bool = True):
     if is_port_in_use(get_inventory_port()):
         raise RuntimeError("El puerto de Inventarios está ocupado. Detén su proceso o configura INVENTARIOS_PORT.")
 
-    # Limpiar puertos huérfanos o colgados previamente
-    free_ports_if_busy([8000, 8001, dash_port])
+    # Do not kill an existing service as an implicit side effect of starting the
+    # fourth component. An explicit restart command owns teardown of registered PIDs.
+    busy = [port for port in (8000, 8001, dash_port) if is_port_in_use(port)]
+    if busy:
+        raise RuntimeError(f"Puertos ocupados {busy}. Ejecuta `python run.py restart` para reiniciar servicios registrados.")
 
     forti_dir = ROOT_DIR / "API Forti"
     omni_dir = ROOT_DIR / "API Omni"

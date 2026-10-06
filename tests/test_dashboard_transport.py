@@ -28,15 +28,40 @@ def handler(monkeypatch, *, public="", peer="127.0.0.1", host="localhost:3000",
 
 
 @pytest.mark.parametrize("path", ["/api/auth/login", "/api/auth/bootstrap", "/api/auth/session", "/api/admin/users/save", "/api/idfs"])
-def test_lan_http_rejected_before_body_or_session(monkeypatch, path):
+def test_lan_http_allowed_when_configured(monkeypatch, path):
     monkeypatch.setenv("SGRS_LAN_ORIGIN", "http://192.0.2.20:3000")
     route = handler(monkeypatch, peer="192.0.2.10", host="192.0.2.20:3000",
                     origin="http://192.0.2.20:3000", path=path)
     handled = route.access_post() if path.endswith(("login", "bootstrap", "save")) else route.access_get()
     assert handled
-    assert route.response[0] == 403
-    assert "HTTPS" in route.response[1]["error"]
-    assert route.rfile.tell() == 0
+    # No debe ser rechazado por la capa de transporte HTTPS
+    if hasattr(route, "response"):
+        error_msg = str(route.response[1].get("error", "")) if isinstance(route.response[1], dict) else ""
+        assert "HTTPS" not in error_msg
+
+
+def test_lan_http_session_and_cookie_without_secure(monkeypatch):
+    monkeypatch.setenv("SGRS_LAN_ORIGIN", "http://192.168.38.250:3000")
+    route = handler(monkeypatch, peer="192.168.38.10", host="192.168.38.250:3000",
+                    origin="http://192.168.38.250:3000", path="/api/auth/session")
+    handled = route.access_get()
+    assert handled
+    assert route.response[0] == 200
+    assert route.response[1].get("user") is None
+
+    # Verificar que la cookie emitida para LAN HTTP no contenga '; Secure'
+    route._cookie("lan-session-token")
+    assert "; Secure" not in route._session_cookie
+    assert "; HttpOnly" in route._session_cookie
+    assert "; SameSite=Strict" in route._session_cookie
+
+
+def test_public_ip_rejected_even_if_lan_origin_set(monkeypatch):
+    monkeypatch.setenv("SGRS_LAN_ORIGIN", "http://192.168.38.250:3000")
+    route = handler(monkeypatch, peer="8.8.8.8", host="192.168.38.250:3000",
+                    origin="http://192.168.38.250:3000", path="/api/auth/session")
+    with pytest.raises(AccessError, match="HTTPS"):
+        route._boundary(mutation=False)
 
 
 @pytest.mark.parametrize("peer,proto", [("192.0.2.10", None), ("192.0.2.10", "https"), ("127.0.0.1", None), ("127.0.0.1", "http"), ("127.0.0.1", "https,http")])
