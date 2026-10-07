@@ -17,9 +17,15 @@ class DHCPLeaseItem(BaseModel):
     ip: Optional[str] = Field(None, description="Dirección IP asignada por DHCP")
     mac: Optional[str] = Field(None, description="Dirección MAC del cliente")
     hostname: Optional[str] = Field(None, description="Nombre de host del cliente DHCP")
+    device_name: Optional[str] = Field(None, description="Nombre administrativo del dispositivo configurado en FortiGate")
     interface: Optional[str] = Field(None, description="Interfaz o servidor DHCP")
     expires: Optional[Union[str, int]] = Field(None, description="Tiempo restante de la concesión (lease)")
     status: Optional[str] = Field(None, description="Estado del lease (ej. bound, reserved)")
+    is_reserved: bool = Field(False, description="La MAC tiene una reserva DHCP activa en esta interfaz")
+    reserved_ip: Optional[str] = Field(None, description="IP fijada por la reserva DHCP, si existe")
+    is_online: Optional[bool] = Field(None, description="Actividad actual según el inventario nativo de FortiGate")
+    lease_started_at: Optional[int] = Field(None, description="Inicio estimado de la concesión DHCP Unix epoch")
+    lease_duration_seconds: Optional[int] = Field(None, description="Duración configurada de la concesión DHCP")
 
 
 class ARPEntry(BaseModel):

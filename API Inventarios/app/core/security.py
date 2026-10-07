@@ -21,19 +21,23 @@ class Principal:
 def key_principal(token):
     if not token:
         return None
-    for value, scopes, dashboard in (
-        (settings.API_KEYS, {'read'}, False),
-        (settings.EXPORT_KEYS, {'read', 'export'}, False),
-        (settings.WRITE_KEYS, {'read', 'write', 'export'}, False),
-        (settings.DASHBOARD_KEY, {'read', 'write', 'export'}, True),
-    ):
+    grants = {}
+    for value, scopes in ((settings.API_KEYS, {'read'}), (settings.EXPORT_KEYS, {'read', 'export'}),
+                          (settings.WRITE_KEYS, {'read', 'write', 'export'})):
         for key in settings.keys(value):
-            if secrets.compare_digest(token.encode(), key.encode()):
-                return Principal('key:' + hashlib.sha256(key.encode()).hexdigest()[:16], scopes, dashboard)
+            grants.setdefault(key, set()).update(scopes)
+    for key, scopes in grants.items():
+        if secrets.compare_digest(token.encode(), key.encode()):
+            return Principal('key:' + hashlib.sha256(key.encode()).hexdigest()[:16], scopes, False)
+    if settings.DASHBOARD_KEY and secrets.compare_digest(token.encode(), settings.DASHBOARD_KEY.encode()):
+        key = settings.DASHBOARD_KEY
+        return Principal('key:' + hashlib.sha256(key.encode()).hexdigest()[:16], {'read', 'write', 'export'}, True)
     return None
 
 
 async def authenticate(request: Request, api_key=Security(header), credentials=Security(bearer)):
+    if request.method == 'GET' and request.url.path == '/api/v1/system/health':
+        return Principal('public-health', {'read'}, False)
     token = api_key or (credentials.credentials if credentials else '')
     principal = key_principal(token)
     if principal and (principal.dashboard or not settings.ENABLE_2FA):

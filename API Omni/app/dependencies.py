@@ -204,6 +204,12 @@ def verify_api_key(
     1. Un token JWT con 2FA verificado.
     2. O una clave de API válida configurada en APP_API_KEY / API_SECRET_KEY.
     """
+    # Solo liveness mínimo es público; el resto de la API conserva autenticación.
+    if request.method == "GET" and request.url.path in {
+        "/health", "/api/v1/health", "/api/v1/system/health"
+    }:
+        return True
+
     if settings.ALLOW_UNAUTHENTICATED:
         return True
 

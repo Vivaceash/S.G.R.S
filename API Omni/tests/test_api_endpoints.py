@@ -112,13 +112,14 @@ def test_unauthorized_access_rejected():
     assert res_ver.status_code == 401
 
 
-def test_diagnostic_health_endpoints_require_auth():
-    """Solo /health de liveness es público; los diagnósticos de NMS requieren clave."""
+def test_health_status_endpoints_are_public_but_data_endpoints_are_not():
+    """Los health status son públicos; las consultas de datos mantienen autenticación."""
     res_h1 = client.get("/api/v1/health")
-    assert res_h1.status_code == 401
+    assert res_h1.status_code != 401
 
     res_h2 = client.get("/api/v1/system/health")
-    assert res_h2.status_code == 401
+    assert res_h2.status_code != 401
+    assert client.get("/api/v1/system/version").status_code == 401
 
 
 def test_invalid_api_key_rejected():

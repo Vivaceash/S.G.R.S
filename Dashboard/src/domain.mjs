@@ -6,6 +6,7 @@ export const AVAILABLE_PAGES = [
   { id: 'resumen', label: 'Dashboard Operativo' },
   { id: 'dispositivos', label: 'Dispositivos' },
   { id: 'disponibilidad', label: 'Direcciones IP' },
+  { id: 'gestion-meztli', label: 'Gestión Meztli' },
   { id: 'bitacora', label: 'Bitácora' },
   { id: 'idf', label: 'Registro IDF' },
   { id: 'aps', label: 'Access Points' },
@@ -72,9 +73,9 @@ export function countUsersForRoleCard(users, roleId, actorRole) {
 
 export const ROLE_PAGE_DEFAULTS = {
   soporte: ['soporte'],
-  admin: ['resumen', 'dispositivos', 'disponibilidad', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'usuarios'],
-  'super-admin': ['resumen', 'dispositivos', 'disponibilidad', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
-  viewer: ['resumen', 'dispositivos', 'disponibilidad', 'bitacora', 'idf', 'aps', 'cctv', 'altas'],
+  admin: ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'usuarios'],
+  'super-admin': ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
+  viewer: ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'aps', 'cctv', 'altas'],
 };
 export const segmentKey = segment => JSON.stringify([segment.id ?? '', segment.interface ?? '']);
 const ipv4 = value => {
@@ -510,7 +511,8 @@ export function reportsFromData(reports, idfs) {
       records.set(key, { ...incident, key, idfId: idf.id, idf: idf.name, actor: incident.tech || incident.reporter || 'Sin responsable' });
     }
   }
-  return [...records.values()].sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0));
+  // A missing legacy date cannot displace dated, current alerts.
+  return [...records.values()].sort((a, b) => (Date.parse(b.date) || -Infinity) - (Date.parse(a.date) || -Infinity));
 }
 export class ApiError extends Error {
   constructor(status, message) {

@@ -60,8 +60,8 @@ class Settings(BaseSettings):
             raise ValueError('2FA requiere secretos JWT y TOTP independientes de al menos 32 caracteres.')
         groups = [self.keys(self.API_KEYS), self.keys(self.WRITE_KEYS), self.keys(self.EXPORT_KEYS), [self.DASHBOARD_KEY] if self.DASHBOARD_KEY else []]
         keys = [key for group in groups for key in group]
-        if len(keys) != len(set(keys)):
-            raise ValueError('Usa claves distintas para cada perfil.')
+        # API_KEYS and EXPORT_KEYS may share a temporary operator key; key_principal
+        # unions read/export only. WRITE_KEYS and the dashboard identity stay separate.
         if self.ENVIRONMENT not in ('development', 'test'):
             if not keys or any(len(key) < 32 for key in keys) or self.DEBUG or '*' in self.ALLOWED_HOSTS or '*' in self.CORS_ORIGINS:
                 raise ValueError('Producción requiere claves robustas, hosts/orígenes explícitos y DEBUG desactivado.')

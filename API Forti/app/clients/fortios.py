@@ -149,8 +149,11 @@ class FortiOSClient:
             raise
         except Exception as exc:
             logger.error("Error inesperado al consultar FortiOS (%s)", type(exc).__name__)
-            raise FortiOSResponseError(
-                message="Error inesperado durante la comunicación con FortiOS.",
+            # Invalid or undecodable upstream responses are an availability
+            # issue in the FortiGate integration, not a bad request from the
+            # dashboard client. Keep the response retryable for callers.
+            raise FortiOSConnectionError(
+                message="FortiOS entregó una respuesta no válida o no se pudo procesar.",
                 details=None
             )
 

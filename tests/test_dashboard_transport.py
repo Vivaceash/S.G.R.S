@@ -3,9 +3,25 @@ from email.message import Message
 from io import BytesIO
 
 import pytest
+import json
+from types import SimpleNamespace
 
 from dashboard_access import AccessError
 from dashboard_routes import AccessRoutes
+
+
+@pytest.mark.parametrize('server_ip,client_ip', [('10.20.0.250', '10.30.1.20'),
+                                               ('172.20.0.250', '172.21.1.20'),
+                                               ('192.168.38.250', '192.168.99.20'),
+                                               ('11.20.1.250', '11.20.1.20')])
+def test_all_server_lan_interfaces_allow_same_origin_sessions(monkeypatch, server_ip, client_ip):
+    addresses = [{'addr_info': [{'family': 'inet', 'scope': 'global', 'local': ip, 'prefixlen': 24}]}
+                 for ip in ('10.20.0.250', '172.20.0.250', '192.168.38.250', '11.20.1.250')]
+    monkeypatch.setattr('dashboard_routes.subprocess.run',
+                        lambda *args, **kwargs: SimpleNamespace(stdout=json.dumps(addresses)))
+    route = handler(monkeypatch, peer=client_ip, host=server_ip + ':3000',
+                    origin='http://' + server_ip + ':3000')
+    route._boundary(mutation=True)
 
 
 def handler(monkeypatch, *, public="", peer="127.0.0.1", host="localhost:3000",
@@ -58,6 +74,23 @@ def test_lan_http_session_and_cookie_without_secure(monkeypatch):
 
 def test_public_ip_rejected_even_if_lan_origin_set(monkeypatch):
     monkeypatch.setenv("SGRS_LAN_ORIGIN", "http://192.168.38.250:3000")
+    route = handler(monkeypatch, peer="8.8.8.8", host="192.168.38.250:3000",
+                    origin="http://192.168.38.250:3000", path="/api/auth/session")
+    with pytest.raises(AccessError, match="HTTPS"):
+        route._boundary(mutation=False)
+
+
+def test_configured_institutional_cidr_can_use_lan_http(monkeypatch):
+    monkeypatch.setenv("SGRS_LAN_ORIGIN", "http://192.168.38.250:3000")
+    monkeypatch.setenv("SGRS_LAN_CLIENT_CIDRS", "15.40.0.0/16")
+    route = handler(monkeypatch, peer="15.40.1.57", host="192.168.38.250:3000",
+                    origin="http://192.168.38.250:3000", path="/api/auth/session")
+    route._boundary(mutation=False)
+
+
+def test_unconfigured_public_client_remains_rejected(monkeypatch):
+    monkeypatch.setenv("SGRS_LAN_ORIGIN", "http://192.168.38.250:3000")
+    monkeypatch.setenv("SGRS_LAN_CLIENT_CIDRS", "15.40.0.0/16")
     route = handler(monkeypatch, peer="8.8.8.8", host="192.168.38.250:3000",
                     origin="http://192.168.38.250:3000", path="/api/auth/session")
     with pytest.raises(AccessError, match="HTTPS"):

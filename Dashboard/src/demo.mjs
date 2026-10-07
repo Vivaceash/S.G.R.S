@@ -174,5 +174,15 @@ export function createDemo() {
     { id: 'ap-5', name: 'AP-Consulta-Externa', model: 'OAW-AP1311', ip: '192.168.5.120', mac: 'dc:08:56:d3:22:10', serial: 'SSZ234101750', status: 'online', status_raw: 'Up', location: 'IDF-2 -> 2/1/10', idf_tag: 'IDF-2', clients: 19, channels: ['6(2.4G)', '157(5G All)'], ssids: ['Admin(2.4G)', 'Tonatiuh(5G)'], version: '4.0.7.7081', last_seen: 1790078740000 },
     { id: 'ap-6', name: 'AP-Terapia-Intensiva', model: 'OAW-AP1321', ip: '192.168.5.132', mac: 'dc:08:56:d3:23:05', serial: 'SSZ234101802', status: 'offline', status_raw: 'Down', location: 'IDF-3 -> 1/1/15', idf_tag: 'IDF-3', clients: 0, channels: [], ssids: [], version: '4.0.7.7081', last_seen: 1790078000000 },
   ];
-  return { segments, resources, requests, ips, idfs, reports, devices: allDevices, aps: demoAps, health: { forti: true, omni: true }, updatedAt: '2026-09-06T16:24:00Z' };
+  const demoAudit = [
+    { id: 1, action: 'session.login', actor: 'carlos.mendoza', actor_name: 'Dr. Carlos Mendoza', target: 'Sesión web', target_label: 'Sesión Dr. Carlos Mendoza', created_at: nowUnix - 3600 * 2, user_role: 'admin' },
+    { id: 2, action: 'inventory.physical.update', actor: 'psanchez', actor_name: 'Ing. Pedro Sánchez', target: 'resource-3', target_label: 'Switch IDF-03 (Rack 1)', created_at: nowUnix - 3600 * 5, user_role: 'soporte' },
+    { id: 3, action: 'connection.test', actor: 'admin', actor_name: 'Administrador NOC', target: 'forti', target_label: 'Servicio FORTIGATE', created_at: nowUnix - 3600 * 8, user_role: 'super-admin' },
+    { id: 4, action: 'ap.map.position.saved', actor: 'admin', actor_name: 'Administrador NOC', target: 'ap-1', target_label: 'AP-1F:20 en Plano Piso 1', created_at: nowUnix - 3600 * 12, user_role: 'super-admin' },
+    { id: 5, action: 'idf.report.created', actor: 'mtorres', actor_name: 'María Torres', target: 'idf-3:IDF-2026-001', target_label: 'IDF-03 · Inspección de gabinete', created_at: nowUnix - 3600 * 24, user_role: 'operativo' },
+    { id: 6, action: 'user.updated', actor: 'admin', actor_name: 'Administrador NOC', target: 'user-aramirez', target_label: 'Usuario Lic. Ana Ramírez', created_at: nowUnix - 3600 * 36, user_role: 'super-admin' },
+    { id: 7, action: 'session.login', actor: 'mtorres', actor_name: 'María Torres', target: 'Sesión web', target_label: 'Sesión María Torres', created_at: nowUnix - 3600 * 48, user_role: 'operativo' },
+    { id: 8, action: 'ap.map.position.removed', actor: 'admin', actor_name: 'Administrador NOC', target: 'ap-6', target_label: 'AP-Terapia-Intensiva', created_at: nowUnix - 3600 * 52, user_role: 'super-admin' },
+  ];
+  return { segments, resources, requests, ips, idfs, reports, audit: demoAudit, devices: allDevices, aps: demoAps, health: { forti: true, omni: true }, updatedAt: '2026-09-06T16:24:00Z' };
 }

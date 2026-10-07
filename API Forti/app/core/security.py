@@ -213,6 +213,12 @@ async def verify_api_key(
     1. Un token de sesión JWT verificado con 2FA válido (si se provee o se activa 2FA).
     2. O una clave de API válida configurada en APP_API_KEY / API_SECRET_KEY.
     """
+    # Solo los endpoints de salud son públicos.
+    if request.method == "GET" and request.url.path in {
+        "/health", "/api/v1/health"
+    }:
+        return "public_read_only"
+
     # Si explícitamente se habilitó el modo no autenticado para desarrollo
     if settings.ALLOW_UNAUTHENTICATED:
         return "unauthenticated_dev_mode"
