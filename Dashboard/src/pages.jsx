@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, ArrowRight, ArrowUpDown, Building2, Camera, Check, CheckCircle2, Eye, Thermometer, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Copy, Download, FileText, Grid, HardDrive, Headset, Info, Laptop, Layers3, List, Monitor, Network, Package, Plus, Printer, Radio, RotateCcw, Router, Server, ShieldCheck, Smartphone, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X, LogIn, LogOut, UserPlus, KeyRound, PlugZap, MapPin, MapPinOff } from 'lucide-react';
-import { Badge, Button, DataTable, Dialog, Empty, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, downloadExcel, useListState } from './components.jsx';
+import { Activity, ArrowRight, ArrowUpDown, Building2, Camera, Check, CheckCircle2, Eye, Thermometer, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Copy, Download, FileText, Grid, HardDrive, Headset, Info, Laptop, Layers3, List, Monitor, Network, Package, Plus, Printer, Radio, RotateCcw, Router, Server, ShieldCheck, Smartphone, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X, LogIn, LogOut, UserPlus, KeyRound, PlugZap, MapPin, MapPinOff, Calendar, CalendarDays, FilePlus, MessageSquare, Send } from 'lucide-react';
+import { Badge, Button, DataTable, Dialog, Empty, Field, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, downloadExcel, useListState } from './components.jsx';
 import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getOverviewSegmentDevices, isMeztliSegment, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, getSupportSegments, normalizeText } from './domain.mjs';
+import { useSession } from './session.jsx';
 
 export function PageHeading({ eyebrow, title, description, updatedAt, children, headingId = 'page-title' }) {
   const hasActions = Boolean(children);
@@ -529,11 +530,917 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
   );
 }
 
-export function MeztliManagement({ data, openEditor, loading, errors, refresh, canExport }) {
+function getDaysDifference(start, end) {
+  if (!start || !end) return 1;
+  const d1 = new Date(start + 'T00:00:00');
+  const d2 = new Date(end + 'T00:00:00');
+  const diff = Math.round((d2 - d1) / (1000 * 60 * 60 * 24)) + 1;
+  return Number.isFinite(diff) && diff > 0 ? diff : 1;
+}
+
+function addDaysToDate(dateStr, days) {
+  const d = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
+  d.setDate(d.getDate() + days);
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+function DateRangeCalendarPicker({ startDate, endDate, onSelectRange }) {
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const [viewMonth, setViewMonth] = useState(() => {
+    const d = startDate ? new Date(startDate + 'T00:00:00') : new Date();
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+
+  const monthNames = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+
+  const firstDay = new Date(viewMonth.year, viewMonth.month, 1).getDay();
+  const daysInMonth = new Date(viewMonth.year, viewMonth.month + 1, 0).getDate();
+  const adjustedFirstDay = (firstDay + 6) % 7;
+
+  const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  const blanks = Array.from({ length: adjustedFirstDay }, (_, i) => i);
+
+  const formatDayStr = day => {
+    const m = String(viewMonth.month + 1).padStart(2, '0');
+    const d = String(day).padStart(2, '0');
+    return `${viewMonth.year}-${m}-${d}`;
+  };
+
+  const handleDayClick = day => {
+    const clicked = formatDayStr(day);
+    if (!startDate || (startDate && endDate && startDate !== endDate)) {
+      onSelectRange(clicked, clicked);
+    } else if (startDate && !endDate) {
+      if (clicked < startDate) {
+        onSelectRange(clicked, startDate);
+      } else {
+        onSelectRange(startDate, clicked);
+      }
+    } else {
+      if (clicked < startDate) {
+        onSelectRange(clicked, startDate);
+      } else {
+        onSelectRange(startDate, clicked);
+      }
+    }
+  };
+
+  const nextMonth = () => {
+    setViewMonth(prev => prev.month === 11 ? { year: prev.year + 1, month: 0 } : { year: prev.year, month: prev.month + 1 });
+  };
+  const prevMonth = () => {
+    setViewMonth(prev => prev.month === 0 ? { year: prev.year - 1, month: 11 } : { year: prev.year, month: prev.month - 1 });
+  };
+
+  const totalDays = getDaysDifference(startDate, endDate);
+
+  return (
+    <div className="meztli-calendar-picker panel">
+      <div className="meztli-calendar-header">
+        <IconButton label="Mes anterior" icon={ChevronLeft} onClick={prevMonth} />
+        <strong>{monthNames[viewMonth.month]} {viewMonth.year}</strong>
+        <IconButton label="Mes siguiente" icon={ChevronRight} onClick={nextMonth} />
+      </div>
+
+      <div className="meztli-calendar-weekdays">
+        <span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span>
+      </div>
+
+      <div className="meztli-calendar-grid">
+        {blanks.map(b => <div key={`b-${b}`} className="meztli-calendar-cell empty" />)}
+        {daysArray.map(day => {
+          const dateStr = formatDayStr(day);
+          const isSelected = startDate && endDate && dateStr >= startDate && dateStr <= endDate;
+          const isStart = dateStr === startDate;
+          const isEnd = dateStr === endDate;
+          const isToday = dateStr === todayStr;
+
+          return (
+            <button
+              type="button"
+              key={day}
+              className={`meztli-calendar-cell ${isSelected ? 'selected' : ''} ${isStart ? 'range-start' : ''} ${isEnd ? 'range-end' : ''} ${isToday ? 'today' : ''}`}
+              onClick={() => handleDayClick(day)}
+            >
+              <span>{day}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="meztli-calendar-summary">
+        <div className="meztli-calendar-badge">
+          <CalendarDays size={14} aria-hidden="true" />
+          <span>Vigencia en calendario: <strong>{totalDays} {totalDays === 1 ? 'día' : 'días'}</strong> ({startDate} al {endDate})</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MeztliDerechohabientesSubmodule({ demo, notify, user, canSupervise }) {
+  const state = useListState('meztli-derechohabientes');
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(!demo);
+  const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
+
+  // Modals
+  const [isCreating, setIsCreating] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [attendingTicket, setAttendingTicket] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [followUp, setFollowUp] = useState('');
+  const [followUpError, setFollowUpError] = useState('');
+  const [followUpBusy, setFollowUpBusy] = useState(false);
+  const [reportingTicket, setReportingTicket] = useState(null);
+  const [problemMessage, setProblemMessage] = useState('');
+  const [problemError, setProblemError] = useState('');
+  const [problemBusy, setProblemBusy] = useState(false);
+
+  // Form states for creating new ticket
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const [patientName, setPatientName] = useState('');
+  const [startDate, setStartDate] = useState(todayStr);
+  const [endDate, setEndDate] = useState(() => addDaysToDate(todayStr, 2));
+  const [department, setDepartment] = useState('Trabajo Social');
+  const [customDepartment, setCustomDepartment] = useState('');
+  const [roomBed, setRoomBed] = useState('');
+  const [notes, setNotes] = useState('');
+  const [formBusy, setFormBusy] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  // Attend modal states
+  const [attendStatus, setAttendStatus] = useState('attended');
+  const [attendNotes, setAttendNotes] = useState('');
+  const [attendBusy, setAttendBusy] = useState(false);
+
+  // Atender es una facultad técnica, definida por el submódulo Supervisión.
+  // El rol por sí solo nunca debe elevar privilegios.
+  const canAttend = Boolean(canSupervise);
+
+  useEffect(() => {
+    if (demo) {
+      setTickets([
+        {
+          id: 'dh-demo-1',
+          folio: 'DH-2026-0001',
+          patient_name: 'María Elena Morales Gómez',
+          start_date: '2026-10-07',
+          end_date: '2026-10-10',
+          entry_time: '08:00',
+          exit_time: '18:00',
+          department: 'Trabajo Social',
+          room_bed: 'Cama 204 (Hospitalización)',
+          notes: 'Paciente requiere conectividad temporal para teleconsulta con médicos familiares y seguimiento clínico.',
+          requested_by: 'Lic. Silvia Cruz (Trabajo Social)',
+          status: 'pending',
+          attended_by: '',
+          attended_at: null,
+          response_notes: '',
+          created_at: Math.floor(Date.now() / 1000) - 3600 * 3,
+        },
+        {
+          id: 'dh-demo-2',
+          folio: 'DH-2026-0002',
+          patient_name: 'Roberto Carlos Hernández Ramos',
+          start_date: '2026-10-06',
+          end_date: '2026-10-08',
+          entry_time: '07:30',
+          exit_time: '15:00',
+          department: 'Admisión / Urgencias',
+          room_bed: 'Observación Urgencias Cama 08',
+          notes: 'Alta temporal de acompañante para comunicación de estatus médico.',
+          requested_by: 'Lic. Fernando Soto (Admisión)',
+          status: 'attended',
+          attended_by: 'operador.redes',
+          attended_at: Math.floor(Date.now() / 1000) - 3600 * 20,
+          response_notes: 'Alta autorizada en SSID-Meztli. Vigencia configurada hasta el 08/10.',
+          created_at: Math.floor(Date.now() / 1000) - 3600 * 24,
+        },
+        {
+          id: 'dh-demo-3',
+          folio: 'DH-2026-0003',
+          patient_name: 'Guadalupe Estrada Ruiz',
+          start_date: '2026-10-05',
+          end_date: '2026-10-12',
+          entry_time: '09:00',
+          exit_time: '20:00',
+          department: 'Oncología Médica',
+          room_bed: 'Habitación 312',
+          notes: 'Paciente en tratamiento prolongado, requiere conexión estable para equipo de monitoreo personal.',
+          requested_by: 'Dra. Laura Jiménez (Oncología)',
+          status: 'in_progress',
+          attended_by: 'admin.demo',
+          attended_at: null,
+          response_notes: 'En revisión de cobertura de AP Meztli en el área de hospitalización.',
+          created_at: Math.floor(Date.now() / 1000) - 3600 * 48,
+        },
+      ]);
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let alive = true;
+    setLoading(true);
+    setError('');
+
+    request('/api/meztli/derechohabientes', { signal: controller.signal })
+      .then(res => {
+        if (alive && res?.items) {
+          setTickets(res.items);
+        }
+      })
+      .catch(err => {
+        if (alive && err.name !== 'AbortError') {
+          setError(err.message || 'No se pudieron consultar las altas de derechohabientes.');
+        }
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+
+    return () => {
+      alive = false;
+      controller.abort();
+    };
+  }, [demo, revision]);
+
+  useEffect(() => {
+    if (!selectedTicket) {
+      setMessages([]);
+      setFollowUp('');
+      setFollowUpError('');
+      return;
+    }
+    if (demo) {
+      setMessages(selectedTicket.status === 'attended' ? [{
+        id: `message-${selectedTicket.id}`,
+        body: 'El acceso fue habilitado. Si se pierde la conexión, responde aquí para que NOC vuelva a atender el caso.',
+        author_name: 'NOC / TI',
+        created_at: selectedTicket.updated_at || selectedTicket.created_at,
+      }] : []);
+      return;
+    }
+    const controller = new AbortController();
+    setMessagesLoading(true);
+    request(`/api/meztli/derechohabientes/${encodeURIComponent(selectedTicket.id)}/messages`, { signal: controller.signal })
+      .then(result => setMessages(Array.isArray(result?.items) ? result.items : []))
+      .catch(error => { if (error.name !== 'AbortError') setFollowUpError('No se pudo cargar el seguimiento del ticket.'); })
+      .finally(() => setMessagesLoading(false));
+    return () => controller.abort();
+  }, [demo, selectedTicket?.id]);
+
+  const handleCreateSubmit = async e => {
+    e.preventDefault();
+    setFormError('');
+    if (patientName.trim().length < 3) {
+      setFormError('Escribe el nombre completo del paciente (mínimo 3 letras).');
+      return;
+    }
+    if (!startDate || !endDate) {
+      setFormError('Indica la fecha de inicio y de fin.');
+      return;
+    }
+    if (endDate < startDate) {
+      setFormError('La fecha de salida no puede ser anterior a la de ingreso.');
+      return;
+    }
+    const effectiveDept = department === 'Otro' ? customDepartment.trim() : department;
+    const payload = {
+      patient_name: patientName.trim(),
+      start_date: startDate,
+      end_date: endDate,
+      department: effectiveDept,
+      room_bed: roomBed.trim(),
+      notes: notes.trim(),
+    };
+
+    setFormBusy(true);
+    try {
+      if (demo) {
+        const newTicket = {
+          ...payload,
+          id: `dh-demo-${Date.now()}`,
+          folio: `DH-2026-${String(tickets.length + 1).padStart(4, '0')}`,
+          status: 'pending',
+          attended_by: '',
+          attended_at: null,
+          response_notes: '',
+          created_at: Math.floor(Date.now() / 1000),
+          updated_at: Math.floor(Date.now() / 1000),
+        };
+        setTickets(prev => [newTicket, ...prev]);
+        notify?.(`Alta de paciente registrada con folio ${newTicket.folio} (modo demostración).`);
+      } else {
+        const res = await request('/api/meztli/derechohabientes', { body: payload });
+        if (res?.item) {
+          setTickets(prev => [res.item, ...prev]);
+        } else {
+          setRevision(r => r + 1);
+        }
+        notify?.('Solicitud de alta de derechohabiente registrada y enviada a TI/NOC.');
+      }
+      setIsCreating(false);
+      setPatientName('');
+      setNotes('');
+      setRoomBed('');
+    } catch (err) {
+      setFormError(err.message || 'No se pudo guardar la solicitud.');
+    } finally {
+      setFormBusy(false);
+    }
+  };
+
+  const handleAttendSubmit = async e => {
+    e.preventDefault();
+    if (!attendingTicket) return;
+    setAttendBusy(true);
+    try {
+      if (demo) {
+        const updated = {
+          ...attendingTicket,
+          status: attendStatus,
+          attended_by: user?.name || user?.username || 'operador',
+          attended_at: Math.floor(Date.now() / 1000),
+          response_notes: attendNotes.trim(),
+          updated_at: Math.floor(Date.now() / 1000),
+        };
+        setTickets(prev => prev.map(t => t.id === attendingTicket.id ? updated : t));
+        notify?.(`Ticket ${attendingTicket.folio} actualizado como ${attendStatus === 'attended' ? 'Atendido' : attendStatus === 'in_progress' ? 'En atención' : 'Cancelado'}.`);
+      } else {
+        const res = await request('/api/meztli/derechohabientes/status', {
+          body: {
+            id: attendingTicket.id,
+            status: attendStatus,
+            response_notes: attendNotes.trim(),
+          }
+        });
+        if (res?.item) {
+          setTickets(prev => prev.map(t => t.id === attendingTicket.id ? res.item : t));
+        } else {
+          setRevision(r => r + 1);
+        }
+        notify?.(`Ticket ${attendingTicket.folio} actualizado exitosamente.`);
+      }
+      setAttendingTicket(null);
+      setAttendNotes('');
+    } catch (err) {
+      notify?.(`Error al actualizar ticket: ${err.message}`);
+    } finally {
+      setAttendBusy(false);
+    }
+  };
+
+  const sendFollowUp = async (ticket, message) => {
+    if (demo) {
+        const savedMessage = {
+          id: `message-${Date.now()}`,
+          body: message.trim(),
+          author_name: user?.name || user?.username || 'Solicitante',
+          created_at: Math.floor(Date.now() / 1000),
+        };
+        return { message: savedMessage, item: { ...ticket, status: 'pending', updated_at: savedMessage.created_at } };
+    }
+    return request('/api/meztli/derechohabientes/messages', {
+      body: { id: ticket.id, message: message.trim() },
+    });
+  };
+
+  const applyFollowUp = result => {
+      setMessages(previous => [...previous, result.message]);
+      setTickets(previous => previous.map(ticket => ticket.id === result.item.id ? result.item : ticket));
+      setSelectedTicket(current => current?.id === result.item.id ? result.item : current);
+  };
+
+  const submitFollowUp = async () => {
+    if (!selectedTicket || followUp.trim().length < 3) {
+      setFollowUpError('Describe la desconexión o el seguimiento requerido.');
+      return;
+    }
+    setFollowUpBusy(true);
+    setFollowUpError('');
+    try {
+      const result = await sendFollowUp(selectedTicket, followUp);
+      applyFollowUp(result);
+      setFollowUp('');
+      notify?.(`Seguimiento enviado. El ticket ${result.item.folio} volvió a Pendiente para NOC.`);
+    } catch (error) {
+      setFollowUpError(error.message || 'No se pudo enviar el seguimiento.');
+    } finally {
+      setFollowUpBusy(false);
+    }
+  };
+
+  const submitProblemReport = async event => {
+    event.preventDefault();
+    if (!reportingTicket || problemMessage.trim().length < 3) {
+      setProblemError('Describe la desconexión o el problema de conectividad.');
+      return;
+    }
+    setProblemBusy(true);
+    setProblemError('');
+    try {
+      const result = await sendFollowUp(reportingTicket, problemMessage);
+      applyFollowUp(result);
+      setReportingTicket(null);
+      setProblemMessage('');
+      notify?.(`Problema notificado. El ticket ${result.item.folio} volvió a Pendiente para TI / NOC.`);
+    } catch (error) {
+      setProblemError(error.message || 'No se pudo enviar el reporte.');
+    } finally {
+      setProblemBusy(false);
+    }
+  };
+
+  const statusLabel = s => {
+    if (s === 'attended') return 'Atendido';
+    if (s === 'in_progress') return 'En atención';
+    if (s === 'cancelled') return 'Cancelado';
+    return 'Pendiente';
+  };
+
+  const activeTickets = tickets.filter(ticket => ['pending', 'in_progress', 'attended'].includes(ticket.status));
+  const pendingCount = activeTickets.filter(t => t.status === 'pending').length;
+  const inProgressCount = activeTickets.filter(t => t.status === 'in_progress').length;
+
+  const columns = [
+    {
+      key: 'folio',
+      label: 'Folio',
+      render: r => <span className="network-tag font-mono font-semibold">{r.folio}</span>,
+    },
+    {
+      key: 'patient',
+      label: 'Paciente derechohabiente',
+      render: r => (
+        <div className="cell-detail">
+          <strong>{r.patient_name}</strong>
+          <small>{[r.department, r.room_bed].filter(Boolean).join(' · ')}</small>
+        </div>
+      ),
+    },
+    {
+      key: 'dates',
+      label: 'Período y vigencia',
+      render: r => (
+        <div className="cell-detail">
+          <strong>{r.start_date} al {r.end_date}</strong>
+          <small className="meztli-dh-duration-tag">
+            <Clock size={11} aria-hidden="true" /> {getDaysDifference(r.start_date, r.end_date)} días vigentes
+          </small>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      label: 'Estado',
+      render: r => (
+        <Badge status={r.status === 'attended' ? 'online' : r.status === 'in_progress' ? 'warning' : r.status === 'pending' ? 'pending' : 'offline'}>
+          {statusLabel(r.status)}
+        </Badge>
+      ),
+    },
+    {
+      key: 'actions',
+      label: 'Acciones',
+      sortable: false,
+      render: r => (
+        <div className="meztli-ticket-actions">
+          <Button icon={Eye} onClick={() => setSelectedTicket(r)}>
+            Detalle
+          </Button>
+          {!canAttend && (
+            <Button
+              className="meztli-report-problem"
+              icon={MessageSquare}
+              onClick={() => {
+                setProblemError('');
+                setProblemMessage('');
+                setReportingTicket(r);
+              }}
+            >
+              Notificar problema
+            </Button>
+          )}
+          {canAttend && (
+            <Button
+              variant={r.status === 'pending' ? 'primary' : 'secondary'}
+              icon={CheckCircle2}
+              onClick={() => {
+                setAttendingTicket(r);
+                setAttendStatus(r.status === 'pending' ? 'attended' : r.status);
+                setAttendNotes(r.response_notes || 'Acceso a red SSID-Meztli autorizado conforme a vigencia.');
+              }}
+            >
+              Atender
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="Gestión Meztli · Módulo para Áreas Externas"
+        title="Alta Derechohabientes"
+        description="Registro y tickets directos de pacientes para alta de conectividad en la red inalámbrica Meztli."
+      />
+
+      <section className="metric-grid meztli-metrics meztli-dh-metrics">
+        <Metric
+          icon={Clock3}
+          tone="warning"
+          label="Pendientes de atención"
+          value={number(pendingCount)}
+          caption={pendingCount ? 'tickets directos sin procesar' : 'sin tickets directos por atender'}
+        />
+        <Metric
+          icon={Radio}
+          tone="info"
+          label="En atención técnica"
+          value={number(inProgressCount)}
+          caption="en revisión de cobertura o acceso"
+        />
+        <aside className="meztli-new-request" aria-label="Nueva solicitud">
+          <span>Gestión de acceso</span>
+          <strong>¿Nuevo paciente?</strong>
+          <small>Registra una alta directa para que TI / NOC la atienda.</small>
+          <Button
+            variant="primary"
+            icon={Plus}
+            onClick={() => {
+              setFormError('');
+              setIsCreating(true);
+            }}
+          >
+            Nueva alta
+          </Button>
+        </aside>
+      </section>
+
+      <DataTable
+        title="Solicitudes y tickets de derechohabientes"
+        className="meztli-dh-table"
+        rows={activeTickets}
+        columns={columns}
+        state={state}
+        pageSize={20}
+        noun="solicitudes de alta"
+        loading={loading}
+        error={error}
+        onRetry={() => setRevision(r => r + 1)}
+        rowClassName={ticket => ticket.status === 'pending' ? 'meztli-ticket-pending' : ''}
+        toolbar={
+          <div className="toolbar meztli-table-toolbar">
+            <SearchField
+              value={state.query}
+              onChange={state.setQuery}
+              placeholder="Buscar por paciente, folio o área…"
+            />
+          </div>
+        }
+        emptyText={activeTickets.length === 0 ? 'No hay solicitudes activas de derechohabientes.' : 'No se encontraron solicitudes activas con esa búsqueda.'}
+      />
+
+      {/* Modal: Crear nueva alta */}
+      <Dialog
+        open={isCreating}
+        onClose={() => !formBusy && setIsCreating(false)}
+        title="Nueva alta de derechohabiente (Ticket directo a TI/NOC)"
+        wide
+      >
+        <form className="meztli-dh-create-form" noValidate onSubmit={handleCreateSubmit}>
+          {formError && <Notice title="Revisa los campos" tone="danger">{formError}</Notice>}
+
+          <div className="form-grid">
+            <div className="col-span-full">
+              <Field label="Nombre completo del paciente" required>
+                <input
+                  value={patientName}
+                  onChange={e => setPatientName(e.target.value)}
+                  placeholder="Ej. María Elena Morales Gómez"
+                  required
+                  autoFocus
+                />
+              </Field>
+            </div>
+
+            <Field label="Departamento solicitante" required>
+              <select value={department} onChange={e => setDepartment(e.target.value)}>
+                <option value="Trabajo Social">Trabajo Social</option>
+                <option value="Admisión / Urgencias">Admisión / Urgencias</option>
+                <option value="Hospitalización">Hospitalización</option>
+                <option value="Medicina Interna">Medicina Interna</option>
+                <option value="Oncología Médica">Oncología Médica</option>
+                <option value="Pediatría">Pediatría</option>
+                <option value="Consulta Externa">Consulta Externa</option>
+                <option value="Otro">Otro (especificar)</option>
+              </select>
+            </Field>
+
+            {department === 'Otro' ? (
+              <Field label="Especificar área / servicio" required>
+                <input
+                  value={customDepartment}
+                  onChange={e => setCustomDepartment(e.target.value)}
+                  placeholder="Ej. Cardiología"
+                  required
+                />
+              </Field>
+            ) : (
+              <Field label="Cama / Habitación / Ubicación">
+                <input
+                  value={roomBed}
+                  onChange={e => setRoomBed(e.target.value)}
+                  placeholder="Ej. Cama 204 o Pabellón B"
+                />
+              </Field>
+            )}
+
+            <div className="col-span-full meztli-dh-stay">
+              <h4 style={{ margin: '4px 0 7px', fontSize: '13px', fontWeight: 650 }}>
+                Período de estancia y vigencia (Calendario)
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '6px' }}>
+                <Field label="Fecha de inicio (De qué día)" required>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={e => setStartDate(e.target.value)}
+                    required
+                  />
+                </Field>
+                <Field label="Fecha de término (A qué día)" required>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={e => setEndDate(e.target.value)}
+                    required
+                  />
+                </Field>
+              </div>
+
+            </div>
+
+            <div className="col-span-full meztli-dh-bottom-layout">
+              <div className="meztli-dh-calendar-column">
+                <DateRangeCalendarPicker
+                  startDate={startDate}
+                  endDate={endDate}
+                  onSelectRange={(start, end) => {
+                    setStartDate(start);
+                    setEndDate(end);
+                  }}
+                />
+              </div>
+              <div className="meztli-dh-notes-column">
+                <Field label="Mensaje directo / Observaciones para TI y Redes">
+                  <textarea
+                    rows={1}
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    placeholder="Ej. Paciente en estancia programada requiere acceso para expediente familiar y teleconsulta..."
+                  />
+                </Field>
+              </div>
+            </div>
+          </div>
+
+          <div className="form-actions" style={{ marginTop: '12px' }}>
+            <Button disabled={formBusy} onClick={() => setIsCreating(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" variant="primary" icon={Send} busy={formBusy}>
+              Enviar solicitud de alta
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Modal: Atender ticket */}
+      <Dialog
+        open={Boolean(attendingTicket)}
+        onClose={() => !attendBusy && setAttendingTicket(null)}
+        title={attendingTicket ? `Atender solicitud ${attendingTicket.folio}` : 'Atender solicitud'}
+      >
+        {attendingTicket && (
+          <form noValidate onSubmit={handleAttendSubmit}>
+            <Notice title={`Paciente: ${attendingTicket.patient_name}`} tone="info">
+              Área: <strong>{attendingTicket.department}</strong> {attendingTicket.room_bed ? `(${attendingTicket.room_bed})` : ''} · Vigencia: <strong>{attendingTicket.start_date} al {attendingTicket.end_date}</strong>
+            </Notice>
+
+            {attendingTicket.notes && (
+              <div style={{ margin: '14px 0', padding: '12px', background: 'var(--surface-muted)', borderRadius: '8px', fontSize: '13px' }}>
+                <strong style={{ display: 'block', marginBottom: '4px' }}>Mensaje del solicitante:</strong>
+                <span>{attendingTicket.notes}</span>
+              </div>
+            )}
+
+            <div className="form-grid">
+              <div className="col-span-full">
+                <Field label="Estado de atención a asignar" required>
+                  <select value={attendStatus} onChange={e => setAttendStatus(e.target.value)}>
+                    <option value="attended">Atendido (Acceso habilitado en red Meztli)</option>
+                    <option value="in_progress">En atención técnica (Revisando cobertura)</option>
+                    <option value="pending">Dejar como Pendiente</option>
+                  </select>
+                </Field>
+              </div>
+
+              <div className="col-span-full">
+                <Field label="Nota de respuesta técnica para el solicitante" hint="Este mensaje quedará registrado en la bitácora del ticket.">
+                  <textarea
+                    rows={3}
+                    value={attendNotes}
+                    onChange={e => setAttendNotes(e.target.value)}
+                    placeholder="Ej. Conexión autorizada en red inalámbrica Meztli. Vigencia configurada."
+                  />
+                </Field>
+              </div>
+            </div>
+
+            <div className="form-actions" style={{ marginTop: '20px' }}>
+              <Button disabled={attendBusy} onClick={() => setAttendingTicket(null)}>
+                Cancelar
+              </Button>
+              <Button type="submit" variant="primary" icon={CheckCircle2} busy={attendBusy}>
+                Guardar atención de ticket
+              </Button>
+            </div>
+          </form>
+        )}
+      </Dialog>
+
+      {/* Modal: Detalle de ticket */}
+      <Dialog
+        open={Boolean(selectedTicket)}
+        onClose={() => setSelectedTicket(null)}
+        title={selectedTicket ? `Ficha de Alta · ${selectedTicket.folio}` : 'Detalle'}
+      >
+        {selectedTicket && (
+          <div className="detail-grid">
+            <div className="cell-detail">
+              <small>Folio Institucional</small>
+              <strong className="font-mono">{selectedTicket.folio}</strong>
+            </div>
+            <div className="cell-detail">
+              <small>Estado</small>
+              <Badge status={selectedTicket.status === 'attended' ? 'online' : selectedTicket.status === 'in_progress' ? 'warning' : selectedTicket.status === 'pending' ? 'review' : 'offline'}>
+                {statusLabel(selectedTicket.status)}
+              </Badge>
+            </div>
+            <div className="cell-detail">
+              <small>Paciente Derechohabiente</small>
+              <strong>{selectedTicket.patient_name}</strong>
+            </div>
+            <div className="cell-detail">
+              <small>Departamento / Servicio</small>
+              <strong>{[selectedTicket.department, selectedTicket.room_bed].filter(Boolean).join(' · ')}</strong>
+            </div>
+            <div className="cell-detail">
+              <small>Vigencia (Calendario)</small>
+              <strong>{selectedTicket.start_date} al {selectedTicket.end_date} ({getDaysDifference(selectedTicket.start_date, selectedTicket.end_date)} días)</strong>
+            </div>
+            <div className="cell-detail">
+              <small>Fecha de solicitud</small>
+              <span>{selectedTicket.created_at ? dateTime(new Date(selectedTicket.created_at * 1000).toISOString()) : 'Reciente'}</span>
+            </div>
+
+            {selectedTicket.notes && (
+              <div className="col-span-full" style={{ padding: '10px', background: 'var(--surface-muted)', borderRadius: '6px' }}>
+                <small className="text-muted" style={{ display: 'block', marginBottom: '3px' }}>Mensaje directo del solicitante:</small>
+                <p style={{ margin: 0, fontSize: '13px' }}>{selectedTicket.notes}</p>
+              </div>
+            )}
+
+            <section className="meztli-ticket-thread col-span-full" aria-label="Seguimiento del ticket">
+              <div className="meztli-ticket-thread-heading">
+                <div>
+                  <small>CONVERSACIÓN OPERATIVA</small>
+                  <h3>Seguimiento con TI / NOC</h3>
+                </div>
+                <span>{selectedTicket.status === 'pending' ? 'Requiere atención' : 'Puedes reportar una nueva desconexión'}</span>
+              </div>
+              {messagesLoading ? <p className="text-muted text-sm">Cargando seguimiento…</p> : (
+                <div className="meztli-ticket-messages">
+                  {messages.length ? messages.map(message => (
+                    <article key={message.id} className="meztli-ticket-message">
+                      <strong>{message.author_name}</strong>
+                      <p>{message.body}</p>
+                      <small>{message.created_at ? dateTime(new Date(message.created_at * 1000).toISOString()) : 'Ahora'}</small>
+                    </article>
+                  )) : <p className="text-muted text-sm">Aún no hay mensajes. Reporta aquí si el acceso se vuelve a desconectar.</p>}
+                </div>
+              )}
+              <label className="meztli-followup-field">
+                <span>Reportar nueva desconexión o solicitar seguimiento</span>
+                <textarea
+                  rows={2}
+                  value={followUp}
+                  onChange={event => setFollowUp(event.target.value)}
+                  placeholder="Ej. El paciente se desconectó de la red Meztli y requiere una nueva revisión en la habitación."
+                  disabled={selectedTicket.status === 'cancelled' || followUpBusy}
+                />
+              </label>
+              {followUpError && <p className="field-error">{followUpError}</p>}
+              <Button
+                variant="primary"
+                icon={Send}
+                busy={followUpBusy}
+                disabled={selectedTicket.status === 'cancelled'}
+                onClick={submitFollowUp}
+              >
+                Enviar a TI / NOC y reabrir ticket
+              </Button>
+            </section>
+
+            {selectedTicket.attended_by && (
+              <div className="col-span-full" style={{ padding: '10px', background: 'var(--surface-muted)', borderRadius: '6px', borderLeft: '3px solid var(--color-success, #10b981)' }}>
+                <small className="text-muted" style={{ display: 'block', marginBottom: '3px' }}>
+                  Atendido por <strong>{selectedTicket.attended_by}</strong> {selectedTicket.attended_at ? `el ${dateTime(new Date(selectedTicket.attended_at * 1000).toISOString())}` : ''}:
+                </small>
+                <p style={{ margin: 0, fontSize: '13px' }}>{selectedTicket.response_notes || 'Acceso procesado y autorizado.'}</p>
+              </div>
+            )}
+
+            <div className="form-actions col-span-full" style={{ marginTop: '14px' }}>
+              <Button onClick={() => setSelectedTicket(null)}>Cerrar</Button>
+              {canAttend && selectedTicket.status !== 'attended' && (
+                <Button
+                  variant="primary"
+                  icon={CheckCircle2}
+                  onClick={() => {
+                    setAttendingTicket(selectedTicket);
+                    setAttendStatus('attended');
+                    setAttendNotes(selectedTicket.response_notes || 'Acceso a red SSID-Meztli autorizado.');
+                    setSelectedTicket(null);
+                  }}
+                >
+                  Atender solicitud
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </Dialog>
+
+      <Dialog
+        open={Boolean(reportingTicket)}
+        onClose={() => !problemBusy && setReportingTicket(null)}
+        title="Notificar problema de conexión"
+      >
+        {reportingTicket && (
+          <form className="meztli-problem-form" noValidate onSubmit={submitProblemReport}>
+            <div className="meztli-problem-ticket">
+              <MessageSquare size={21} aria-hidden="true" />
+              <div>
+                <strong>{reportingTicket.patient_name}</strong>
+                <span>{reportingTicket.folio} · Describe el problema para TI / NOC.</span>
+              </div>
+            </div>
+            <Field label="¿Qué ocurrió con la conexión?" required error={problemError}>
+              <textarea
+                rows={5}
+                autoFocus
+                value={problemMessage}
+                onChange={event => setProblemMessage(event.target.value)}
+                placeholder="Ej. El paciente se desconectó de la red Meztli y requiere una nueva revisión en la habitación."
+                disabled={problemBusy}
+              />
+            </Field>
+            <div className="form-actions meztli-problem-actions">
+              <Button disabled={problemBusy} onClick={() => setReportingTicket(null)}>Cancelar</Button>
+              <Button type="submit" variant="primary" icon={Send} busy={problemBusy}>Enviar a TI / NOC</Button>
+            </div>
+          </form>
+        )}
+      </Dialog>
+    </>
+  );
+}
+
+export function MeztliManagement({ data, openEditor, loading, errors, refresh, canExport, notify, demo }) {
+  const { canViewSubmodule, user } = useSession() || {};
+  const canSupervise = canViewSubmodule ? canViewSubmodule('gestion-meztli', 'supervision') : true;
+  const canDerechohabientes = canViewSubmodule ? canViewSubmodule('gestion-meztli', 'derechohabientes') : true;
+
+  const [activeTab, setActiveTab] = useState(() => (!canSupervise && canDerechohabientes ? 'derechohabientes' : 'supervision'));
+
+  const currentTab = !canSupervise && canDerechohabientes
+    ? 'derechohabientes'
+    : (canSupervise && !canDerechohabientes ? 'supervision' : activeTab);
+
   const state = useListState('gestion-meztli');
-  // La vista no debe iniciar ocultando los equipos admitidos: cuando todos
-  // tienen reserva DHCP, el filtro "No admitidos" hacía parecer que la tabla
-  // no se actualizaba aunque FortiGate hubiera devuelto concesiones vigentes.
   const [admissionFilter, setAdmissionFilter] = useState('all');
   const [deviceTypeFilter, setDeviceTypeFilter] = useState('');
   const directLeases = Array.isArray(data.meztliLeases) ? data.meztliLeases : [];
@@ -542,8 +1449,7 @@ export function MeztliManagement({ data, openEditor, loading, errors, refresh, c
   const belongsToMeztli = device => (meztliSegment && deviceInSegment(device, meztliSegment)) || looksLikeMeztli(device);
   const meztliDevices = data.devices.filter(belongsToMeztli);
   const directMeztliLeases = directLeases.filter(lease => normalizeText(lease.interface).includes('meztli'));
-  // DHCP leases are the source of truth when available; device inventory is only
-  // retained as a visual fallback for demo/offline integrations.
+
   const connected = directMeztliLeases.length ? directMeztliLeases.map(lease => ({ ...lease, name: lease.device_name || lease.hostname || lease.mac || 'Sin identificar', status: lease.is_online === false ? 'offline' : 'online', activity: lease.is_online === false ? 'Sin conexión' : 'En línea' })) : meztliDevices.filter(device => device.status === 'online' || device.is_online === true);
   const reserved = connected.filter(device => device.is_reserved === true);
   const unmanaged = connected.filter(device => device.is_reserved !== true);
@@ -576,12 +1482,49 @@ export function MeztliManagement({ data, openEditor, loading, errors, refresh, c
     { key: 'uptime', label: 'Tiempo en línea', value: row => row.lease_started_at || 0, render: row => row.is_online === false ? detailText('Sin conexión', 'Concesión DHCP vigente') : detailText(elapsedSinceLease(row.lease_started_at), 'desde la última renovación DHCP') },
     { key: 'admission', label: 'Admisión', value: row => row.admission, render: row => row.admission === 'admitted' ? <span className="meztli-reservation-mark meztli-table-mark"><ShieldCheck size={13} /> Admitido</span> : <span className="meztli-unapproved-mark"><TriangleAlert size={13} /> No admitido</span> },
   ];
+
   return <>
-    <PageHeading eyebrow="Supervisión de red inalámbrica" title="Gestión Meztli" description="Dispositivos conectados a Meztli sin reserva DHCP" updatedAt={data.updatedAt} />
-    {unmanaged.length > 0 && <Notice title="Aviso: conexiones no admitidas detectadas">Hay <strong>{number(unmanaged.length)} dispositivo{unmanaged.length === 1 ? '' : 's'}</strong> conectado{unmanaged.length === 1 ? '' : 's'} a <strong>SSID-Meztli</strong> sin reserva DHCP. Revísalos antes de realizar una acción en la red.</Notice>}
-    <section className="metric-grid meztli-metrics"><Metric icon={Wifi} label="Conectados a Meztli" value={number(connected.length)} caption="actividad detectada en este momento" /><Metric icon={ShieldCheck} tone="success" label="Con reserva DHCP" value={number(reserved.length)} caption="autorizados para permanecer conectados" ><span className="meztli-reservation-mark"><ShieldCheck size={12} /> Reserva activa</span></Metric><Metric icon={TriangleAlert} tone="danger" label="No deberían estar conectados" value={number(unmanaged.length)} caption="sin reserva DHCP · requieren revisión" /></section>
-    <DataTable title="Conexiones de SSID-Meztli" rows={rows} columns={columns} state={state} pageSize={25} noun={admissionFilter === 'not-admitted' ? 'dispositivos por revisar' : 'dispositivos'} toolbar={<div className="toolbar meztli-table-toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar dispositivo, IP o MAC…" /><Select label="Admisión" value={admissionFilter} onChange={event => setAdmissionFilter(event.target.value)}><option value="not-admitted">No admitidos</option><option value="admitted">Admitidos (reserva DHCP)</option><option value="all">Todos</option></Select><Select label="Tipo de dispositivo" value={deviceTypeFilter} onChange={event => setDeviceTypeFilter(event.target.value)}><option value="">Todos los tipos</option>{options(allRows.map(row => row.deviceType))}</Select></div>} exportable={canExport} loading={loading} error={errors.meztliLeases || errors.devices} onRetry={refresh} onRowClick={row => openEditor('device-detail', row)} emptyText={connected.length ? admissionFilter === 'not-admitted' ? 'Todos los dispositivos conectados a Meztli tienen una reserva DHCP.' : 'No hay dispositivos que coincidan con los filtros seleccionados.' : 'FortiGate no devolvió concesiones DHCP activas para SSID-Meztli.'} />
-    <Note title="Alcance de Gestión Meztli">La vista es de supervisión: no modifica reservas DHCP ni desconecta equipos. Abre un registro para revisar sus datos técnicos antes de realizar cualquier acción en la red.</Note>
+    {canSupervise && canDerechohabientes && (
+      <nav className="inventory-tabs meztli-tabs" role="tablist" aria-label="Secciones de Gestión Meztli">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={currentTab === 'supervision'}
+          className={currentTab === 'supervision' ? 'active' : ''}
+          onClick={() => setActiveTab('supervision')}
+        >
+          <Wifi size={15} aria-hidden="true" />
+          Supervisión de conexiones ({number(connected.length)})
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={currentTab === 'derechohabientes'}
+          className={currentTab === 'derechohabientes' ? 'active' : ''}
+          onClick={() => setActiveTab('derechohabientes')}
+        >
+          <Users size={15} aria-hidden="true" />
+          Alta derechohabientes
+        </button>
+      </nav>
+    )}
+
+    {currentTab === 'derechohabientes' ? (
+      <MeztliDerechohabientesSubmodule
+        demo={demo}
+        notify={notify}
+        user={user}
+        canSupervise={canSupervise}
+      />
+    ) : (
+      <>
+        <PageHeading eyebrow="Supervisión de red inalámbrica" title="Gestión Meztli" description="Dispositivos conectados a Meztli sin reserva DHCP" updatedAt={data.updatedAt} />
+        {unmanaged.length > 0 && <Notice title="Aviso: conexiones no admitidas detectadas">Hay <strong>{number(unmanaged.length)} dispositivo{unmanaged.length === 1 ? '' : 's'}</strong> conectado{unmanaged.length === 1 ? '' : 's'} a <strong>SSID-Meztli</strong> sin reserva DHCP. Revísalos antes de realizar una acción en la red.</Notice>}
+        <section className="metric-grid meztli-metrics meztli-supervision-metrics"><Metric icon={Wifi} label="Conectados a Meztli" value={number(connected.length)} caption="actividad detectada en este momento" /><Metric icon={ShieldCheck} tone="success" label="Con reserva DHCP" value={number(reserved.length)} caption="autorizados para permanecer conectados" ><span className="meztli-reservation-mark"><ShieldCheck size={12} /> Reserva activa</span></Metric><Metric icon={TriangleAlert} tone="danger" label="No deberían estar conectados" value={number(unmanaged.length)} caption="sin reserva DHCP · requieren revisión" /></section>
+        <DataTable title="Conexiones de SSID-Meztli" rows={rows} columns={columns} state={state} pageSize={25} noun={admissionFilter === 'not-admitted' ? 'dispositivos por revisar' : 'dispositivos'} toolbar={<div className="toolbar meztli-table-toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar dispositivo, IP o MAC…" /><Select label="Admisión" value={admissionFilter} onChange={event => setAdmissionFilter(event.target.value)}><option value="not-admitted">No admitidos</option><option value="admitted">Admitidos (reserva DHCP)</option><option value="all">Todos</option></Select><Select label="Tipo de dispositivo" value={deviceTypeFilter} onChange={event => setDeviceTypeFilter(event.target.value)}><option value="">Todos los tipos</option>{options(allRows.map(row => row.deviceType))}</Select></div>} exportable={canExport} loading={loading} error={errors.meztliLeases || errors.devices} onRetry={refresh} onRowClick={row => openEditor('device-detail', row)} emptyText={connected.length ? admissionFilter === 'not-admitted' ? 'Todos los dispositivos conectados a Meztli tienen una reserva DHCP.' : 'No hay dispositivos que coincidan con los filtros seleccionados.' : 'FortiGate no devolvió concesiones DHCP activas para SSID-Meztli.'} />
+        <Note title="Alcance de Gestión Meztli">La vista es de supervisión: no modifica reservas DHCP ni desconecta equipos. Abre un registro para revisar sus datos técnicos antes de realizar cualquier acción en la red.</Note>
+      </>
+    )}
   </>;
 }
 export function AuditLog({

@@ -149,6 +149,14 @@ svg { flex-shrink: 0; }
 .overview-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, .88fr)) minmax(345px, 1.28fr); gap: 12px; margin-bottom: 22px; }
 .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; margin-bottom: 19px; }
 .metric { display: flex; align-items: flex-start; gap: 17px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-panel); box-shadow: var(--shadow-panel); padding: 23px 19px; min-height: 128px; }
+.meztli-dh-metrics { grid-template-columns: 3fr 3fr 2fr; align-items: stretch; gap: 16px; }
+.meztli-supervision-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.meztli-metrics .metric { min-width: 0; }
+.meztli-new-request { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 5px; min-height: 128px; padding: 17px 19px; border: 1px solid #ead5dc; border-radius: var(--radius-panel); background: linear-gradient(135deg, #fffafa, #f9eef1); box-shadow: var(--shadow-panel); }
+.meztli-new-request > span { color: #8c2748; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.meztli-new-request > strong { color: var(--color-brand); font-family: var(--font-display); font-size: 19px; }
+.meztli-new-request > small { min-height: 30px; color: var(--muted); font-size: 11px; line-height: 1.35; }
+.meztli-new-request .button { width: 100%; min-height: 37px; margin-top: 5px; padding-inline: 10px; font-size: 11px; }
 .overview-metrics .metric { min-height: 118px; padding: 16px 17px; gap: 14px; }
 .metric-icon { width: 51px; height: 51px; flex-shrink: 0; border-radius: 12px; display: inline-grid; place-items: center; color: white; box-shadow: inset 0 0 0 1px #ffffff32; }
 .metric-icon-brand { background: linear-gradient(130deg, #9e2649, var(--color-brand)); }
@@ -296,6 +304,8 @@ td .button { min-height: 31px; font-size: 11px; padding: 6px 13px; border-radius
 .qr-card { text-align: center; }.qr-card h3 { font-family: var(--font-display); font-size: 28px; }.qr-card img { display: block; margin: 20px auto; }.qr-url { display: block; overflow-wrap: anywhere; font: 12px var(--font-mono); margin: 16px 0; color: var(--color-brand); text-decoration: underline; }
 .toast-region { position: fixed; right: 22px; bottom: 22px; z-index: 80; max-width: min(480px, calc(100vw - 32px)); }.toast { display: flex; align-items: center; gap: 12px; padding: 13px 16px; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--color-success); border-radius: 9px; box-shadow: 0 5px 25px #36241620; font-size: 12px; }.toast > svg { color: var(--color-success); }
 @media (min-width: 1750px) { .main-content { padding-inline: 45px; }.metric-value { font-size: 32px; }.metric-label { font-size: 13px; }.segment-card { padding: 24px; }.segment-details { font-size: 14px; }.segment-description { font-size: 13px; } }
+@media (max-width: 1150px) { .meztli-dh-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }.meztli-new-request { grid-column: 1 / -1; min-height: 0; flex-direction: row; flex-wrap: wrap; align-items: center; }.meztli-new-request > small { flex: 1; min-width: 210px; min-height: 0; }.meztli-new-request .button { width: auto; margin: 0 0 0 auto; } }
+@media (max-width: 600px) { .meztli-dh-metrics, .meztli-supervision-metrics { grid-template-columns: 1fr; }.meztli-new-request { display: flex; align-items: flex-start; flex-direction: column; }.meztli-new-request .button { width: 100%; margin: 5px 0 0; } }
 @media (max-width: 1450px) { :root { --sidebar-width: 220px; }.main-content { padding-inline: 26px; }.institutional-header { gap: 16px; padding-inline: 20px; }.header-title { padding-left: 0; min-width: 200px; }.header-search { max-width: 290px; }.overview-metrics { grid-template-columns: repeat(3, minmax(0, .85fr)) minmax(310px, 1.25fr); }.page-heading-actions { gap: 10px; }.operation-status { display: none; }.metric { padding: 19px 16px; gap: 12px; }.metric-icon { width: 44px; height: 44px; }.segment-grid { gap: 14px; }.segment-card { padding: 17px; }.segment-card h3 { font-size: 18px; } }
 @media (max-width: 1150px) { .header-search { display: none; }.header-refresh { margin-left: auto; }.account-button { margin-left: 0; }.main-content { padding-inline: 22px; }.metric-icon { width: 39px; height: 39px; border-radius: 9px; }.metric-icon svg { width: 23px; }.metric-value { font-size: 25px; }.overview-metrics .metric { gap: 10px; padding: 15px 12px; }.network-usage-list { gap-inline: 10px; }.network-usage-row { grid-template-columns: minmax(95px, 1fr) minmax(85px, 1.1fr) 48px; gap: 7px; }.segment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.segment-card:last-child { grid-column: 1 / -1; }.segment-card:last-child .segment-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }.metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.toolbar .select-field { min-width: 160px; }.page-heading-actions .update-stamp { display: none; }.operational-note blockquote { display: none; } }
 @media (max-width: 850px) { :root { --sidebar-width: 0px; --header-height: 73px; }.sidebar { display: none; }.institutional-header { padding-inline: 17px; gap: 14px; }.brand-image { width: 196px; height: 58px; background-size: 1438px 809px; background-position: -36px -7px; }.header-title { min-width: 180px; }.header-title strong { font-size: 21px; }.mexico-wordmark { display: none; }.account-button { padding-left: 12px; }.account-button > span:not(.avatar), .account-button > svg { display: none; }.institutional-header .mobile-menu { display: inline-grid; }.main-content { padding-inline: 22px; }.overview-metrics { gap: 10px; }.metric-icon { width: 36px; height: 36px; }.metric-value { font-size: 25px; }.page-heading-copy { padding-left: 17px; } }
@@ -1643,6 +1653,439 @@ td .button { min-height: 31px; font-size: 11px; padding: 6px 13px; border-radius
 .modular-page-item:hover:not(.is-disabled) {
   border-color: var(--color-brand);
 }
+
+/* Modular Modules & Submodules Tree */
+.modular-modules-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.modular-module-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 10px 14px;
+  transition: all 0.15s ease;
+}
+
+.modular-module-card.is-active {
+  border-color: rgba(188, 149, 92, 0.4);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.modular-module-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modular-module-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  width: 100%;
+}
+
+.modular-module-label input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  min-height: 0;
+  margin: 0;
+  accent-color: var(--color-brand);
+  cursor: pointer;
+}
+
+.modular-module-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.modular-sub-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+
+.modular-submodules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-left: 27px;
+  border-left: 2px solid var(--border);
+  margin-left: 8px;
+}
+
+.modular-submodule-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 10px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.modular-submodule-item input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  min-height: 0;
+  margin: 0;
+  accent-color: var(--color-brand);
+  cursor: pointer;
+}
+
+.modular-submodule-item.is-selected {
+  background: #fbf2f4;
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+  font-weight: 600;
+}
+
+.modular-submodule-item.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Meztli Tabs & Derechohabientes Calendar */
+.meztli-tabs {
+  margin-bottom: 20px;
+}
+
+.meztli-calendar-picker {
+  width: min(100%, 420px);
+  margin: 2px auto 0;
+  padding: 5px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.meztli-calendar-presets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 7px;
+}
+
+.btn-chip {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-chip:hover {
+  background: var(--color-brand);
+  color: #fff;
+  border-color: var(--color-brand);
+}
+
+.meztli-calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+  font-size: 12px;
+}
+
+.meztli-calendar-header .icon-button {
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 2px;
+}
+
+.meztli-calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 1px;
+}
+
+.meztli-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.meztli-calendar-cell {
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--foreground);
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.meztli-calendar-cell:hover:not(.empty) {
+  background: var(--surface-muted);
+  border-color: var(--border);
+}
+
+.meztli-calendar-cell.empty {
+  cursor: default;
+}
+
+.meztli-calendar-cell.selected {
+  background: rgba(188, 149, 92, 0.22);
+  color: var(--color-brand);
+  font-weight: 650;
+}
+
+.meztli-calendar-cell.range-start,
+.meztli-calendar-cell.range-end {
+  background: var(--color-brand) !important;
+  color: #fff !important;
+  font-weight: 700;
+}
+
+.meztli-calendar-cell.today {
+  border-color: var(--color-brand);
+}
+
+.meztli-calendar-summary {
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px solid var(--border);
+}
+
+.meztli-calendar-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.meztli-dh-duration-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 550;
+}
+
+.meztli-ticket-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meztli-ticket-actions .button {
+  justify-content: center;
+  white-space: nowrap;
+}
+
+/* The patient queue should grow with its records, not reserve a mostly empty screen. */
+.meztli-dh-table .table-panel-heading {
+  padding: 12px 18px;
+  background: linear-gradient(90deg, #fffdfc, #fbf7f5);
+  border-bottom: 1px solid var(--border);
+}
+
+.meztli-dh-table .table-scroll {
+  min-height: 0;
+  max-height: 480px;
+}
+
+.meztli-dh-table table { table-layout: fixed; }
+.meztli-dh-table th:nth-child(1), .meztli-dh-table td:nth-child(1) { width: 16%; }
+.meztli-dh-table th:nth-child(2), .meztli-dh-table td:nth-child(2) { width: 23%; }
+.meztli-dh-table th:nth-child(3), .meztli-dh-table td:nth-child(3) { width: 21%; }
+.meztli-dh-table th:nth-child(4), .meztli-dh-table td:nth-child(4) { width: 15%; }
+.meztli-dh-table th:nth-child(5), .meztli-dh-table td:nth-child(5) { width: 25%; }
+.meztli-dh-table th:last-child, .meztli-dh-table td:last-child { text-align: right; }
+
+.meztli-dh-table th {
+  height: 45px;
+  font-size: 12px;
+}
+
+.meztli-dh-table td {
+  height: auto;
+  padding-top: 16px;
+  padding-bottom: 16px;
+  font-size: 13px;
+}
+
+.meztli-dh-table .cell-detail { gap: 5px; }
+.meztli-dh-table .cell-detail strong { font-size: 13px; }
+.meztli-dh-table .cell-detail small { font-size: 12px; }
+.meztli-dh-table .network-tag { font-size: 12px; }
+.meztli-dh-table .badge { font-size: 11px; padding: 5px 11px; }
+.meztli-dh-table td .button { min-height: 35px; padding: 7px 14px; font-size: 12px; }
+.meztli-dh-table .table-footer { font-size: 12px; }
+
+.meztli-dh-table .table-footer {
+  min-height: 56px;
+  background: #fffdfc;
+}
+
+.meztli-report-problem {
+  border-color: #d99a2b;
+  color: #85540c;
+  background: #fffaf0;
+}
+
+.meztli-report-problem:hover:not(:disabled) {
+  border-color: #b87511;
+  background: #fff0c8;
+  color: #704400;
+}
+
+/* A pending patient request must stand out immediately in the operational queue. */
+.meztli-ticket-pending > td {
+  background: #fff9e8;
+  animation: meztli-pending-attention 1.7s ease-in-out infinite;
+}
+
+.meztli-ticket-pending > td:first-child {
+  box-shadow: inset 4px 0 0 #d5931a;
+}
+
+@keyframes meztli-pending-attention {
+  0%, 100% { background: #fff9e8; }
+  50% { background: #ffefbd; }
+}
+
+/* The patient-admission dialog must fit a typical laptop viewport. Keep
+   validation feedback, but do not reserve a blank helper row for each field. */
+.meztli-dh-create-form .field-help:not(.field-error) {
+  display: none;
+}
+
+.meztli-dh-create-form .field {
+  gap: 4px;
+}
+
+.meztli-dh-create-form textarea {
+  min-height: 48px;
+  height: 48px;
+}
+
+.meztli-dh-bottom-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.meztli-dh-bottom-layout .meztli-calendar-picker {
+  margin: 0;
+}
+
+.meztli-dh-notes-column textarea {
+  min-height: 166px;
+  height: 166px;
+  resize: vertical;
+}
+
+@media (max-width: 600px) {
+  .meztli-dh-bottom-layout { grid-template-columns: 1fr; gap: 12px; }
+  .meztli-dh-notes-column textarea { min-height: 72px; height: 72px; }
+}
+
+.meztli-ticket-thread {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-muted);
+}
+
+.meztli-ticket-thread-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.meztli-ticket-thread-heading small {
+  color: var(--color-brand);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+}
+
+.meztli-ticket-thread-heading h3 {
+  margin: 2px 0 0;
+  font-size: 15px;
+}
+
+.meztli-ticket-thread-heading > span {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+}
+
+.meztli-ticket-messages {
+  display: grid;
+  gap: 7px;
+  max-height: 190px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+
+.meztli-ticket-message {
+  padding: 9px 10px;
+  border-radius: 7px;
+  background: var(--surface);
+  border-left: 3px solid var(--color-brand);
+}
+
+.meztli-ticket-message strong,
+.meztli-ticket-message small {
+  display: block;
+  font-size: 11px;
+}
+
+.meztli-ticket-message small { color: var(--muted); }
+.meztli-ticket-message p { margin: 4px 0; font-size: 13px; white-space: pre-wrap; }
+
+.meztli-followup-field { display: grid; gap: 5px; margin-bottom: 8px; font-size: 12px; font-weight: 650; }
+.meztli-followup-field textarea { min-height: 58px; resize: vertical; }
+
+.meztli-problem-form { display: grid; gap: 16px; }
+.meztli-problem-ticket { display: flex; align-items: flex-start; gap: 11px; padding: 12px; border: 1px solid #ead7ad; border-radius: 9px; background: #fff9e9; color: #85540c; }
+.meztli-problem-ticket > svg { flex: 0 0 auto; margin-top: 1px; }
+.meztli-problem-ticket strong, .meztli-problem-ticket span { display: block; }
+.meztli-problem-ticket strong { color: var(--text); font-size: 13px; }
+.meztli-problem-ticket span { margin-top: 3px; color: #7b6b52; font-size: 11px; line-height: 1.45; }
+.meztli-problem-form textarea { min-height: 126px; resize: vertical; }
+.meztli-problem-actions { margin-top: 0; }
 
 /* Demo Role Testing Selector */
 .demo-role-selector {

@@ -20,7 +20,7 @@ from http.cookies import SimpleCookie, CookieError
 from urllib.parse import urlsplit
 
 PRIVATE = Path(__file__).resolve().parent / ".sgrs-private"
-ROLES = ("soporte", "viewer", "admin", "super-admin")
+ROLES = ("soporte", "gestion-altas", "viewer", "admin", "super-admin")
 READ = ["dashboard.read", "inventory.read", "idf.read", "activity.read"]
 OPERATE = ["inventory.write", "idf.visits.write", "inventory.export"]
 MANAGE = ["users.manage", "integrations.manage", "traffic.read"]
@@ -29,11 +29,19 @@ IDLE_SECONDS = 30 * 60
 
 AVAILABLE_PAGES = (
     "resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf",
-    "aps", "cctv", "altas", "soporte", "usuarios", "conexiones"
+    "aps", "cctv", "altas", "soporte", "usuarios", "conexiones",
+    # Submódulos permitidos:
+    "gestion-meztli:supervision", "gestion-meztli:derechohabientes",
+    "idf:catalogo", "idf:incidencias",
+    "aps:omnivista", "aps:documental", "aps:mapa",
+    "cctv:actualizadas", "cctv:originales",
 )
 
 ROLE_PAGE_DEFAULTS = {
     "soporte": ["soporte"],
+    # Personal administrativo: registra y consulta solicitudes de pacientes,
+    # sin visibilidad de supervisión ni facultad para atenderlas.
+    "gestion-altas": ["gestion-meztli:derechohabientes"],
     "admin": ["resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf", "aps", "cctv", "altas", "usuarios"],
     "super-admin": ["resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf", "aps", "cctv", "altas", "soporte", "usuarios", "conexiones"],
     "viewer": ["resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf", "aps", "cctv", "altas"],
@@ -44,6 +52,11 @@ ROLE_CATALOG = {
         "id": "soporte",
         "title": "Soporte",
         "description": "Atención y diagnóstico técnico: consulta de dispositivos, fichas técnicas y DHCP.",
+    },
+    "gestion-altas": {
+        "id": "gestion-altas",
+        "title": "Solicitud Altas",
+        "description": "Solicita y consulta altas de derechohabientes. No puede atender tickets ni acceder a herramientas técnicas.",
     },
     "viewer": {
         "id": "viewer",
@@ -74,17 +87,17 @@ def capabilities(role):
         return READ + OPERATE + MANAGE
     if role == "admin":
         return READ + OPERATE
-    if role in ("viewer", "soporte"):
+    if role in ("viewer", "soporte", "gestion-altas"):
         return READ
     return []
 
 
 def visible_roles(role):
-    """Return assignable roles according to hierarchy: super-admin sees all 3, admin sees soporte and admin."""
+    """Return assignable roles according to hierarchy."""
     if role == "super-admin":
-        return [ROLE_CATALOG["soporte"], ROLE_CATALOG["admin"], ROLE_CATALOG["super-admin"]]
+        return [ROLE_CATALOG["soporte"], ROLE_CATALOG["gestion-altas"], ROLE_CATALOG["admin"], ROLE_CATALOG["super-admin"]]
     if role == "admin":
-        return [ROLE_CATALOG["soporte"], ROLE_CATALOG["admin"]]
+        return [ROLE_CATALOG["soporte"], ROLE_CATALOG["gestion-altas"], ROLE_CATALOG["admin"]]
     return []
 
 
@@ -171,6 +184,26 @@ def database(write=False):
           );
           CREATE INDEX IF NOT EXISTS idx_device_history_type_streak
           ON device_connection_history(device_type, is_online, current_session_seconds DESC);
+          CREATE TABLE IF NOT EXISTS meztli_derechohabientes (
+            id TEXT PRIMARY KEY,
+            folio TEXT NOT NULL,
+            patient_name TEXT NOT NULL,
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            entry_time TEXT NOT NULL,
+            exit_time TEXT NOT NULL,
+            department TEXT NOT NULL DEFAULT '',
+            room_bed TEXT NOT NULL DEFAULT '',
+            notes TEXT NOT NULL DEFAULT '',
+            requested_by TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'pending',
+            attended_by TEXT NOT NULL DEFAULT '',
+            attended_at INTEGER,
+            response_notes TEXT NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_meztli_dh_status ON meztli_derechohabientes(status, created_at DESC);
         """)
         cols = [r[1] for r in db.execute("PRAGMA table_info(users)").fetchall()]
         if "allowed_pages" not in cols:
@@ -311,8 +344,8 @@ def save_user(body, actor=None, bootstrap=False):
             actor_role = actor_row["role"]
             if "is_hidden" in body and actor_role != "super-admin":
                 raise AccessError(403, "No tienes permiso para realizar esta operación.")
-            if actor_role == "admin" and role not in ("soporte", "admin"):
-                raise AccessError(403, "Los administradores solo pueden asignar roles de soporte o administrador.")
+            if actor_role == "admin" and role not in ("soporte", "gestion-altas", "admin"):
+                raise AccessError(403, "Los administradores solo pueden asignar roles de soporte, Solicitud Altas o administrador.")
 
         active = body.get("active", True)
         hidden = body.get("is_hidden", False)

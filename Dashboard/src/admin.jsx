@@ -3,7 +3,7 @@ import { Users, UserPlus, ShieldCheck, Eye, Settings2, PlugZap, Save, RefreshCw,
 import { Badge, Button, DataTable, Dialog, Field, Loading, Notice, SearchField, SecretInput, Select, useListState } from './components.jsx';
 import { PageHeading } from './pages.jsx';
 import { useForm } from './forms.jsx';
-import { roleLabel, request, dateTime, AVAILABLE_PAGES, ROLE_PAGE_DEFAULTS, BASE_ROLE_CATALOG, getEffectiveRoles, usersForDemo, projectUsersForActor, countUsersForRoleCard, getCardRoles, getUserFilterRoles } from './domain.mjs';
+import { roleLabel, request, dateTime, AVAILABLE_PAGES, ALL_PERMISSION_KEYS, ROLE_PAGE_DEFAULTS, BASE_ROLE_CATALOG, getEffectiveRoles, usersForDemo, projectUsersForActor, countUsersForRoleCard, getCardRoles, getUserFilterRoles } from './domain.mjs';
 import { useSession } from './session.jsx';
 
 export const BASE_ROLES = BASE_ROLE_CATALOG;
@@ -41,9 +41,8 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
   const normalizedRoles = getEffectiveRoles(roleInfo?.length ? roleInfo : BASE_ROLE_CATALOG, currentUser?.role);
 
   // Role options according to actor hierarchy:
-  // super-admin can select: 'soporte', 'admin', 'super-admin'
-  // admin can select: 'soporte', 'admin'
-  const allowedRoleIds = isSuperAdmin ? ['soporte', 'admin', 'super-admin'] : ['soporte', 'admin'];
+  // super-admin can select all operational roles; admin can also provision Solicitud Altas.
+  const allowedRoleIds = isSuperAdmin ? ['soporte', 'gestion-altas', 'admin', 'super-admin'] : ['soporte', 'gestion-altas', 'admin'];
   const selectableRoles = normalizedRoles.filter(r => allowedRoleIds.includes(r.id));
   const defaultRole = selectableRoles[0]?.id || 'soporte';
   const initialRole = row?.role || defaultRole;
@@ -54,10 +53,46 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
     return ROLE_PAGE_DEFAULTS[initialRole] || [];
   });
 
-  const togglePage = pageId => {
+  const toggleModule = page => {
     if (!isSuperAdmin) return;
+    const moduleId = page.id;
+    const subIds = (page.submodules || []).map(s => s.id);
     setAllowedPages(prev => {
-      const next = prev.includes(pageId) ? prev.filter(p => p !== pageId) : [...prev, pageId];
+      const isParentActive = prev.includes(moduleId) || subIds.some(s => prev.includes(s));
+      let next;
+      if (isParentActive) {
+        next = prev.filter(p => p !== moduleId && !subIds.includes(p));
+      } else {
+        next = [...prev.filter(p => p !== moduleId && !subIds.includes(p)), moduleId, ...subIds];
+      }
+      f.change('confirmed', false);
+      onDirty?.(true);
+      return next;
+    });
+  };
+
+  const toggleSubmodule = (page, subId) => {
+    if (!isSuperAdmin) return;
+    const moduleId = page.id;
+    const subIds = (page.submodules || []).map(s => s.id);
+    setAllowedPages(prev => {
+      let next;
+      const hasExplicitSubs = subIds.some(s => prev.includes(s));
+      if (prev.includes(moduleId) && !hasExplicitSubs) {
+        const otherSubs = subIds.filter(s => s !== subId);
+        next = [...prev.filter(p => p !== moduleId), moduleId, ...otherSubs];
+      } else if (prev.includes(subId)) {
+        next = prev.filter(p => p !== subId);
+        const hasOtherSubs = subIds.some(s => s !== subId && next.includes(s));
+        if (!hasOtherSubs) {
+          next = next.filter(p => p !== moduleId);
+        }
+      } else {
+        next = [...prev, subId];
+        if (!next.includes(moduleId)) {
+          next.push(moduleId);
+        }
+      }
       f.change('confirmed', false);
       onDirty?.(true);
       return next;
@@ -66,7 +101,7 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
 
   const selectAllPages = () => {
     if (!isSuperAdmin) return;
-    setAllowedPages(AVAILABLE_PAGES.map(p => p.id));
+    setAllowedPages(ALL_PERMISSION_KEYS);
     f.change('confirmed', false);
     onDirty?.(true);
   };
@@ -80,7 +115,16 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
 
   const loadRoleDefaults = () => {
     if (!isSuperAdmin) return;
-    setAllowedPages(ROLE_PAGE_DEFAULTS[f.values.role] || []);
+    const base = ROLE_PAGE_DEFAULTS[f.values.role] || [];
+    const expanded = [];
+    for (const p of base) {
+      expanded.push(p);
+      const mod = AVAILABLE_PAGES.find(m => m.id === p);
+      if (mod?.submodules) {
+        mod.submodules.forEach(s => expanded.push(s.id));
+      }
+    }
+    setAllowedPages(expanded);
     f.change('confirmed', false);
     onDirty?.(true);
   };
@@ -141,8 +185,8 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
       {isSuperAdmin && <div className="col-span-full modular-pages-container">
         <div className="modular-pages-header">
           <div>
-            <h3>Permisos de páginas modulares</h3>
-            <p className="muted">Selecciona las vistas a las que tendrá acceso esta cuenta en el Centro Operativo.</p>
+            <h3>Permisos de Módulos y Submódulos</h3>
+            <p className="muted">Selecciona los módulos generales y los apartados específicos a los que tendrá acceso esta cuenta en el Centro Operativo.</p>
           </div>
           {isSuperAdmin && (
             <div className="modular-pages-actions">
@@ -155,22 +199,59 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
           )}
         </div>
 
-        <div className="modular-pages-grid">
+        <div className="modular-modules-tree">
           {AVAILABLE_PAGES.map(page => {
-            const checked = allowedPages.includes(page.id);
+            const submodules = page.submodules || [];
+            const hasSubmodules = submodules.length > 0;
+            const selectedSubsCount = submodules.filter(s => allowedPages.includes(s.id)).length;
+            const isParentDirectlyChecked = allowedPages.includes(page.id);
+            const isModuleActive = hasSubmodules
+              ? (isParentDirectlyChecked || selectedSubsCount > 0)
+              : isParentDirectlyChecked;
+
             return (
-              <label
-                key={page.id}
-                className={`modular-page-item ${checked ? 'is-selected' : ''} ${!isSuperAdmin ? 'is-disabled' : ''}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={!isSuperAdmin}
-                  onChange={() => togglePage(page.id)}
-                />
-                <span>{page.label}</span>
-              </label>
+              <div key={page.id} className={`modular-module-card ${isModuleActive ? 'is-active' : ''}`}>
+                <div className="modular-module-row">
+                  <label className={`modular-module-label ${!isSuperAdmin ? 'is-disabled' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={isModuleActive}
+                      disabled={!isSuperAdmin}
+                      onChange={() => toggleModule(page)}
+                    />
+                    <span className="modular-module-title">
+                      <strong>{page.label}</strong>
+                      {hasSubmodules && (
+                        <span className="modular-sub-badge">
+                          {selectedSubsCount > 0 ? `${selectedSubsCount}/${submodules.length} apartados` : `${submodules.length} apartados`}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                </div>
+
+                {hasSubmodules && (
+                  <div className="modular-submodules-list">
+                    {submodules.map(sub => {
+                      const isSubChecked = allowedPages.includes(sub.id) || (isParentDirectlyChecked && selectedSubsCount === 0);
+                      return (
+                        <label
+                          key={sub.id}
+                          className={`modular-submodule-item ${isSubChecked ? 'is-selected' : ''} ${!isSuperAdmin ? 'is-disabled' : ''}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSubChecked}
+                            disabled={!isSuperAdmin}
+                            onChange={() => toggleSubmodule(page, sub.id)}
+                          />
+                          <span className="modular-submodule-name">{sub.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>

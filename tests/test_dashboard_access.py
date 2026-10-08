@@ -103,7 +103,7 @@ def test_fixed_capabilities_and_no_session_for_missing_cookie(local_store):
     assert access.session("") is None
 
 
-@pytest.mark.parametrize("role,expected_roles", [("viewer", []), ("soporte", []), ("admin", ["soporte", "admin"])])
+@pytest.mark.parametrize("role,expected_roles", [("viewer", []), ("soporte", []), ("admin", ["soporte", "gestion-altas", "admin"])])
 def test_business_sessions_do_not_disclose_internal_role(local_store, role, expected_roles):
     import json
     access.save_user({"username": f"business.{role}", "name": "Cuenta operativa", "role": role,
@@ -117,8 +117,8 @@ def test_business_sessions_do_not_disclose_internal_role(local_store, role, expe
 
 
 def test_internal_catalog_retains_all_roles():
-    assert [r["id"] for r in access.visible_roles("super-admin")] == ["soporte", "admin", "super-admin"]
-    assert [r["id"] for r in access.visible_roles("admin")] == ["soporte", "admin"]
+    assert [r["id"] for r in access.visible_roles("super-admin")] == ["soporte", "gestion-altas", "admin", "super-admin"]
+    assert [r["id"] for r in access.visible_roles("admin")] == ["soporte", "gestion-altas", "admin"]
     assert access.visible_roles("unknown") == []
     assert access.visible_roles("viewer") == []
     assert access.visible_roles("soporte") == []

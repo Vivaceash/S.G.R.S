@@ -1,24 +1,76 @@
 export const LOCALE = 'es-MX';
 export const TIME_ZONE = 'America/Mexico_City';
-export const roleLabel = role => role === 'super-admin' ? 'Admin' : role === 'admin' ? 'Administrador' : role === 'soporte' ? 'Soporte' : (role || '');
+export const roleLabel = role => role === 'super-admin' ? 'Admin' : role === 'admin' ? 'Administrador' : role === 'soporte' ? 'Soporte' : role === 'gestion-altas' ? 'Solicitud Altas' : (role || '');
 
 export const AVAILABLE_PAGES = [
   { id: 'resumen', label: 'Dashboard Operativo' },
   { id: 'dispositivos', label: 'Dispositivos' },
   { id: 'disponibilidad', label: 'Direcciones IP' },
-  { id: 'gestion-meztli', label: 'Gestión Meztli' },
+  {
+    id: 'gestion-meztli',
+    label: 'Gestión Meztli',
+    submodules: [
+      { id: 'gestion-meztli:supervision', label: 'Supervisión de conexiones (DHCP y no admitidos)' },
+      { id: 'gestion-meztli:derechohabientes', label: 'Alta derechohabientes (Tickets de pacientes)' },
+    ],
+  },
   { id: 'bitacora', label: 'Bitácora' },
-  { id: 'idf', label: 'Registro IDF' },
-  { id: 'aps', label: 'Access Points' },
-  { id: 'cctv', label: 'CCTV' },
+  {
+    id: 'idf',
+    label: 'Registro IDF',
+    submodules: [
+      { id: 'idf:catalogo', label: 'Catálogo de IDFs y Racks' },
+      { id: 'idf:incidencias', label: 'Visitas e incidencias' },
+    ],
+  },
+  {
+    id: 'aps',
+    label: 'Access Points',
+    submodules: [
+      { id: 'aps:omnivista', label: 'En vivo (OmniVista)' },
+      { id: 'aps:documental', label: 'Catálogo documental' },
+      { id: 'aps:mapa', label: 'Mapa físico' },
+    ],
+  },
+  {
+    id: 'cctv',
+    label: 'CCTV',
+    submodules: [
+      { id: 'cctv:actualizadas', label: 'Cámaras actualizadas' },
+      { id: 'cctv:originales', label: 'Cámaras originales' },
+    ],
+  },
   { id: 'altas', label: 'Gestión de altas' },
   { id: 'soporte', label: 'Dashboard de Soporte' },
   { id: 'usuarios', label: 'Usuarios y privilegios' },
   { id: 'conexiones', label: 'Conexiones API' },
 ];
 
+export const ALL_PERMISSION_KEYS = AVAILABLE_PAGES.flatMap(p => [
+  p.id,
+  ...(p.submodules ? p.submodules.map(s => s.id) : []),
+]);
+
+export function canAccessModule(allowedPages, moduleId) {
+  if (!Array.isArray(allowedPages)) return false;
+  if (allowedPages.includes(moduleId)) return true;
+  return allowedPages.some(p => p.startsWith(`${moduleId}:`));
+}
+
+export function canAccessSubmodule(allowedPages, moduleId, submoduleId) {
+  if (!Array.isArray(allowedPages)) return false;
+  const fullSubId = `${moduleId}:${submoduleId}`;
+  if (allowedPages.includes(fullSubId)) return true;
+  if (allowedPages.includes(moduleId)) {
+    const hasExplicitSubmodules = allowedPages.some(p => p.startsWith(`${moduleId}:`));
+    if (!hasExplicitSubmodules) return true;
+  }
+  return false;
+}
+
 export const BASE_ROLE_CATALOG = [
   { id: 'soporte', title: 'Soporte', description: 'Atención y diagnóstico técnico: consulta de dispositivos, fichas técnicas y DHCP.' },
+  { id: 'gestion-altas', title: 'Solicitud Altas', description: 'Solicita y consulta altas de derechohabientes. No puede atender tickets ni acceder a herramientas técnicas.' },
   { id: 'admin', title: 'Administrador', description: 'Administra la operación: inventario, visitas e incidencias de IDF y gestión de usuarios.' },
   { id: 'super-admin', title: 'Admin', description: 'Gestiona cuentas, privilegios modulares, conexiones y consultas técnicas.' },
 ];
@@ -73,6 +125,7 @@ export function countUsersForRoleCard(users, roleId, actorRole) {
 
 export const ROLE_PAGE_DEFAULTS = {
   soporte: ['soporte'],
+  'gestion-altas': ['gestion-meztli:derechohabientes'],
   admin: ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'usuarios'],
   'super-admin': ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
   viewer: ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'aps', 'cctv', 'altas'],

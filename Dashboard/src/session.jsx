@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { LogIn, ShieldCheck } from 'lucide-react';
 import { Button, Field, Loading, Notice, SecretInput } from './components.jsx';
 import { useForm } from './forms.jsx';
-import { request, setCsrfToken, ROLE_PAGE_DEFAULTS, roleLabel, BASE_ROLE_CATALOG, getEffectiveRoles } from './domain.mjs';
+import { request, setCsrfToken, ROLE_PAGE_DEFAULTS, roleLabel, BASE_ROLE_CATALOG, getEffectiveRoles, canAccessModule, canAccessSubmodule } from './domain.mjs';
 
 const SessionContext = createContext(null);
 export const useSession = () => useContext(SessionContext);
@@ -65,13 +65,15 @@ export function SessionProvider({ children }) {
   const [setupAllowed, setSetupAllowed] = useState(false);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
+  const sessionProbeGeneration = useRef(0);
   useEffect(() => {
     if (demo) { setReady(true); setCsrfToken(''); return; }
+    const generation = ++sessionProbeGeneration.current;
     const controller = new AbortController(); let alive = true;
     const timeout = setTimeout(() => controller.abort(), 10000);
     setError('');
     request('/api/auth/session', { signal: controller.signal }).then(value => {
-      if (!alive || controller.signal.aborted) return;
+      if (!alive || controller.signal.aborted || generation !== sessionProbeGeneration.current) return;
       setCsrfToken(value.csrf); setSetup(Boolean(value.setup_required));
       setSetupAllowed(Boolean(value.web_bootstrap_allowed));
       if (value.user) { setIdentity(value); setExpired(false); }
@@ -94,9 +96,21 @@ export function SessionProvider({ children }) {
     history.replaceState(null, '', url);
   };
   const signIn = async values => {
-    const result = await request('/api/auth/login', { body: values }); setCsrfToken(result.csrf); setIdentity(result); setExpired(false); setReady(true); setError('');
+    // A probe started before login is anonymous. Invalidate it immediately so
+    // it cannot overwrite the identity returned by a slower LAN login.
+    sessionProbeGeneration.current += 1;
+    const result = await request('/api/auth/login', { body: values });
+    setCsrfToken(result.csrf); setIdentity(result); setExpired(false); setReady(true); setError('');
+    // Cancel the pre-login session probe. On a LAN it can finish after login
+    // and otherwise replace this new identity with its stale anonymous result.
+    setRevision(value => value + 1);
   };
-  const bootstrap = async values => { const result = await request('/api/auth/bootstrap', { body: values }); setCsrfToken(result.csrf); setIdentity(result); setSetup(false); setExpired(false); setReady(true); setError(''); };
+  const bootstrap = async values => {
+    sessionProbeGeneration.current += 1;
+    const result = await request('/api/auth/bootstrap', { body: values });
+    setCsrfToken(result.csrf); setIdentity(result); setSetup(false); setExpired(false); setReady(true); setError('');
+    setRevision(value => value + 1);
+  };
   const signOut = async () => { if (!demo) await request('/api/auth/logout', { body: {} }); setCsrfToken(''); setIdentity(null); setExpired(false); };
   const [demoRole, setDemoRole] = useState(() => new URLSearchParams(location.search).get('role') || 'super-admin');
   const switchDemoRole = newRole => {
@@ -137,10 +151,9 @@ export function SessionProvider({ children }) {
   const canViewPage = pageId => {
     if (!Array.isArray(allowedPages)) return false;
     if (pageId === 'entrada') return allowedPages.includes('idf');
-    // Existing accounts that can consult IPs inherit this operational view.
-    if (pageId === 'gestion-meztli') return allowedPages.includes(pageId) || allowedPages.includes('disponibilidad');
-    return allowedPages.includes(pageId);
+    return canAccessModule(allowedPages, pageId);
   };
+  const canViewSubmodule = (moduleId, submoduleId) => canAccessSubmodule(allowedPages, moduleId, submoduleId);
 
   const sessionRoles = getEffectiveRoles(current?.roles);
 
@@ -150,6 +163,7 @@ export function SessionProvider({ children }) {
     allowedPages,
     allowed_pages: allowedPages,
     canViewPage,
+    canViewSubmodule,
     roles: sessionRoles,
     demo,
     setDemo,

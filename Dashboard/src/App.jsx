@@ -85,6 +85,7 @@ const emptyData = () => ({
   ips: [],
   devices: [],
   meztliLeases: [],
+  meztliDerechohabientes: [],
   resources: [],
   requests: [],
   idfs: [],
@@ -1791,6 +1792,8 @@ export default function App() {
         errors={errors}
         refresh={refresh}
         canExport={can("inventory.export")}
+        notify={notify}
+        demo={demo}
       />
     );
   } else if (route.path === "usuarios") {

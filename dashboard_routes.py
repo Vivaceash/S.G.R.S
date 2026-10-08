@@ -22,6 +22,22 @@ from dashboard_access import (AccessError, SESSION_SECONDS, database, session, l
                               save_connection, audit)
 
 
+def has_meztli_submodule_access(allowed_pages, submodule):
+    """Mirror the UI's explicit submodule policy on the server.
+
+    A module-wide grant permits both sections only when no explicit Meztli
+    submodule is selected. This prevents a checked IP/other module, or one
+    selected Meztli section, from granting the other section by inheritance.
+    """
+    if not isinstance(allowed_pages, list):
+        return False
+    explicit_sections = any(page.startswith("gestion-meztli:") for page in allowed_pages)
+    return (
+        f"gestion-meztli:{submodule}" in allowed_pages
+        or ("gestion-meztli" in allowed_pages and not explicit_sections)
+    )
+
+
 # Explicit read surface: adding an upstream route never grants access implicitly.
 RESERVED_READ_PATHS = frozenset(
     "/api/forti/" + suffix for suffix in (
@@ -395,6 +411,26 @@ class AccessRoutes:
                 devices = get_longest_connected_devices(device_type=dtype, limit=limit, only_online=only_online)
                 self._send_json(devices)
                 return True
+            if path == "/api/meztli/derechohabientes":
+                allowed = self.identity.get("allowed_pages", [])
+                has_perm = has_meztli_submodule_access(allowed, "derechohabientes")
+                if not has_perm:
+                    raise AccessError(403, "No tienes permiso para consultar altas de derechohabientes.")
+                query_params = parse_qs(urlsplit(self.path).query)
+                st = query_params.get("status", [None])[0]
+                q = query_params.get("q", [None])[0]
+                from dashboard_meztli import list_derechohabientes
+                self._send_json({"items": list_derechohabientes(status=st, query=q)})
+                return True
+            message_match = re.fullmatch(r"/api/meztli/derechohabientes/([A-Za-z0-9_-]+)/messages", path)
+            if message_match:
+                allowed = self.identity.get("allowed_pages", [])
+                has_perm = has_meztli_submodule_access(allowed, "derechohabientes")
+                if not has_perm:
+                    raise AccessError(403, "No tienes permiso para consultar este seguimiento.")
+                from dashboard_meztli import list_derechohabiente_messages
+                self._send_json({"items": list_derechohabiente_messages(message_match.group(1))})
+                return True
             normal = {"/api/idfs", "/api/reports", "/api/ips", "/api/devices", "/api/devices/summary", "/api/devices/export", "/api/health", "/api/ip", "/api/forti/network/dhcp-pools", "/api/forti/network/dhcp-leases", "/api/altas/omnivista", "/api/aps/omnivista"}
             if path in normal:
                 return False
@@ -483,6 +519,42 @@ class AccessRoutes:
                 if self.identity["user"]["role"] not in ("admin", "super-admin"):
                     raise AccessError(403, "No tienes permiso para realizar esta operación.")
                 self._send_json({"user": save_user(self._body(), actor)})
+                return True
+            if path == "/api/meztli/derechohabientes":
+                allowed = self.identity.get("allowed_pages", [])
+                has_perm = has_meztli_submodule_access(allowed, "derechohabientes")
+                if not has_perm:
+                    raise AccessError(403, "No tienes permiso para registrar altas de derechohabientes.")
+                body = self._body()
+                actor_name = self.identity["user"]["name"] or self.identity["user"]["username"]
+                from dashboard_meztli import create_derechohabiente
+                item = create_derechohabiente(body, actor, actor_name)
+                self._send_json({"item": item}, 201)
+                return True
+            if path == "/api/meztli/derechohabientes/messages":
+                allowed = self.identity.get("allowed_pages", [])
+                has_perm = has_meztli_submodule_access(allowed, "derechohabientes")
+                if not has_perm:
+                    raise AccessError(403, "No tienes permiso para dar seguimiento a este ticket.")
+                body = self._body()
+                actor_name = self.identity["user"]["name"] or self.identity["user"]["username"]
+                from dashboard_meztli import add_derechohabiente_message
+                result = add_derechohabiente_message(body.get("id"), body.get("message"), actor, actor_name)
+                self._send_json(result, 201)
+                return True
+            if path == "/api/meztli/derechohabientes/status":
+                allowed = self.identity.get("allowed_pages", [])
+                can_attend = has_meztli_submodule_access(allowed, "supervision")
+                if not can_attend:
+                    raise AccessError(403, "No tienes permiso para cambiar el estado de este ticket.")
+                body = self._body()
+                actor_name = self.identity["user"]["name"] or self.identity["user"]["username"]
+                from dashboard_meztli import update_derechohabiente_status
+                alta_id = body.get("id")
+                new_status = body.get("status")
+                response_notes = body.get("response_notes", "")
+                item = update_derechohabiente_status(alta_id, new_status, actor, actor_name, response_notes)
+                self._send_json({"item": item})
                 return True
             match = re.fullmatch(r"/api/admin/connections/(forti|omni|inventarios)/(save|test)", path)
             if match:

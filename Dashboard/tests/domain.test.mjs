@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { csvCell, makeCsv, paginate, selectRows, inventoryFromIdfs, reportsFromData, roleLabel, AVAILABLE_PAGES, ROLE_PAGE_DEFAULTS, formatDeviceType, BASE_ROLE_CATALOG, getEffectiveRoles, formatUptime, getSaturationStatus, getSaturationLabel, makeExcelWorkbook, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, escapeXml, sanitizeWorksheetName, EXCEL_MIME_TYPE, SUPPORT_ALLOWED_NETWORKS, isSupportSegment, getSupportSegments, normalizeText, usersForDemo, projectUsersForActor, getCardRoles, getUserFilterRoles, countUsersForRoleCard } from '../src/domain.mjs';
+import { csvCell, makeCsv, paginate, selectRows, inventoryFromIdfs, reportsFromData, roleLabel, AVAILABLE_PAGES, ALL_PERMISSION_KEYS, canAccessModule, canAccessSubmodule, ROLE_PAGE_DEFAULTS, formatDeviceType, BASE_ROLE_CATALOG, getEffectiveRoles, formatUptime, getSaturationStatus, getSaturationLabel, makeExcelWorkbook, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, escapeXml, sanitizeWorksheetName, EXCEL_MIME_TYPE, SUPPORT_ALLOWED_NETWORKS, isSupportSegment, getSupportSegments, normalizeText, usersForDemo, projectUsersForActor, getCardRoles, getUserFilterRoles, countUsersForRoleCard } from '../src/domain.mjs';
 import { createDemo } from '../src/demo.mjs';
 
 test('Incidencias sin ID conservan su identidad y la resolución sustituye solo su origen', () => {
@@ -37,10 +37,11 @@ test('Bitácora fusiona formatos históricos sin duplicar incidentes de un mismo
   assert.equal(rows.length, 2); assert.equal(rows.find(r => r.idfId === 'idf-1').title, 'Actualizado');
 });
 
-test('roleLabel asigna etiquetas precisas para soporte, admin y super-admin', () => {
+test('roleLabel asigna etiquetas precisas para los roles institucionales', () => {
   assert.equal(roleLabel('super-admin'), 'Admin');
   assert.equal(roleLabel('admin'), 'Administrador');
   assert.equal(roleLabel('soporte'), 'Soporte');
+  assert.equal(roleLabel('gestion-altas'), 'Solicitud Altas');
   assert.equal(roleLabel('viewer'), 'viewer');
 });
 
@@ -53,7 +54,7 @@ test('Catálogo AVAILABLE_PAGES y ROLE_PAGE_DEFAULTS son coherentes con las ruta
   assert.ok(ROLE_PAGE_DEFAULTS['super-admin'].includes('conexiones'));
   for (const [role, pages] of Object.entries(ROLE_PAGE_DEFAULTS)) {
     for (const page of pages) {
-      assert.ok(AVAILABLE_PAGES.some(p => p.id === page), `Página ${page} en rol ${role} debe estar en AVAILABLE_PAGES`);
+      assert.ok(ALL_PERMISSION_KEYS.includes(page), `Página ${page} en rol ${role} debe estar en ALL_PERMISSION_KEYS`);
     }
   }
 });
@@ -105,8 +106,8 @@ test('Matriz de acceso desacoplada: admin accede a usuarios sin can(users.manage
 
 test('BASE_ROLE_CATALOG y getEffectiveRoles normalizan roles institucionales y excluyen viewer', () => {
   // 1. Catálogo base
-  assert.equal(BASE_ROLE_CATALOG.length, 3);
-  assert.deepEqual(BASE_ROLE_CATALOG.map(r => r.id), ['soporte', 'admin', 'super-admin']);
+  assert.equal(BASE_ROLE_CATALOG.length, 4);
+  assert.deepEqual(BASE_ROLE_CATALOG.map(r => r.id), ['soporte', 'gestion-altas', 'admin', 'super-admin']);
 
   // 2. Si roleInfo viene vacío o nulo
   const fromEmpty = getEffectiveRoles([]);
@@ -126,8 +127,8 @@ test('BASE_ROLE_CATALOG y getEffectiveRoles normalizan roles institucionales y e
   assert.deepEqual(normalizedLegacy.map(r => r.id), ['admin', 'super-admin']);
 
   // 4. Roles seleccionables en UserForm según jerarquía del actor
-  const isSuperAdminAllowed = ['soporte', 'admin', 'super-admin'];
-  const isAdminAllowed = ['soporte', 'admin'];
+  const isSuperAdminAllowed = ['soporte', 'gestion-altas', 'admin', 'super-admin'];
+  const isAdminAllowed = ['soporte', 'gestion-altas', 'admin'];
 
   // Para super-admin:
   const superSelectable = normalizedLegacy.filter(r => isSuperAdminAllowed.includes(r.id));
@@ -167,9 +168,9 @@ test('Diferenciación de roles, tarjetas y proyección de usuarios según jerarq
 
   // B) Tarjetas de rol (role-cards):
   const adminCards = getCardRoles('admin');
-  assert.equal(adminCards.length, 2, 'Admin solo ve 2 tarjetas de rol');
-  assert.deepEqual(adminCards.map(c => c.id), ['soporte', 'admin']);
-  assert.deepEqual(adminCards.map(c => roleLabel(c.id)), ['Soporte', 'Administrador']);
+  assert.equal(adminCards.length, 3, 'Admin ve las tres tarjetas de rol asignables');
+  assert.deepEqual(adminCards.map(c => c.id), ['soporte', 'gestion-altas', 'admin']);
+  assert.deepEqual(adminCards.map(c => roleLabel(c.id)), ['Soporte', 'Solicitud Altas', 'Administrador']);
 
   // Conteos en tarjetas para Admin:
   const adminSoporteCount = countUsersForRoleCard(projectedForAdmin, 'soporte', 'admin');
@@ -181,9 +182,9 @@ test('Diferenciación de roles, tarjetas y proyección de usuarios según jerarq
 
   // C) Selector de filtro por Rol en la toolbar:
   const adminFilterRoles = getUserFilterRoles('admin');
-  assert.equal(adminFilterRoles.length, 2, 'Admin solo tiene 2 opciones de rol en el filtro');
-  assert.deepEqual(adminFilterRoles.map(r => r.id), ['soporte', 'admin']);
-  assert.deepEqual(adminFilterRoles.map(r => roleLabel(r.id)), ['Soporte', 'Administrador']);
+  assert.equal(adminFilterRoles.length, 3, 'Admin tiene las tres opciones de rol asignables');
+  assert.deepEqual(adminFilterRoles.map(r => r.id), ['soporte', 'gestion-altas', 'admin']);
+  assert.deepEqual(adminFilterRoles.map(r => roleLabel(r.id)), ['Soporte', 'Solicitud Altas', 'Administrador']);
   assert.ok(!adminFilterRoles.some(r => r.id === 'super-admin'), 'Admin nunca ve la opción de super-admin ni Admin');
 
   // ==========================================
@@ -198,11 +199,11 @@ test('Diferenciación de roles, tarjetas y proyección de usuarios según jerarq
   assert.equal(roleLabel(projectedForSuper.find(u => u.id === 'u-sop-1').role), 'Soporte', 'Super-admin ve soporte como Soporte');
 
   // B) Tarjetas de rol (role-cards):
-  // Ahora las tarjetas visibles son únicamente las operativas ('Soporte' y 'Administrador') para TODOS los usuarios (tanto admin como super-admin)
+  // Las tarjetas visibles son los roles operativos; Admin se conserva oculto como rol de control.
   const superCards = getCardRoles('super-admin');
-  assert.equal(superCards.length, 2, 'Super-admin ahora solo ve 2 tarjetas de rol (ocultando Admin)');
-  assert.deepEqual(superCards.map(c => c.id), ['soporte', 'admin']);
-  assert.deepEqual(superCards.map(c => roleLabel(c.id)), ['Soporte', 'Administrador']);
+  assert.equal(superCards.length, 3, 'Super-admin ve tres tarjetas operativas (ocultando Admin)');
+  assert.deepEqual(superCards.map(c => c.id), ['soporte', 'gestion-altas', 'admin']);
+  assert.deepEqual(superCards.map(c => roleLabel(c.id)), ['Soporte', 'Solicitud Altas', 'Administrador']);
   assert.ok(!superCards.some(c => c.id === 'super-admin'), 'getCardRoles no incluye super-admin para super-admin');
   assert.ok(!getCardRoles('admin').some(c => c.id === 'super-admin'), 'getCardRoles no incluye super-admin para admin');
   assert.ok(!getCardRoles().some(c => c.id === 'super-admin'), 'getCardRoles no incluye super-admin para ningún rol');
@@ -217,9 +218,9 @@ test('Diferenciación de roles, tarjetas y proyección de usuarios según jerarq
 
   // C) Selector de filtro por Rol en la toolbar:
   const superFilterRoles = getUserFilterRoles('super-admin');
-  assert.equal(superFilterRoles.length, 3, 'Super-admin ve 3 roles en filtro');
-  assert.deepEqual(superFilterRoles.map(r => r.id), ['soporte', 'admin', 'super-admin']);
-  assert.deepEqual(superFilterRoles.map(r => roleLabel(r.id)), ['Soporte', 'Administrador', 'Admin']);
+  assert.equal(superFilterRoles.length, 4, 'Super-admin ve 4 roles en filtro');
+  assert.deepEqual(superFilterRoles.map(r => r.id), ['soporte', 'gestion-altas', 'admin', 'super-admin']);
+  assert.deepEqual(superFilterRoles.map(r => roleLabel(r.id)), ['Soporte', 'Solicitud Altas', 'Administrador', 'Admin']);
 
   // ==========================================
   // 3. VALIDACIÓN MODO REAL (consumiendo /api/admin/users)
@@ -706,6 +707,48 @@ test('normalizeText normaliza diacríticos, mayúsculas y variantes fonéticas p
 
   assert.equal(normalizeText(null), '');
   assert.equal(normalizeText(undefined), '');
+});
+
+test('Módulos y submódulos: catálogo, keys y funciones de acceso canAccessModule y canAccessSubmodule', () => {
+  // 1. Catálogo incluye submódulos para Meztli, IDF, APS y CCTV
+  const meztli = AVAILABLE_PAGES.find(p => p.id === 'gestion-meztli');
+  assert.ok(meztli);
+  assert.ok(Array.isArray(meztli.submodules));
+  assert.ok(meztli.submodules.some(s => s.id === 'gestion-meztli:supervision'));
+  assert.ok(meztli.submodules.some(s => s.id === 'gestion-meztli:derechohabientes'));
+
+  // ALL_PERMISSION_KEYS incluye tanto módulos como submódulos
+  assert.ok(ALL_PERMISSION_KEYS.includes('gestion-meztli'));
+  assert.ok(ALL_PERMISSION_KEYS.includes('gestion-meztli:supervision'));
+  assert.ok(ALL_PERMISSION_KEYS.includes('gestion-meztli:derechohabientes'));
+
+  // 2. canAccessModule
+  // Hereda si tiene el módulo
+  assert.equal(canAccessModule(['gestion-meztli'], 'gestion-meztli'), true);
+  // Accede si solo tiene un submódulo específico
+  assert.equal(canAccessModule(['gestion-meztli:derechohabientes'], 'gestion-meztli'), true);
+  assert.equal(canAccessModule(['resumen'], 'gestion-meztli'), false);
+
+  // 3. canAccessSubmodule
+  // Caso A: Usuario con permiso a todo el módulo sin sub-restricciones (admin/super-admin)
+  const fullModuleUser = ['resumen', 'gestion-meztli'];
+  assert.equal(canAccessSubmodule(fullModuleUser, 'gestion-meztli', 'supervision'), true);
+  assert.equal(canAccessSubmodule(fullModuleUser, 'gestion-meztli', 'derechohabientes'), true);
+
+  // Caso B: Usuario de otro departamento con SOLO 'gestion-meztli:derechohabientes'
+  const externalDeptUser = ['gestion-meztli', 'gestion-meztli:derechohabientes'];
+  assert.equal(canAccessSubmodule(externalDeptUser, 'gestion-meztli', 'supervision'), false);
+  assert.equal(canAccessSubmodule(externalDeptUser, 'gestion-meztli', 'derechohabientes'), true);
+
+  // Caso C: Técnico NOC con solo supervisión
+  const nocTech = ['gestion-meztli', 'gestion-meztli:supervision'];
+  assert.equal(canAccessSubmodule(nocTech, 'gestion-meztli', 'supervision'), true);
+  assert.equal(canAccessSubmodule(nocTech, 'gestion-meztli', 'derechohabientes'), false);
+
+  // Caso D: Sin acceso a Meztli
+  const otherUser = ['resumen', 'dispositivos'];
+  assert.equal(canAccessSubmodule(otherUser, 'gestion-meztli', 'supervision'), false);
+  assert.equal(canAccessSubmodule(otherUser, 'gestion-meztli', 'derechohabientes'), false);
 });
 
 
