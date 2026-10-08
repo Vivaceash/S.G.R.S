@@ -25,7 +25,7 @@ class FortiOSClient:
 
     def __init__(self):
         self.base_url = settings.fortios_base_url
-        self.token = settings.FORTIOS_API_TOKEN
+        self.token = settings.FORTIOS_API_TOKEN.strip()
         self.verify_ssl = settings.FORTIOS_CA_BUNDLE if (settings.FORTIOS_CA_BUNDLE and os.path.exists(settings.FORTIOS_CA_BUNDLE)) else settings.FORTIOS_VERIFY_SSL
         self.timeout = settings.FORTIOS_TIMEOUT
         self.default_vdom = settings.FORTIOS_DEFAULT_VDOM
@@ -87,6 +87,11 @@ class FortiOSClient:
         """
         Ejecuta una petición HTTP hacia FortiOS con validación de respuestas y control de excepciones.
         """
+        if not self.token:
+            raise FortiOSAuthError(
+                message="FortiOS no tiene configurado FORTIOS_API_TOKEN.",
+                details=None,
+            )
         client = await self.get_client()
 
         query_params = params.copy() if params else {}

@@ -20,15 +20,17 @@ class Settings(BaseSettings):
     OV_HOST: str = "192.168.10.201"
     OV_PORT: int = 443
     OV_PROTOCOL: str = "https"
-    OV_USERNAME: str = "admin.red"
+    OV_USERNAME: str = ""
     OV_PASSWORD: str = ""
+    OV_AUTH_MODE: str = "credentials"
+    # Deprecated: las consultas upstream deben usar login con OV_USERNAME/OV_PASSWORD.
     OV_API_KEY: str = ""
     OV_VERIFY_SSL: bool = True
     OV_CA_BUNDLE: Optional[str] = None
 
     # Configuración de Seguridad y Autenticación del Backend
     # Acepta APP_API_KEY o API_SECRET_KEY con soporte para múltiples claves separadas por coma
-    APP_API_KEY: Optional[str] = "admin"
+    APP_API_KEY: Optional[str] = None
     API_SECRET_KEY_CONFIG: Optional[str] = None
     ALLOW_UNAUTHENTICATED: bool = False
 
@@ -102,13 +104,20 @@ class Settings(BaseSettings):
         if self.ENABLE_2FA and not self.TOTP_SECRET_KEY:
             raise ValueError("ENABLE_2FA requiere configurar un TOTP_SECRET_KEY propio y aleatorio.")
 
+        if self.ALLOW_UNAUTHENTICATED and environment != "test":
+            raise ValueError("ALLOW_UNAUTHENTICATED solo puede usarse en el entorno test.")
+
         if environment not in {"development", "test"}:
             if self.DEBUG:
                 raise ValueError("DEBUG debe estar desactivado fuera de development/test.")
-            if self.ALLOW_UNAUTHENTICATED:
-                raise ValueError("ALLOW_UNAUTHENTICATED solo puede usarse en development/test.")
             if not self.api_keys or any(key.lower() in weak_api_keys or len(key) < 16 for key in self.api_keys):
                 raise ValueError("APP_API_KEY debe contener claves robustas fuera de development/test.")
+            if self.OV_AUTH_MODE != "credentials":
+                raise ValueError("OV_AUTH_MODE debe ser 'credentials' fuera de development/test.")
+            if self.OV_API_KEY:
+                raise ValueError("OV_API_KEY no está permitido: OmniVista debe autenticarse con usuario y contraseña.")
+            if not self.OV_USERNAME.strip() or not self.OV_PASSWORD.strip():
+                raise ValueError("OV_USERNAME y OV_PASSWORD son obligatorios para autenticar OmniVista.")
             if not self.JWT_SECRET_KEY or self.JWT_SECRET_KEY == default_jwt_secret:
                 raise ValueError("JWT_SECRET_KEY debe reemplazarse fuera de development/test.")
             if self.ALLOW_2FA_ENROLLMENT:

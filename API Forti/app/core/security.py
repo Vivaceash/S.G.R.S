@@ -219,8 +219,8 @@ async def verify_api_key(
     }:
         return "public_read_only"
 
-    # Si explícitamente se habilitó el modo no autenticado para desarrollo
-    if settings.ALLOW_UNAUTHENTICATED:
+    # Solo permitir el bypass en pruebas automatizadas; nunca en un proceso desplegado.
+    if settings.ALLOW_UNAUTHENTICATED and settings.ENVIRONMENT.strip().lower() == "test":
         return "unauthenticated_dev_mode"
 
     client_ip = request.client.host if request.client else "unknown"
@@ -228,16 +228,14 @@ async def verify_api_key(
 
     valid_keys = settings.api_keys
     if not valid_keys:
-        if settings.ENVIRONMENT == "production":
-            log_security_event(
-                "auth_misconfiguration",
-                {"ip": client_ip, "path": request.url.path, "reason": "no_keys_configured"},
-            )
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="El servidor no tiene configurada ninguna clave de API válida. Contacte al administrador.",
-            )
-        return None
+        log_security_event(
+            "auth_misconfiguration",
+            {"ip": client_ip, "path": request.url.path, "reason": "no_keys_configured"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El servidor no tiene configurada ninguna clave de API válida. Contacte al administrador.",
+        )
 
     # Extraer el token provisto desde cualquiera de los esquemas válidos
     token_provided = api_key_1 or api_key_2 or (auth_credentials.credentials if auth_credentials else None)

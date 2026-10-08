@@ -1,3 +1,4 @@
+import os
 import uvicorn
 from app.core.config import settings
 
@@ -10,7 +11,8 @@ def main():
     print(f"==================================================")
     print(f"Iniciando {settings.APP_NAME}")
     print(f"Escuchando en: http://{settings.HOST}:{settings.PORT}")
-    print(f"Documentación Scalar: http://localhost:{settings.PORT}/scalar")
+    display_host = os.environ.get("SGRS_SERVER_IP", "192.168.38.250")
+    print(f"Documentación Scalar: http://{display_host}:{settings.PORT}/scalar")
     print(f"X-API-Key configurada: {'[ACTIVADA]' if settings.api_keys else '[DESACTIVADA]'} ({len(settings.api_keys)} activa(s))")
     print(f"FortiGate Target: {target}")
     print(f"==================================================")

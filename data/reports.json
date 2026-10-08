@@ -84,6 +84,18 @@
   "idf-pacs": {
     "incidents": [
       {
+        "id": "IDF-63822ea1-c52d-46a5-b40c-ec66dd7331f3",
+        "date": "2026-10-08T17:59:35.211837+00:00",
+        "severity": "medium",
+        "device": "Gabinete",
+        "temp": 23.0,
+        "title": "Reporte de incidencia",
+        "description": "dwkdnkaw",
+        "status": "open",
+        "tech": "Israel Garcia",
+        "actor_id": "9276a7d9981a7c3ff6a1df06cb376a47"
+      },
+      {
         "id": "FOL-PACS-GJYCZ",
         "date": "08/09/2026 20:06",
         "severity": "medium",
@@ -99,8 +111,8 @@
       }
     ],
     "telemetry": {
-      "temp": 21.5,
-      "date": "08/09/2026 20:06",
+      "date": "2026-10-08T17:59:35.211837+00:00",
+      "temp": 23.0,
       "status": "normal"
     }
   },

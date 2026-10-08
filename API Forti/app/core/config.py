@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Seguridad de la API (soporta clave única o múltiples separadas por coma)
-    APP_API_KEY: Optional[str] = "admin"
+    APP_API_KEY: Optional[str] = None
     API_SECRET_KEY: Optional[str] = None
     ALLOW_UNAUTHENTICATED: bool = False
 
@@ -118,13 +118,16 @@ class Settings(BaseSettings):
         if self.ENABLE_2FA and not self.TOTP_SECRET_KEY:
             raise ValueError("ENABLE_2FA requiere configurar un TOTP_SECRET_KEY propio y aleatorio.")
 
+        if self.ALLOW_UNAUTHENTICATED and environment != "test":
+            raise ValueError("ALLOW_UNAUTHENTICATED solo puede usarse en el entorno test.")
+
         if environment not in {"development", "test"}:
             if self.DEBUG:
                 raise ValueError("DEBUG debe estar desactivado fuera de development/test.")
-            if self.ALLOW_UNAUTHENTICATED:
-                raise ValueError("ALLOW_UNAUTHENTICATED solo puede usarse en development/test.")
             if not self.api_keys or any(key.lower() in weak_api_keys or len(key) < 16 for key in self.api_keys):
                 raise ValueError("APP_API_KEY debe contener claves robustas fuera de development/test.")
+            if not self.FORTIOS_API_TOKEN.strip() or self.FORTIOS_API_TOKEN.strip() == "tu_token_aqui":
+                raise ValueError("FORTIOS_API_TOKEN es obligatorio para autenticar FortiOS.")
             if not self.JWT_SECRET_KEY or self.JWT_SECRET_KEY == default_jwt_secret:
                 raise ValueError("JWT_SECRET_KEY debe reemplazarse fuera de development/test.")
             if self.ALLOW_2FA_ENROLLMENT:

@@ -1,0 +1,660 @@
+- generic [ref=f1e3]:
+  - generic [ref=f1e4]:
+    - complementary "Sidebar for SGRS - API Inventarios" [ref=f1e5]:
+      - 'button "Open Search Keyboard Shortcut: Control k" [ref=f1e7] [cursor=pointer]':
+        - generic [ref=f1e11]:
+          - generic [ref=f1e12]: Open Search
+          - text: Search
+        - generic [ref=f1e13]:
+          - generic [ref=f1e14]: "Keyboard Shortcut:"
+          - generic [ref=f1e15]:
+            - generic [ref=f1e16]: Control
+            - text: ⌃ k
+      - list [ref=f1e17]:
+        - listitem [ref=f1e18]:
+          - link "Introduction" [ref=f1e19] [cursor=pointer]:
+            - /url: "#description/introduction"
+        - listitem [ref=f1e21]:
+          - generic [ref=f1e22]:
+            - link "Salud" [ref=f1e23] [cursor=pointer]:
+              - /url: "#tag/salud"
+            - button "Close Group - Salud" [expanded] [ref=f1e26] [cursor=pointer]
+          - list [ref=f1e32]:
+            - listitem [ref=f1e33]:
+              - 'link "Health HTTP Method: GET" [ref=f1e34] [cursor=pointer]':
+                - /url: "#tag/salud/GET/health"
+                - generic [ref=f1e39]: Health
+                - generic [ref=f1e40]:
+                  - generic [ref=f1e41]: "HTTP Method:"
+                  - text: GET
+            - listitem [ref=f1e42]:
+              - 'link "Health HTTP Method: GET" [ref=f1e43] [cursor=pointer]':
+                - /url: "#tag/salud/GET/api/v1/system/health"
+                - generic [ref=f1e48]: Health
+                - generic [ref=f1e49]:
+                  - generic [ref=f1e50]: "HTTP Method:"
+                  - text: GET
+        - listitem [ref=f1e51]:
+          - generic [ref=f1e52]:
+            - link "Autenticación y 2FA" [ref=f1e53] [cursor=pointer]:
+              - /url: "#tag/autenticaci%C3%B3n-y-2fa"
+            - button "Close Group - Autenticación y 2FA" [expanded] [ref=f1e56] [cursor=pointer]
+          - list [ref=f1e62]:
+            - listitem [ref=f1e63]:
+              - 'link "Status HTTP Method: GET" [ref=f1e64] [cursor=pointer]':
+                - /url: "#tag/autenticaci%C3%B3n-y-2fa/GET/api/v1/auth/status"
+                - generic [ref=f1e69]: Status
+                - generic [ref=f1e70]:
+                  - generic [ref=f1e71]: "HTTP Method:"
+                  - text: GET
+            - listitem [ref=f1e72]:
+              - 'link "Setup HTTP Method: POST" [ref=f1e73] [cursor=pointer]':
+                - /url: "#tag/autenticaci%C3%B3n-y-2fa/POST/api/v1/auth/setup-2fa"
+                - generic [ref=f1e78]: Setup
+                - generic [ref=f1e79]:
+                  - generic [ref=f1e80]: "HTTP Method:"
+                  - text: POST
+            - listitem [ref=f1e81]:
+              - 'link "Verify HTTP Method: POST" [ref=f1e82] [cursor=pointer]':
+                - /url: "#tag/autenticaci%C3%B3n-y-2fa/POST/api/v1/auth/verify-2fa"
+                - generic [ref=f1e87]: Verify
+                - generic [ref=f1e88]:
+                  - generic [ref=f1e89]: "HTTP Method:"
+                  - text: POST
+            - listitem [ref=f1e90]:
+              - 'link "Verify Token HTTP Method: POST" [ref=f1e91] [cursor=pointer]':
+                - /url: "#tag/autenticaci%C3%B3n-y-2fa/POST/api/v1/auth/verify-token"
+                - generic [ref=f1e96]: Verify Token
+                - generic [ref=f1e97]:
+                  - generic [ref=f1e98]: "HTTP Method:"
+                  - text: POST
+        - listitem [ref=f1e99]:
+          - generic [ref=f1e100]:
+            - link "CCTV" [ref=f1e101] [cursor=pointer]:
+              - /url: "#tag/cctv"
+            - button "Close Group - CCTV" [expanded] [ref=f1e104] [cursor=pointer]
+          - list [ref=f1e110]:
+            - listitem [ref=f1e111]:
+              - 'link "Catálogo CCTV completo para el dashboard HTTP Method: GET" [ref=f1e112] [cursor=pointer]':
+                - /url: "#tag/cctv/GET/api/v1/cctv/catalog"
+                - generic [ref=f1e117]: Catálogo CCTV completo para el dashboard
+                - generic [ref=f1e118]:
+                  - generic [ref=f1e119]: "HTTP Method:"
+                  - text: GET
+            - listitem [ref=f1e120]:
+              - 'link "Consultar cámaras y observaciones de red HTTP Method: GET" [ref=f1e121] [cursor=pointer]':
+                - /url: "#tag/cctv/GET/api/v1/cctv/cameras"
+                - generic [ref=f1e126]: Consultar cámaras y observaciones de red
+                - generic [ref=f1e127]:
+                  - generic [ref=f1e128]: "HTTP Method:"
+                  - text: GET
+            - listitem [ref=f1e129]:
+              - 'link "Métricas del inventario filtrado HTTP Method: GET" [ref=f1e130] [cursor=pointer]':
+                - /url: "#tag/cctv/GET/api/v1/cctv/summary"
+                - generic [ref=f1e135]: Métricas del inventario filtrado
+                - generic [ref=f1e136]:
+                  - generic [ref=f1e137]: "HTTP Method:"
+                  - text: GET
+            - listitem [ref=f1e138]:
+              - 'link "Exportar consulta a CSV HTTP Method: GET" [ref=f1e139] [cursor=pointer]':
+                - /url: "#tag/cctv/GET/api/v1/cctv/export"
+                - generic [ref=f1e144]: Exportar consulta a CSV
+                - generic [ref=f1e145]:
+                  - generic [ref=f1e146]: "HTTP Method:"
+                  - text: GET
+            - listitem [ref=f1e147]:
+              - 'link "Ficha de cámara HTTP Method: GET" [ref=f1e148] [cursor=pointer]':
+                - /url: "#tag/cctv/GET/api/v1/cctv/cameras/{asset_id}"
+                - generic [ref=f1e153]: Ficha de cámara
+                - generic [ref=f1e154]:
+                  - generic [ref=f1e155]: "HTTP Method:"
+                  - text: GET
+            - listitem [ref=f1e156]:
+              - 'link "Corregir datos físicos o estado administrativo HTTP Method: PATCH" [ref=f1e157] [cursor=pointer]':
+                - /url: "#tag/cctv/PATCH/api/v1/cctv/cameras/{asset_id}"
+                - generic [ref=f1e162]: Corregir datos físicos o estado administrativo
+                - generic [ref=f1e163]:
+                  - generic [ref=f1e164]: "HTTP Method:"
+                  - text: PATCH
+            - listitem [ref=f1e165]:
+              - 'link "Historial de observaciones de red HTTP Method: GET" [ref=f1e166] [cursor=pointer]':
+                - /url: "#tag/cctv/GET/api/v1/cctv/cameras/{asset_id}/observations"
+                - generic [ref=f1e171]: Historial de observaciones de red
+                - generic [ref=f1e172]:
+                  - generic [ref=f1e173]: "HTTP Method:"
+                  - text: GET
+            - listitem [ref=f1e174]:
+              - 'link "Auditoría de correcciones HTTP Method: GET" [ref=f1e175] [cursor=pointer]':
+                - /url: "#tag/cctv/GET/api/v1/cctv/cameras/{asset_id}/changes"
+                - generic [ref=f1e180]: Auditoría de correcciones
+                - generic [ref=f1e181]:
+                  - generic [ref=f1e182]: "HTTP Method:"
+                  - text: GET
+        - listitem [ref=f1e183]:
+          - generic [ref=f1e184]:
+            - link "Catálogos" [ref=f1e185] [cursor=pointer]:
+              - /url: "#tag/cat%C3%A1logos"
+            - button "Close Group - Catálogos" [expanded] [ref=f1e188] [cursor=pointer]
+          - list [ref=f1e194]:
+            - listitem [ref=f1e195]:
+              - 'link "Cabinets HTTP Method: GET" [ref=f1e196] [cursor=pointer]':
+                - /url: "#tag/cat%C3%A1logos/GET/api/v1/catalogs/cabinets"
+                - generic [ref=f1e201]: Cabinets
+                - generic [ref=f1e202]:
+                  - generic [ref=f1e203]: "HTTP Method:"
+                  - text: GET
+            - listitem [ref=f1e204]:
+              - 'link "Networks HTTP Method: GET" [ref=f1e205] [cursor=pointer]':
+                - /url: "#tag/cat%C3%A1logos/GET/api/v1/catalogs/networks"
+                - generic [ref=f1e210]: Networks
+                - generic [ref=f1e211]:
+                  - generic [ref=f1e212]: "HTTP Method:"
+                  - text: GET
+        - listitem [ref=f1e213]:
+          - generic [ref=f1e214]:
+            - link "Fuentes documentales" [ref=f1e215] [cursor=pointer]:
+              - /url: "#tag/fuentes-documentales"
+            - button "Close Group - Fuentes documentales" [expanded] [ref=f1e218] [cursor=pointer]
+          - list [ref=f1e224]:
+            - listitem [ref=f1e225]:
+              - 'link "Sources HTTP Method: GET" [ref=f1e226] [cursor=pointer]':
+                - /url: "#tag/fuentes-documentales/GET/api/v1/sources"
+                - generic [ref=f1e231]: Sources
+                - generic [ref=f1e232]:
+                  - generic [ref=f1e233]: "HTTP Method:"
+                  - text: GET
+            - listitem [ref=f1e234]:
+              - 'link "Download HTTP Method: GET" [ref=f1e235] [cursor=pointer]':
+                - /url: "#tag/fuentes-documentales/GET/api/v1/sources/{digest}/download"
+                - generic [ref=f1e240]: Download
+                - generic [ref=f1e241]:
+                  - generic [ref=f1e242]: "HTTP Method:"
+                  - text: GET
+        - listitem [ref=f1e243]:
+          - generic [ref=f1e244]:
+            - link "Cotejo de red" [ref=f1e245] [cursor=pointer]:
+              - /url: "#tag/cotejo-de-red"
+            - button "Close Group - Cotejo de red" [expanded] [ref=f1e248] [cursor=pointer]
+          - list [ref=f1e254]:
+            - listitem [ref=f1e255]:
+              - 'link "Start HTTP Method: POST" [ref=f1e256] [cursor=pointer]':
+                - /url: "#tag/cotejo-de-red/POST/api/v1/reconciliation/jobs"
+                - generic [ref=f1e261]: Start
+                - generic [ref=f1e262]:
+                  - generic [ref=f1e263]: "HTTP Method:"
+                  - text: POST
+            - listitem [ref=f1e264]:
+              - 'link "Job HTTP Method: GET" [ref=f1e265] [cursor=pointer]':
+                - /url: "#tag/cotejo-de-red/GET/api/v1/reconciliation/jobs/{job_id}"
+                - generic [ref=f1e270]: Job
+                - generic [ref=f1e271]:
+                  - generic [ref=f1e272]: "HTTP Method:"
+                  - text: GET
+        - listitem [ref=f1e273]:
+          - generic [ref=f1e274]:
+            - link "Models" [ref=f1e275] [cursor=pointer]:
+              - /url: "#models"
+            - button "Close Group - Models" [expanded] [ref=f1e278] [cursor=pointer]
+          - list [ref=f1e284]:
+            - listitem [ref=f1e285]:
+              - link "Camera" [ref=f1e286] [cursor=pointer]:
+                - /url: "#models/Camera"
+            - listitem [ref=f1e292]:
+              - link "CameraPage" [ref=f1e293] [cursor=pointer]:
+                - /url: "#models/CameraPage"
+            - listitem [ref=f1e299]:
+              - link "Catalog" [ref=f1e300] [cursor=pointer]:
+                - /url: "#models/Catalog"
+            - listitem [ref=f1e306]:
+              - link "Correction" [ref=f1e307] [cursor=pointer]:
+                - /url: "#models/Correction"
+            - listitem [ref=f1e313]:
+              - link "CorrectionFields" [ref=f1e314] [cursor=pointer]:
+                - /url: "#models/CorrectionFields"
+            - listitem [ref=f1e320]:
+              - link "Credentials" [ref=f1e321] [cursor=pointer]:
+                - /url: "#models/Credentials"
+            - listitem [ref=f1e327]:
+              - link "ErrorResponse" [ref=f1e328] [cursor=pointer]:
+                - /url: "#models/ErrorResponse"
+            - listitem [ref=f1e334]:
+              - link "Response[CameraPage]" [ref=f1e335] [cursor=pointer]:
+                - /url: "#models/Response-CameraPage"
+            - listitem [ref=f1e341]:
+              - link "Response[Camera]" [ref=f1e342] [cursor=pointer]:
+                - /url: "#models/Response-Camera"
+            - listitem [ref=f1e348]:
+              - link "Response[Catalog]" [ref=f1e349] [cursor=pointer]:
+                - /url: "#models/Response-Catalog"
+            - listitem [ref=f1e355]:
+              - link "Response[dict]" [ref=f1e356] [cursor=pointer]:
+                - /url: "#models/Response-dict"
+            - listitem [ref=f1e362]:
+              - link "Response[list[dict]]" [ref=f1e363] [cursor=pointer]:
+                - /url: "#models/Response-list-dict"
+            - listitem [ref=f1e369]:
+              - link "Token" [ref=f1e370] [cursor=pointer]:
+                - /url: "#models/Token"
+            - listitem [ref=f1e376]:
+              - link "Verify" [ref=f1e377] [cursor=pointer]:
+                - /url: "#models/Verify"
+      - generic [ref=f1e383]:
+        - link "Open API Client" [ref=f1e384] [cursor=pointer]:
+          - /url: https://client.scalar.com/?url=http%3A%2F%2F192.168.38.250%3A8002%2Fopenapi.json&integration=fastapi&utm_source=api-reference&utm_medium=button&utm_campaign=sidebar
+        - generic [ref=f1e388]:
+          - link "Powered by Scalar" [ref=f1e390] [cursor=pointer]:
+            - /url: https://scalar.com/?utm_source=powered-by&utm_medium=api-reference&utm_campaign=fastapi
+          - button [ref=f1e391] [cursor=pointer]:
+            - generic "Set dark mode" [ref=f1e394]
+    - main "API documentation for SGRS - API Inventarios" [ref=f1e401]:
+      - generic [ref=f1e402]:
+        - region "Introduction" [ref=f1e404]:
+          - generic [ref=f1e405]:
+            - generic [ref=f1e406]:
+              - generic [ref=f1e407]: v1.0.0
+              - generic [ref=f1e408]: OpenAPI 3.1.0
+            - heading "SGRS - API Inventarios" [level=1] [ref=f1e411]
+            - generic [ref=f1e412]:
+              - generic [ref=f1e413]:
+                - generic [ref=f1e414]:
+                  - button "Download OpenAPI Document as JSON" [ref=f1e415] [cursor=pointer]:
+                    - generic [ref=f1e416]: Download OpenAPI Document
+                  - button "Download OpenAPI Document as YAML" [ref=f1e417] [cursor=pointer]:
+                    - generic [ref=f1e418]: Download OpenAPI Document
+                - paragraph [ref=f1e422]: Inventario CCTV documental, correcciones auditadas y observaciones de red Forti/Omni. La baja administrativa no apaga equipos.
+              - generic [ref=f1e425]:
+                - generic [ref=f1e426]:
+                  - generic [ref=f1e427]: Server
+                  - generic [ref=f1e429]:
+                    - generic [ref=f1e430]: "Server:"
+                    - generic [ref=f1e431]: http://192.168.38.250:8002
+                - group [ref=f1e434]:
+                  - generic [ref=f1e435]:
+                    - button "Authentication" [disabled] [expanded] [ref=f1e436]
+                    - button "Select Auth Type" [ref=f1e443] [cursor=pointer]
+                  - generic [ref=f1e447]: No authentication selected
+                - generic [ref=f1e451]:
+                  - generic [ref=f1e452]: Client Libraries
+                  - generic [ref=f1e453]:
+                    - tablist "Client Libraries" [ref=f1e454]:
+                      - tab "Shell" [selected] [ref=f1e455] [cursor=pointer]
+                      - tab "Ruby" [ref=f1e460] [cursor=pointer]
+                      - tab "Node.js" [ref=f1e465] [cursor=pointer]
+                      - tab "PHP" [ref=f1e471] [cursor=pointer]
+                      - tab "Python" [ref=f1e476] [cursor=pointer]
+                    - button "Select from all clients" [ref=f1e483] [cursor=pointer]
+                  - tabpanel "Shell" [ref=f1e489]: Shell Curl
+        - region [ref=f1e491]:
+          - generic [ref=f1e494]:
+            - heading "Salud" [level=2] [ref=f1e496]
+            - button "Copy link" [ref=f1e497] [cursor=pointer]
+          - group "Salud Operations" [ref=f1e506]:
+            - generic [ref=f1e508]:
+              - generic [ref=f1e509]: Salud
+              - text: Operations
+            - list "Salud endpoints" [ref=f1e511]:
+              - listitem [ref=f1e512]:
+                - generic [ref=f1e513] [cursor=pointer]:
+                  - generic [ref=f1e514]: get
+                  - generic [ref=f1e515]: /health
+              - listitem [ref=f1e516]:
+                - generic [ref=f1e517] [cursor=pointer]:
+                  - generic [ref=f1e518]: get
+                  - generic [ref=f1e519]: /api/v1/system/health
+          - generic [ref=f1e520]:
+            - region [ref=f1e522]:
+              - generic [ref=f1e524]:
+                - generic [ref=f1e526]:
+                  - heading "Health" [level=3] [ref=f1e528]
+                  - button "Copy link" [ref=f1e529] [cursor=pointer]
+                - button "Copy as Markdown" [ref=f1e535] [cursor=pointer]
+                - generic:
+                  - group "Description"
+                - generic [ref=f1e542]:
+                  - heading "Responses" [level=4] [ref=f1e543]
+                  - list "Responses" [ref=f1e544]:
+                    - listitem [ref=f1e545]:
+                      - button "200 Successful Response" [ref=f1e546] [cursor=pointer]:
+                        - generic [ref=f1e547]: "200"
+                        - paragraph [ref=f1e555]: Successful Response
+                      - group "Selected Content Type" [ref=f1e558]:
+                        - generic [ref=f1e559]: application/json
+                    - listitem [ref=f1e560]:
+                      - button "401 Unauthorized" [ref=f1e561] [cursor=pointer]:
+                        - generic [ref=f1e562]: "401"
+                        - paragraph [ref=f1e570]: Unauthorized
+                      - group "Selected Content Type" [ref=f1e573]:
+                        - generic [ref=f1e574]: application/json
+                    - listitem [ref=f1e575]:
+                      - button "403 Forbidden" [ref=f1e576] [cursor=pointer]:
+                        - generic [ref=f1e577]: "403"
+                        - paragraph [ref=f1e585]: Forbidden
+                      - group "Selected Content Type" [ref=f1e588]:
+                        - generic [ref=f1e589]: application/json
+                    - listitem [ref=f1e590]:
+                      - button "404 Not Found" [ref=f1e591] [cursor=pointer]:
+                        - generic [ref=f1e592]: "404"
+                        - paragraph [ref=f1e600]: Not Found
+                      - group "Selected Content Type" [ref=f1e603]:
+                        - generic [ref=f1e604]: application/json
+                    - listitem [ref=f1e605]:
+                      - button "409 Conflict" [ref=f1e606] [cursor=pointer]:
+                        - generic [ref=f1e607]: "409"
+                        - paragraph [ref=f1e615]: Conflict
+                      - group "Selected Content Type" [ref=f1e618]:
+                        - generic [ref=f1e619]: application/json
+                    - listitem [ref=f1e620]:
+                      - button "422 Unprocessable Content" [ref=f1e621] [cursor=pointer]:
+                        - generic [ref=f1e622]: "422"
+                        - paragraph [ref=f1e630]: Unprocessable Content
+                      - group "Selected Content Type" [ref=f1e633]:
+                        - generic [ref=f1e634]: application/json
+                    - listitem [ref=f1e635]:
+                      - button "503 Service Unavailable" [ref=f1e636] [cursor=pointer]:
+                        - generic [ref=f1e637]: "503"
+                        - paragraph [ref=f1e645]: Service Unavailable
+                      - group "Selected Content Type" [ref=f1e648]:
+                        - generic [ref=f1e649]: application/json
+                - generic [ref=f1e650]:
+                  - group "Request Example for get/health" [ref=f1e651]:
+                    - generic [ref=f1e652]:
+                      - generic [ref=f1e653]:
+                        - generic [ref=f1e654]: Request Example for
+                        - generic [ref=f1e655]: get
+                        - generic [ref=f1e656]: /health
+                      - 'button "Change code sample language: Shell Curl" [ref=f1e659] [cursor=pointer]': Shell Curl
+                    - generic [ref=f1e665]:
+                      - 'group "Code sample: Shell Curl" [ref=f1e666]':
+                        - code [ref=f1e668]:
+                          - generic [ref=f1e669]: curl http://192.168.38.250:8002/health
+                      - button "Copy code" [ref=f1e670] [cursor=pointer]
+                    - button "Test Request (get /health)" [ref=f1e681] [cursor=pointer]:
+                      - generic [ref=f1e685]: Test Request
+                      - generic [ref=f1e686]: (get /health)
+                  - region [ref=f1e687]:
+                    - generic [ref=f1e688]:
+                      - tablist [ref=f1e690]:
+                        - 'tab "Status: 200 Successful Response" [selected] [ref=f1e691] [cursor=pointer]':
+                          - generic [ref=f1e692]:
+                            - generic [ref=f1e693]: "Status:"
+                            - text: "200"
+                            - generic [ref=f1e694]: Successful Response
+                        - 'tab "Status: 401 Unauthorized" [ref=f1e695] [cursor=pointer]':
+                          - generic [ref=f1e696]:
+                            - generic [ref=f1e697]: "Status:"
+                            - text: "401"
+                            - generic [ref=f1e698]: Unauthorized
+                        - 'tab "Status: 403 Forbidden" [ref=f1e699] [cursor=pointer]':
+                          - generic [ref=f1e700]:
+                            - generic [ref=f1e701]: "Status:"
+                            - text: "403"
+                            - generic [ref=f1e702]: Forbidden
+                        - 'tab "Status: 404 Not Found" [ref=f1e703] [cursor=pointer]':
+                          - generic [ref=f1e704]:
+                            - generic [ref=f1e705]: "Status:"
+                            - text: "404"
+                            - generic [ref=f1e706]: Not Found
+                        - 'tab "Status: 409 Conflict" [ref=f1e707] [cursor=pointer]':
+                          - generic [ref=f1e708]:
+                            - generic [ref=f1e709]: "Status:"
+                            - text: "409"
+                            - generic [ref=f1e710]: Conflict
+                        - 'tab "Status: 422 Unprocessable Content" [ref=f1e711] [cursor=pointer]':
+                          - generic [ref=f1e712]:
+                            - generic [ref=f1e713]: "Status:"
+                            - text: "422"
+                            - generic [ref=f1e714]: Unprocessable Content
+                        - 'tab "Status: 503 Service Unavailable" [ref=f1e715] [cursor=pointer]':
+                          - generic [ref=f1e716]:
+                            - generic [ref=f1e717]: "Status:"
+                            - text: "503"
+                            - generic [ref=f1e718]: Service Unavailable
+                      - generic [ref=f1e720] [cursor=pointer]:
+                        - text: Show Schema
+                        - checkbox "Show Schema"
+                    - group "Code sample" [ref=f1e725]:
+                      - code [ref=f1e727]:
+                        - generic [ref=f1e728]: "null"
+                    - paragraph [ref=f1e732]: Successful Response
+            - region [ref=f1e734]:
+              - generic [ref=f1e736]:
+                - generic [ref=f1e738]:
+                  - heading "Health" [level=3] [ref=f1e740]
+                  - button "Copy link" [ref=f1e741] [cursor=pointer]
+                - generic [ref=f1e746]:
+                  - button "Auth Required" [ref=f1e748] [cursor=pointer]
+                  - button "Copy as Markdown" [ref=f1e753] [cursor=pointer]
+                - generic:
+                  - group "Description"
+                - generic [ref=f1e760]:
+                  - heading "Responses" [level=4] [ref=f1e761]
+                  - list "Responses" [ref=f1e762]:
+                    - listitem [ref=f1e763]:
+                      - button "200 Successful Response" [ref=f1e764] [cursor=pointer]:
+                        - generic [ref=f1e765]: "200"
+                        - paragraph [ref=f1e773]: Successful Response
+                      - group "Selected Content Type" [ref=f1e776]:
+                        - generic [ref=f1e777]: application/json
+                    - listitem [ref=f1e778]:
+                      - button "401 Unauthorized" [ref=f1e779] [cursor=pointer]:
+                        - generic [ref=f1e780]: "401"
+                        - paragraph [ref=f1e788]: Unauthorized
+                      - group "Selected Content Type" [ref=f1e791]:
+                        - generic [ref=f1e792]: application/json
+                    - listitem [ref=f1e793]:
+                      - button "403 Forbidden" [ref=f1e794] [cursor=pointer]:
+                        - generic [ref=f1e795]: "403"
+                        - paragraph [ref=f1e803]: Forbidden
+                      - group "Selected Content Type" [ref=f1e806]:
+                        - generic [ref=f1e807]: application/json
+                    - listitem [ref=f1e808]:
+                      - button "404 Not Found" [ref=f1e809] [cursor=pointer]:
+                        - generic [ref=f1e810]: "404"
+                        - paragraph [ref=f1e818]: Not Found
+                      - group "Selected Content Type" [ref=f1e821]:
+                        - generic [ref=f1e822]: application/json
+                    - listitem [ref=f1e823]:
+                      - button "409 Conflict" [ref=f1e824] [cursor=pointer]:
+                        - generic [ref=f1e825]: "409"
+                        - paragraph [ref=f1e833]: Conflict
+                      - group "Selected Content Type" [ref=f1e836]:
+                        - generic [ref=f1e837]: application/json
+                    - listitem [ref=f1e838]:
+                      - button "422 Unprocessable Content" [ref=f1e839] [cursor=pointer]:
+                        - generic [ref=f1e840]: "422"
+                        - paragraph [ref=f1e848]: Unprocessable Content
+                      - group "Selected Content Type" [ref=f1e851]:
+                        - generic [ref=f1e852]: application/json
+                    - listitem [ref=f1e853]:
+                      - button "503 Service Unavailable" [ref=f1e854] [cursor=pointer]:
+                        - generic [ref=f1e855]: "503"
+                        - paragraph [ref=f1e863]: Service Unavailable
+                      - group "Selected Content Type" [ref=f1e866]:
+                        - generic [ref=f1e867]: application/json
+                - generic [ref=f1e868]:
+                  - group "Request Example for get/api/v1/system/health" [ref=f1e869]:
+                    - generic [ref=f1e870]:
+                      - generic [ref=f1e871]:
+                        - generic [ref=f1e872]: Request Example for
+                        - generic [ref=f1e873]: get
+                        - generic [ref=f1e874]: /api/v1/system/health
+                      - 'button "Change code sample language: Shell Curl" [ref=f1e877] [cursor=pointer]': Shell Curl
+                    - generic [ref=f1e883]:
+                      - 'group "Code sample: Shell Curl" [ref=f1e884]':
+                        - code [ref=f1e886]:
+                          - generic [ref=f1e887]: curl http://192.168.38.250:8002/api/v1/system/health \
+                          - generic [ref=f1e888]: "--header 'X-API-Key: YOUR_SECRET_TOKEN'"
+                      - button "Copy cURL code" [ref=f1e889] [cursor=pointer]
+                    - button "Test Request (get /api/v1/system/health)" [ref=f1e900] [cursor=pointer]:
+                      - generic [ref=f1e904]: Test Request
+                      - generic [ref=f1e905]: (get /api/v1/system/health)
+                  - region [ref=f1e906]:
+                    - generic [ref=f1e907]:
+                      - tablist [ref=f1e909]:
+                        - 'tab "Status: 200 Successful Response" [selected] [ref=f1e910] [cursor=pointer]':
+                          - generic [ref=f1e911]:
+                            - generic [ref=f1e912]: "Status:"
+                            - text: "200"
+                            - generic [ref=f1e913]: Successful Response
+                        - 'tab "Status: 401 Unauthorized" [ref=f1e914] [cursor=pointer]':
+                          - generic [ref=f1e915]:
+                            - generic [ref=f1e916]: "Status:"
+                            - text: "401"
+                            - generic [ref=f1e917]: Unauthorized
+                        - 'tab "Status: 403 Forbidden" [ref=f1e918] [cursor=pointer]':
+                          - generic [ref=f1e919]:
+                            - generic [ref=f1e920]: "Status:"
+                            - text: "403"
+                            - generic [ref=f1e921]: Forbidden
+                        - 'tab "Status: 404 Not Found" [ref=f1e922] [cursor=pointer]':
+                          - generic [ref=f1e923]:
+                            - generic [ref=f1e924]: "Status:"
+                            - text: "404"
+                            - generic [ref=f1e925]: Not Found
+                        - 'tab "Status: 409 Conflict" [ref=f1e926] [cursor=pointer]':
+                          - generic [ref=f1e927]:
+                            - generic [ref=f1e928]: "Status:"
+                            - text: "409"
+                            - generic [ref=f1e929]: Conflict
+                        - 'tab "Status: 422 Unprocessable Content" [ref=f1e930] [cursor=pointer]':
+                          - generic [ref=f1e931]:
+                            - generic [ref=f1e932]: "Status:"
+                            - text: "422"
+                            - generic [ref=f1e933]: Unprocessable Content
+                        - 'tab "Status: 503 Service Unavailable" [ref=f1e934] [cursor=pointer]':
+                          - generic [ref=f1e935]:
+                            - generic [ref=f1e936]: "Status:"
+                            - text: "503"
+                            - generic [ref=f1e937]: Service Unavailable
+                      - generic [ref=f1e939] [cursor=pointer]:
+                        - text: Show Schema
+                        - checkbox "Show Schema"
+                    - generic [ref=f1e943]:
+                      - group "Code sample" [ref=f1e944]:
+                        - code [ref=f1e946]:
+                          - text: "{ \"success\":"
+                          - generic [ref=f1e947]: "true"
+                          - text: ", \"message\": \"Operación completada.\", \"data\": { \"additionalProperty\": \"anything\" } }"
+                      - button "Copy JSON code" [ref=f1e948] [cursor=pointer]
+                    - paragraph [ref=f1e960]: Successful Response
+        - region [ref=f1e962]:
+          - generic [ref=f1e965]:
+            - heading "Autenticación y 2FA" [level=2] [ref=f1e967]
+            - button "Copy link" [ref=f1e968] [cursor=pointer]
+          - group "Autenticación y 2FA Operations" [ref=f1e977]:
+            - generic [ref=f1e979]:
+              - generic [ref=f1e980]: Autenticación y 2FA
+              - text: Operations
+            - list "Autenticación y 2FA endpoints" [ref=f1e982]:
+              - listitem [ref=f1e983]:
+                - generic [ref=f1e984] [cursor=pointer]:
+                  - generic [ref=f1e985]: get
+                  - generic [ref=f1e986]: /api/v1/auth/status
+              - listitem [ref=f1e987]:
+                - generic [ref=f1e988] [cursor=pointer]:
+                  - generic [ref=f1e989]: post
+                  - generic [ref=f1e990]: /api/v1/auth/setup-2fa
+              - listitem [ref=f1e991]:
+                - generic [ref=f1e992] [cursor=pointer]:
+                  - generic [ref=f1e993]: post
+                  - generic [ref=f1e994]: /api/v1/auth/verify-2fa
+              - listitem [ref=f1e995]:
+                - generic [ref=f1e996] [cursor=pointer]:
+                  - generic [ref=f1e997]: post
+                  - generic [ref=f1e998]: /api/v1/auth/verify-token
+        - region [ref=f1e1005]:
+          - generic [ref=f1e1008]:
+            - heading "CCTV" [level=2] [ref=f1e1010]
+            - button "Copy link" [ref=f1e1011] [cursor=pointer]
+          - group "CCTV Operations" [ref=f1e1020]:
+            - generic [ref=f1e1022]:
+              - generic [ref=f1e1023]: CCTV
+              - text: Operations
+            - list "CCTV endpoints" [ref=f1e1025]:
+              - listitem [ref=f1e1026]:
+                - generic [ref=f1e1027] [cursor=pointer]:
+                  - generic [ref=f1e1028]: get
+                  - generic [ref=f1e1029]: /api/v1/cctv/catalog
+              - listitem [ref=f1e1030]:
+                - generic [ref=f1e1031] [cursor=pointer]:
+                  - generic [ref=f1e1032]: get
+                  - generic [ref=f1e1033]: /api/v1/cctv/cameras
+              - listitem [ref=f1e1034]:
+                - generic [ref=f1e1035] [cursor=pointer]:
+                  - generic [ref=f1e1036]: get
+                  - generic [ref=f1e1037]: /api/v1/cctv/summary
+              - listitem [ref=f1e1038]:
+                - generic [ref=f1e1039] [cursor=pointer]:
+                  - generic [ref=f1e1040]: get
+                  - generic [ref=f1e1041]: /api/v1/cctv/export
+              - listitem [ref=f1e1042]:
+                - generic [ref=f1e1043] [cursor=pointer]:
+                  - generic [ref=f1e1044]: get
+                  - generic [ref=f1e1045]: "/api/v1/cctv/cameras/{asset_id}"
+              - listitem [ref=f1e1046]:
+                - generic [ref=f1e1047] [cursor=pointer]:
+                  - generic [ref=f1e1048]: patch
+                  - generic [ref=f1e1049]: "/api/v1/cctv/cameras/{asset_id}"
+              - listitem [ref=f1e1050]:
+                - generic [ref=f1e1051] [cursor=pointer]:
+                  - generic [ref=f1e1052]: get
+                  - generic [ref=f1e1053]: "/api/v1/cctv/cameras/{asset_id}/observations"
+              - listitem [ref=f1e1054]:
+                - generic [ref=f1e1055] [cursor=pointer]:
+                  - generic [ref=f1e1056]: get
+                  - generic [ref=f1e1057]: "/api/v1/cctv/cameras/{asset_id}/changes"
+        - region [ref=f1e1068]:
+          - generic [ref=f1e1071]:
+            - heading "Catálogos" [level=2] [ref=f1e1073]
+            - button "Copy link" [ref=f1e1074] [cursor=pointer]
+          - group "Catálogos Operations" [ref=f1e1083]:
+            - generic [ref=f1e1085]:
+              - generic [ref=f1e1086]: Catálogos
+              - text: Operations
+            - list "Catálogos endpoints" [ref=f1e1088]:
+              - listitem [ref=f1e1089]:
+                - generic [ref=f1e1090] [cursor=pointer]:
+                  - generic [ref=f1e1091]: get
+                  - generic [ref=f1e1092]: /api/v1/catalogs/cabinets
+              - listitem [ref=f1e1093]:
+                - generic [ref=f1e1094] [cursor=pointer]:
+                  - generic [ref=f1e1095]: get
+                  - generic [ref=f1e1096]: /api/v1/catalogs/networks
+        - region [ref=f1e1101]:
+          - generic [ref=f1e1104]:
+            - heading "Fuentes documentales" [level=2] [ref=f1e1106]
+            - button "Copy link" [ref=f1e1107] [cursor=pointer]
+          - group "Fuentes documentales Operations" [ref=f1e1116]:
+            - generic [ref=f1e1118]:
+              - generic [ref=f1e1119]: Fuentes documentales
+              - text: Operations
+            - list "Fuentes documentales endpoints" [ref=f1e1121]:
+              - listitem [ref=f1e1122]:
+                - generic [ref=f1e1123] [cursor=pointer]:
+                  - generic [ref=f1e1124]: get
+                  - generic [ref=f1e1125]: /api/v1/sources
+              - listitem [ref=f1e1126]:
+                - generic [ref=f1e1127] [cursor=pointer]:
+                  - generic [ref=f1e1128]: get
+                  - generic [ref=f1e1129]: "/api/v1/sources/{digest}/download"
+        - region [ref=f1e1134]:
+          - generic [ref=f1e1137]:
+            - heading "Cotejo de red" [level=2] [ref=f1e1139]
+            - button "Copy link" [ref=f1e1140] [cursor=pointer]
+          - group "Cotejo de red Operations" [ref=f1e1149]:
+            - generic [ref=f1e1151]:
+              - generic [ref=f1e1152]: Cotejo de red
+              - text: Operations
+            - list "Cotejo de red endpoints" [ref=f1e1154]:
+              - listitem [ref=f1e1155]:
+                - generic [ref=f1e1156] [cursor=pointer]:
+                  - generic [ref=f1e1157]: post
+                  - generic [ref=f1e1158]: /api/v1/reconciliation/jobs
+              - listitem [ref=f1e1159]:
+                - generic [ref=f1e1160] [cursor=pointer]:
+                  - generic [ref=f1e1161]: get
+                  - generic [ref=f1e1162]: "/api/v1/reconciliation/jobs/{job_id}"
+        - region "Models" [ref=f1e1168]:
+          - heading "Models" [level=2] [ref=f1e1171]
+  - region "Notifications alt+T":
+    - list

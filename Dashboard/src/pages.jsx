@@ -21,6 +21,18 @@ const detailText = (primary, secondary) => <div className="cell-detail"><strong>
 // El prefijo 192.168. corresponde a la red institucional; en IPAM mostramos
 // solamente el segmento y host para que las tarjetas sean más legibles.
 const displayIp = value => String(value || '—').replace(/^192\.168\./, '');
+const readStoredPrincipalSegments = key => {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const value = JSON.parse(localStorage.getItem(key));
+    return Array.isArray(value) && value.every(item => typeof item === 'string') ? value : null;
+  } catch {
+    return null;
+  }
+};
+const cachePrincipalSegments = (key, value) => {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Account preferences remain authoritative when browser storage is unavailable. */ }
+};
 
 export function Overview({ data, demo, navigate, loading, errors, userId, openEditor }) {
   const [activeSegmentKey, setActiveSegmentKey] = useState(null);
@@ -36,12 +48,49 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
   }).filter(segment => Number.isFinite(segment.fillPercent)).sort((a, b) => b.fillPercent - a.fillPercent).slice(0, 3);
   const [all, setAll] = useState(false);
   const preferenceKey = `sgrs:principal-segments:${demo ? 'demo' : userId}`;
-  const [chosen, setChosen] = useState(() => {
-    try { const value = JSON.parse(localStorage.getItem(preferenceKey)); return Array.isArray(value) && value.every(v => typeof v === 'string') ? value : null; } catch { return null; }
-  });
+  const [chosen, setChosen] = useState(() => readStoredPrincipalSegments(preferenceKey));
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState([]);
   const [preferenceError, setPreferenceError] = useState('');
+  const [preferenceBusy, setPreferenceBusy] = useState(false);
+  const [preferenceSaved, setPreferenceSaved] = useState(false);
+  const preferenceLoadId = useRef(0);
+  useEffect(() => {
+    if (!preferenceSaved) return undefined;
+    const timer = setTimeout(() => setPreferenceSaved(false), 3500);
+    return () => clearTimeout(timer);
+  }, [preferenceSaved]);
+  useEffect(() => {
+    let alive = true;
+    const loadId = ++preferenceLoadId.current;
+    setPreferenceError('');
+    if (demo) {
+      setChosen(readStoredPrincipalSegments(preferenceKey));
+      return () => { alive = false; };
+    }
+    const controller = new AbortController();
+    setPreferenceBusy(true);
+    setChosen(readStoredPrincipalSegments(preferenceKey));
+    request('/api/dashboard/preferences', { signal: controller.signal }).then(async result => {
+      if (!alive || loadId !== preferenceLoadId.current) return;
+      const remote = result?.principal_segments;
+      if (Array.isArray(remote)) {
+        setChosen(remote);
+        cachePrincipalSegments(preferenceKey, remote);
+      } else {
+        const stored = readStoredPrincipalSegments(preferenceKey);
+        setChosen(stored);
+        if (remote === null && stored !== null) {
+          await request('/api/dashboard/preferences', { signal: controller.signal, body: { principal_segments: stored } });
+        }
+      }
+    }).catch(error => {
+      if (!alive || loadId !== preferenceLoadId.current || error.name === 'AbortError') return;
+      setChosen(readStoredPrincipalSegments(preferenceKey));
+      setPreferenceError('No se pudo consultar tu selección en la cuenta. Se muestra la última selección de este navegador, si está disponible.');
+    }).finally(() => { if (alive && loadId === preferenceLoadId.current) setPreferenceBusy(false); });
+    return () => { alive = false; controller.abort(); };
+  }, [demo, userId, preferenceKey]);
   const principalKeys = chosen ?? segments.slice(0, 3).map(segmentKey);
   const activeSegment = segments.find(s => segmentKey(s) === activeSegmentKey) || null;
   const visibleSegments = all ? segments : segments.filter(s => principalKeys.includes(segmentKey(s)));
@@ -68,11 +117,25 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
   });
   const remainingUsage = Math.max(0, totalConnections - usageSlices.reduce((sum, item) => sum + item.connected, 0));
   const usageChart = totalConnections ? `conic-gradient(${[...usageSlices.map(item => `${item.color} ${item.start}% ${item.end}%`), remainingUsage ? `#e9e5e2 ${accumulatedUsage / totalConnections * 100}% 100%` : ''].filter(Boolean).join(', ')})` : '#e9e5e2';
-  const editSegments = () => { setDraft(principalKeys); setPreferenceError(''); setEditing(true); };
-  const saveSegments = () => {
-    try { localStorage.setItem(preferenceKey, JSON.stringify(draft)); }
-    catch { setPreferenceError('No se pudo guardar la selección en este navegador. Habilita el almacenamiento e inténtalo de nuevo.'); return; }
-    setChosen(draft); setAll(false); setEditing(false);
+  const editSegments = () => { setDraft(principalKeys); setPreferenceError(''); setPreferenceSaved(false); setEditing(true); };
+  const saveSegments = async () => {
+    ++preferenceLoadId.current;
+    setPreferenceBusy(true);
+    setPreferenceError('');
+    setPreferenceSaved(false);
+    try {
+      if (demo) {
+        localStorage.setItem(preferenceKey, JSON.stringify(draft));
+      } else {
+        await request('/api/dashboard/preferences', { body: { principal_segments: draft } });
+        cachePrincipalSegments(preferenceKey, draft);
+      }
+      setChosen(draft); setAll(false); setEditing(false); setPreferenceSaved(true);
+    } catch (error) {
+      setPreferenceError(error.message || 'No se pudo guardar la selección. Inténtalo de nuevo.');
+    } finally {
+      setPreferenceBusy(false);
+    }
   };
   return <>
     <PageHeading eyebrow="Centro operativo" title="Dashboard Operativo" description="Métricas generales y estado de la infraestructura de red" updatedAt={data.updatedAt} />
@@ -82,7 +145,9 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
       <Metric icon={Users} label="Concesiones activas" value={loading ? '—' : number(segments.reduce((sum, s) => sum + (s.active_leases || 0), 0))} caption="Asignaciones reportadas por DHCP" />
       <article className="network-pressure"><div className="network-pressure-header"><h3>Redes más cerca del límite</h3><small>uso de IPs</small></div>{pressureSegments.length ? <ol>{pressureSegments.map(segment => <li key={segmentKey(segment)}><span><strong>{segment.name || segment.interface || 'Red sin nombre'}</strong><small>{number(segment.active_leases)} / {number(segment.capacity)}</small></span><i><em style={{ width: `${Math.min(100, Math.max(0, segment.fillPercent))}%` }} /></i><b>{number(segment.fillPercent)}%</b></li>)}</ol> : <p className="muted">Sin datos de utilización por segmento.</p>}</article>
     </section>
-    <section className="segment-section"><div className="section-heading"><Layers3 className="section-icon" size={31} aria-hidden="true" /><div><h2>Segmentos de Red y VLANs</h2><p>Capacidad y asignación de los principales segmentos de la infraestructura</p></div><div className="section-actions"><span>{number(segments.length)} segmentos</span><Button onClick={editSegments} icon={Plus} disabled={loading || !segments.length}>Elegir principales</Button><Button onClick={() => setAll(!all)} icon={ArrowRight}>{all ? 'Ver principales' : 'Ver todos'}</Button></div></div>
+    <section className="segment-section"><div className="section-heading"><Layers3 className="section-icon" size={31} aria-hidden="true" /><div><h2>Segmentos de Red y VLANs</h2><p>Capacidad y asignación de los principales segmentos de la infraestructura</p></div><div className="section-actions"><span>{number(segments.length)} segmentos</span><Button onClick={editSegments} icon={Plus} disabled={loading || preferenceBusy || !segments.length}>Elegir principales</Button><Button onClick={() => setAll(!all)} icon={ArrowRight}>{all ? 'Ver principales' : 'Ver todos'}</Button></div></div>
+      {preferenceSaved && <Notice title="Preferencia guardada" role="status">{demo ? 'La selección se conserva en este navegador.' : 'La selección se conservará al volver a iniciar sesión.'}</Notice>}
+      {preferenceError && !editing && <Notice title="Preferencia no disponible" tone="warning">{preferenceError}</Notice>}
       {segments.length ? <><div className="segment-grid">{visibleSegments.map((segment, index) => {
         const isSelected = activeSegmentKey === segmentKey(segment);
         const meterTone = getUtilizationTone(segment.utilization_percent);
@@ -109,11 +174,11 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
       </div> : <Empty title="Sin conexiones por red">El servicio DHCP aún no devolvió concesiones activas por segmento.</Empty>}
       <p className="network-usage-note">Una concesión DHCP representa una conexión o dispositivo con dirección asignada; una persona puede usar más de un equipo.</p>
     </section>
-    <Dialog open={editing} onClose={() => setEditing(false)} title="Elegir segmentos principales" wide>
-      <p className="muted">Selecciona las tarjetas que quieres mostrar al abrir el dashboard. Esta preferencia se guarda para tu cuenta en este navegador.</p>
-      <div className="segment-picker">{segments.map(segment => { const key = segmentKey(segment); const selected = draft.includes(key); return <article className="panel" key={key}><div><strong>{segment.name || segment.interface}</strong><p className="muted font-mono">{segment.subnet || segment.ip_ranges?.join(', ') || segment.default_gateway || 'Rango no informado'}</p></div><Button aria-pressed={selected} aria-label={`${selected ? 'Quitar' : 'Agregar'} ${segment.name || segment.interface}`} icon={selected ? Check : Plus} variant={selected ? 'primary' : 'secondary'} onClick={() => setDraft(old => selected ? old.filter(value => value !== key) : [...old, key])}>{selected ? 'Visible · Quitar' : 'Agregar'}</Button></article>; })}</div>
+    <Dialog open={editing} onClose={() => setEditing(false)} title="Elegir segmentos principales" wide busy={preferenceBusy}>
+      <p className="muted">Selecciona las tarjetas que quieres mostrar al abrir el dashboard. {demo ? 'En la demostración se guarda en este navegador.' : 'La selección se guarda en tu cuenta y se conserva al volver a iniciar sesión.'}</p>
+      <div className="segment-picker">{segments.map(segment => { const key = segmentKey(segment); const selected = draft.includes(key); return <article className="panel" key={key}><div><strong>{segment.name || segment.interface}</strong><p className="muted font-mono">{segment.subnet || segment.ip_ranges?.join(', ') || segment.default_gateway || 'Rango no informado'}</p></div><Button disabled={preferenceBusy} aria-pressed={selected} aria-label={`${selected ? 'Quitar' : 'Agregar'} ${segment.name || segment.interface}`} icon={selected ? Check : Plus} variant={selected ? 'primary' : 'secondary'} onClick={() => setDraft(old => selected ? old.filter(value => value !== key) : [...old, key])}>{selected ? 'Visible · Quitar' : 'Agregar'}</Button></article>; })}</div>
       {preferenceError && <Notice tone="danger" title="No se guardó la selección">{preferenceError}</Notice>}
-      <div className="dialog-actions"><Button onClick={() => setEditing(false)}>Cancelar</Button><Button variant="primary" onClick={saveSegments}>Guardar selección</Button></div>
+      <div className="dialog-actions"><Button onClick={() => setEditing(false)} disabled={preferenceBusy}>Cancelar</Button><Button variant="primary" busy={preferenceBusy} onClick={saveSegments}>Guardar selección</Button></div>
     </Dialog>
     <Note>Consulta el inventario de {number(resources.length)} recursos y registra las visitas a los cuartos de telecomunicaciones. {demo ? 'Todas las cifras de esta vista son de demostración.' : 'La disponibilidad histórica y el estado global de la red aún no se calculan.'}</Note>
   </>;

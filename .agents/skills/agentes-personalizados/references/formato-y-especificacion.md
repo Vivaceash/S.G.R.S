@@ -1,6 +1,6 @@
 # Especificación Técnica y Formato de Agentes Personalizados
 
-Este documento detalla la especificación técnica de los Agentes Personalizados (Custom Agents) en Google Antigravity.
+Referencia de configuración de agentes personalizados. Fuente: [documentación oficial](https://www.antigravity.google/docs/subagents/), consultada el 2026-10-07. Confirma compatibilidad con el runtime instalado; las convenciones de coordinación del proyecto se documentan en SKILL.md.
 
 ---
 
@@ -9,9 +9,10 @@ Este documento detalla la especificación técnica de los Agentes Personalizados
 1. **Ubicaciones de Descubrimiento:**
    - **Nivel de Proyecto (Workspace):** `.agents/agents/*.md`
      - Antigravity busca en la raíz del repositorio local.
-     - Permite definir asistentes compartidos por el equipo (al comitear) o herramientas locales de trabajo (si `.agents/` está en `.gitignore`).
+     - Permite compartir asistentes o excluir solo los archivos privados correspondientes del control de versiones.
    - **Nivel Global del Usuario:** `~/.gemini/config/agents/*.md`
      - Disponible para todos los proyectos abiertos por el usuario.
+   - También se admite `<nombre>/agent.md` y agentes distribuidos en `plugins/<plugin>/agents/`.
 
 2. **Prioridad y Sobrescritura:**
    - Si un agente con el mismo `name` existe tanto en el proyecto como a nivel global, el del **proyecto (`.agents/agents/`)** toma precedencia sobre el global.
@@ -41,7 +42,7 @@ Cada archivo debe comenzar obligatoriamente con un bloque YAML delimitado por `-
   - `pro`: Máxima capacidad de razonamiento, ideal para arquitectura y debugging complejo.
   - `inherit`: Hereda el modelo configurado en la sesión padre.
 
-#### `mainAgent` (boolean, opcional, por defecto: false)
+#### `mainAgent` (boolean, opcional, por defecto: true)
 - Si es `true`, el agente se expone en la interfaz principal de Antigravity (menú desplegable de agentes en Antigravity 2.0 y parámetro `--agent` en CLI).
 
 #### `subagent` (boolean, opcional, por defecto: true)
@@ -58,14 +59,14 @@ Cada archivo debe comenzar obligatoriamente con un bloque YAML delimitado por `-
   - `grep_search`: Búsqueda de expresiones con ripgrep.
   - `find_by_name`: Búsqueda de archivos en el árbol de directorios.
   - `read_url_content`: Obtención de documentación externa.
+  - `send_message`: Comunicación dirigida entre agentes cuando se conoce su ID.
 
 #### `skills` (lista de strings, opcional)
-- Rutas relativas a habilidades accesibles para este agente.
+- Rutas a directorios con SKILL.md. Verifica su existencia y la resolución en la sesión destino. Las configuraciones globales de esta máquina usan rutas absolutas y lectura explícita del SKILL.md; una ruta relativa requiere conocer su raíz de customización. La validación del sistema de archivos no demuestra carga en el runtime.
 - *Ejemplo:*
   ```yaml
   skills:
     - skills/package-upgrade-rules
-    - skills/agentes-personalizados
   ```
 
 #### `permissionMode` (string, opcional)
@@ -75,7 +76,16 @@ Cada archivo debe comenzar obligatoriamente con un bloque YAML delimitado por `-
 
 #### `commandExecutionPolicy` (string, opcional)
 - Control de políticas de ejecución de comandos por terminal:
-  - `auto`: Ejecuta comandos autónomamente en segundo plano (pruebas, compilación, linters), pero mantiene bloqueadas y bajo confirmación manual acciones de alto riesgo (como eliminación de archivos o comandos destructivos).
+  - `off`: No permite ejecución automática de comandos.
+  - `sandbox`: Ejecuta comandos dentro del sandbox del proyecto.
+  - `auto`: Ejecuta comandos autónomamente para pruebas, compilación y linters.
+  - `eager`: Ejecuta comandos con la máxima autonomía disponible; úsalo solo en agentes de implementación confiables.
+
+Para estos agentes, conserva `sandbox` inicialmente. Las instrucciones del cuerpo no sustituyen los límites de herramientas ni de permisos. En particular, run_command puede escribir archivos aunque falten herramientas de edición: QA requiere una regla explícita de solo lectura y comprobación de efectos de los comandos.
+
+#### `mcpServers` y `plugins` (opcionales)
+
+La documentación admite `mcpServers` como lista de objetos y `plugins` como lista de cadenas. Úsalos solo si el rol necesita esas capacidades y se verificó su configuración; no añadas dependencias por defecto.
 
 ---
 
@@ -86,3 +96,13 @@ Todo el contenido que sigue al segundo delimitador `---` se compila como el **Sy
 - **Protocolo de Acción:** Pasos que debe seguir cronológicamente.
 - **Comandos de Verificación:** Qué pruebas o linters debe correr antes de dar una tarea por finalizada.
 - **Restricciones y Buenas Prácticas:** Qué cosas NO debe hacer.
+
+## 4. Coordinación paralela y comunicación
+
+Cuando una tarea requiere varias especialidades, el agente coordinador debe:
+
+Aplicar el protocolo de [SKILL.md, sección 5.3](../SKILL.md#53-coordinación-paralela-y-comunicación-entre-pares). Los subagentes comienzan sin el historial del padre; cada delegación necesita contexto autocontenido o referencias legibles.
+
+Los estados nativos documentados son Running, Idle y Killed. READY y BLOCKED son etiquetas de nuestro protocolo: un proceso Idle puede haber terminado con un bloqueo. Conserva los IDs reales para mensajería y reactivación; verifica los nombres y argumentos de herramientas contra el esquema disponible, sin inventarlos a partir de ejemplos.
+
+El coordinador conserva la autoridad sobre alcance, conflictos, cambios de contrato y aprobación final. La comunicación directa entre pares no reemplaza esas puertas.

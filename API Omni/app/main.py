@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -22,6 +23,16 @@ from app.routers import (
     system_router,
     auth_router,
 )
+from app.services.omnivista_service import omnivista_service
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """No publicar la API de datos hasta autenticar OmniVista."""
+    if not omnivista_service.login():
+        reason = omnivista_service.last_login_error or "No se recibió una sesión válida."
+        raise RuntimeError(f"OmniVista no autenticó con OV_USERNAME/OV_PASSWORD. {reason}")
+    yield
 
 # Inicialización de FastAPI: Scalar condicionado por ENABLE_DOCS
 app = FastAPI(
@@ -44,6 +55,7 @@ app = FastAPI(
     docs_url=None,       # Swagger UI deshabilitado
     redoc_url=None,      # ReDoc deshabilitado
     openapi_url="/openapi.json" if settings.ENABLE_DOCS else None,
+    lifespan=lifespan,
 )
 
 # Configuración de CORS segura

@@ -23,6 +23,13 @@ const reportId = () => {
   const hex = [...bytes].map(value => value.toString(16).padStart(2, '0')).join('');
   return `IDF-${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
 };
+const validateReport = values => {
+  const errors = {};
+  if (values.actor.trim().length < 2) errors.actor = 'Indica tu nombre completo (al menos 2 caracteres).';
+  if (values.temp === '' || !Number.isFinite(Number(values.temp)) || Number(values.temp) < 10 || Number(values.temp) > 42) errors.temp = 'Ingresa una temperatura entre 10 y 42 °C.';
+  if (!values.description.trim()) errors.description = 'Describe la incidencia.';
+  return errors;
+};
 
 export function MobileReport() {
   const query = useRef(params()).current;
@@ -35,6 +42,8 @@ export function MobileReport() {
   const [busy, setBusy] = useState(false);
   const [file, setFile] = useState(null);
   const [values, setValues] = useState({ actor: '', temp: '', description: '' });
+  const [fieldErrors, setFieldErrors] = useState({});
+  const submissionId = useRef(null);
 
   const loadContext = () => {
     setError('');
@@ -64,13 +73,21 @@ export function MobileReport() {
 
   useEffect(() => loadContext(), [idf, token]);
 
-  const update = key => event => setValues(old => ({ ...old, [key]: event.target.value }));
+  const update = key => event => {
+    setValues(old => ({ ...old, [key]: event.target.value }));
+    setFieldErrors(old => ({ ...old, [key]: undefined }));
+    setError('');
+  };
+  const validateField = key => () => setFieldErrors(old => ({ ...old, [key]: validateReport(values)[key] }));
 
   const submit = async event => {
     event.preventDefault();
     if (!context || busy) return;
-    if (!values.actor.trim() || values.temp === '' || !values.description.trim()) {
-      setError('Completa los campos obligatorios antes de enviar.');
+    const invalid = validateReport(values);
+    setFieldErrors(invalid);
+    if (Object.keys(invalid).length) {
+      setError('Corrige los campos marcados antes de enviar el reporte.');
+      event.currentTarget.elements.namedItem(Object.keys(invalid)[0])?.focus();
       return;
     }
     setBusy(true);
@@ -82,8 +99,10 @@ export function MobileReport() {
         return;
       }
       const evidence = await imagePayload(file);
+      submissionId.current ||= reportId();
       const response = await fetch('/api/mobile-report', {
         method: 'POST',
+        signal: AbortSignal.timeout(15000),
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
           idf_id: idf,
@@ -91,7 +110,7 @@ export function MobileReport() {
           actor: values.actor.trim(),
           evidence,
           incident: {
-            id: reportId(),
+            id: submissionId.current,
             temp: Number(values.temp),
             status: 'open',
             description: values.description.trim()
@@ -100,9 +119,10 @@ export function MobileReport() {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || 'No se pudo enviar el reporte. Inténtalo nuevamente.');
+      if (body.status !== 'success' || body.incident?.id !== submissionId.current) throw new Error('El servidor no confirmó el guardado. Vuelve a enviar el reporte.');
       setSent(true);
     } catch (problem) {
-      setError(problem.message || 'No se pudo enviar el reporte.');
+      setError(['TimeoutError', 'AbortError'].includes(problem.name) ? 'El servidor tardó demasiado en confirmar. Revisa la conexión y vuelve a enviar el reporte.' : problem.message || 'No se pudo enviar el reporte.');
     } finally {
       setBusy(false);
     }
@@ -129,7 +149,7 @@ export function MobileReport() {
 
   if (sent) return (
     <main className="mobile-report-page">
-      <section className="mobile-report-card panel mobile-success">
+      <section className="mobile-report-card panel mobile-success" role="status" aria-live="polite">
         <CheckCircle2 size={52} />
         <p className="eyebrow">Registro enviado</p>
         <h1>Reporte guardado correctamente</h1>
@@ -164,14 +184,14 @@ export function MobileReport() {
             <span><i /> Alerta nueva</span>
             <small>Se enviará a Bitácora</small>
           </div>
-          <Field label="Nombre completo" required>
-            <input autoComplete="name" placeholder="Tu nombre" value={values.actor} onChange={update('actor')} maxLength={120} />
+          <Field label="Nombre completo" required error={fieldErrors.actor}>
+            <input name="actor" autoComplete="name" placeholder="Tu nombre" value={values.actor} onChange={update('actor')} onBlur={validateField('actor')} maxLength={120} />
           </Field>
-          <Field label="Temperatura (°C)" required>
-            <input type="number" inputMode="decimal" min="10" max="42" step="0.5" value={values.temp} onChange={update('temp')} placeholder="Ej. 22" />
+          <Field label="Temperatura (°C)" required error={fieldErrors.temp} hint="Entre 10 y 42 °C; puedes usar decimales.">
+            <input name="temp" type="number" inputMode="decimal" min="10" max="42" step="any" value={values.temp} onChange={update('temp')} onBlur={validateField('temp')} placeholder="Ej. 22" />
           </Field>
-          <Field label="Descripción de la incidencia" required hint={`${values.description.length}/1000`}>
-            <textarea rows={3} value={values.description} onChange={update('description')} maxLength={1000} placeholder="Equipo afectado y problema observado…" />
+          <Field label="Descripción de la incidencia" required error={fieldErrors.description} hint={`${values.description.length}/1000`}>
+            <textarea name="description" rows={3} value={values.description} onChange={update('description')} onBlur={validateField('description')} maxLength={1000} placeholder="Equipo afectado y problema observado…" />
           </Field>
           <label className={`mobile-evidence ${file ? 'has-file' : ''}`}>
             <Camera size={21} />

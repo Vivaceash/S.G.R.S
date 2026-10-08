@@ -142,6 +142,10 @@ def database(write=False):
             id TEXT PRIMARY KEY, url TEXT NOT NULL, auth_mode TEXT NOT NULL,
             username TEXT NOT NULL DEFAULT '', secret TEXT NOT NULL DEFAULT '',
             version INTEGER NOT NULL DEFAULT 1, updated_at INTEGER NOT NULL);
+          CREATE TABLE IF NOT EXISTS dashboard_preferences (
+            user_id TEXT PRIMARY KEY,
+            principal_segments TEXT NOT NULL,
+            updated_at INTEGER NOT NULL);
           CREATE TABLE IF NOT EXISTS attempts (bucket TEXT NOT NULL, created_at INTEGER NOT NULL);
           CREATE TABLE IF NOT EXISTS audit (
             id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL,
@@ -427,6 +431,37 @@ def session(cookie):
             return None
         db.execute("UPDATE sessions SET touched=? WHERE token_hash=?", (now, token_hash))
         return {**session_identity(row, row["csrf"]), "token_hash": token_hash}
+
+
+def _principal_segments(values):
+    if not isinstance(values, list) or len(values) > 200 or not all(isinstance(value, str) and 0 < len(value) <= 512 for value in values):
+        raise AccessError(422, "La selección de segmentos no es válida.")
+    return list(dict.fromkeys(values))
+
+
+def dashboard_preferences(user_id):
+    with database() as db:
+        row = db.execute("SELECT principal_segments FROM dashboard_preferences WHERE user_id=?", (user_id,)).fetchone()
+    if not row:
+        return {"principal_segments": None}
+    try:
+        selected = json.loads(row["principal_segments"])
+    except (TypeError, ValueError):
+        selected = []
+    return {"principal_segments": _principal_segments(selected)}
+
+
+def save_dashboard_preferences(user_id, principal_segments):
+    selected = _principal_segments(principal_segments)
+    with database(write=True) as db:
+        if not db.execute("SELECT 1 FROM users WHERE id=? AND active=1", (user_id,)).fetchone():
+            raise AccessError(401, "La sesión no es válida. Vuelve a iniciar sesión.")
+        db.execute(
+            "INSERT INTO dashboard_preferences(user_id,principal_segments,updated_at) VALUES(?,?,?) "
+            "ON CONFLICT(user_id) DO UPDATE SET principal_segments=excluded.principal_segments,updated_at=excluded.updated_at",
+            (user_id, json.dumps(selected, ensure_ascii=False, separators=(",", ":")), int(time.time())),
+        )
+    return {"principal_segments": selected}
 
 
 def connection_default(service):

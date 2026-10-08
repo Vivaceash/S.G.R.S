@@ -19,7 +19,7 @@ from dashboard_device_history import get_longest_connected_devices
 
 from dashboard_access import (AccessError, SESSION_SECONDS, database, session, login,
                               list_users, project_hidden_actors, save_user, connection, connection_values,
-                              save_connection, audit)
+                              save_connection, audit, dashboard_preferences, save_dashboard_preferences)
 
 
 # Explicit read surface: adding an upstream route never grants access implicitly.
@@ -267,6 +267,9 @@ class AccessRoutes:
                 self.mobile_report_context(self.path)
                 return True
             self._authorize()
+            if path == "/api/dashboard/preferences":
+                self._send_json(dashboard_preferences(self.identity["user"]["id"]))
+                return True
             if path.startswith('/api/inventarios/'):
                 if 'inventory.read' not in self.identity['capabilities']:
                     raise AccessError(403, 'No tienes permiso para consultar inventarios.')
@@ -286,7 +289,11 @@ class AccessRoutes:
                 self._send_json(result)
                 return True
             if path == '/api/inventory/reconcile':
-                self._send_json(inventory.live_reconciliation(self.inventory_fetch))
+                if inventories_api.active():
+                    actor = self.identity.get('user', {}).get('id')
+                    self._send_json(inventories_api.reconcile(actor))
+                else:
+                    self._send_json(inventory.live_reconciliation(self.inventory_fetch))
                 return True
             if path == '/api/aps/map':
                 self._send_json(inventory.ap_map_positions())
@@ -440,6 +447,9 @@ class AccessRoutes:
                 return True
             self._authorize(mutation=True)
             actor = self.identity["user"]["id"]
+            if path == "/api/dashboard/preferences":
+                self._send_json(save_dashboard_preferences(actor, self._body().get("principal_segments")))
+                return True
             if path == '/api/inventarios/reconciliation/jobs':
                 if 'inventory.read' not in self.identity['capabilities']:
                     raise AccessError(403, 'No tienes permiso para consultar inventarios.')

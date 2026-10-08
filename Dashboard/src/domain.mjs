@@ -554,7 +554,7 @@ export async function request(path, { signal, body } = {}) {
   });
   if (!response.ok) {
     if (response.status === 401 && !path.startsWith('/api/auth/')) window.dispatchEvent(new Event('sgrs-session-expired'));
-    const local = path.startsWith('/api/admin/') || path.startsWith('/api/auth/') || path.startsWith('/api/inventory/') || path.startsWith('/api/reports');
+    const local = path.startsWith('/api/admin/') || path.startsWith('/api/auth/') || path.startsWith('/api/dashboard/') || path.startsWith('/api/inventory/') || path.startsWith('/api/reports');
     const payload = await response.json().catch(() => ({}));
     throw new ApiError(response.status, local && response.status < 500 && typeof payload.error === 'string' ? payload.error : undefined);
   }

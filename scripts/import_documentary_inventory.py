@@ -133,17 +133,33 @@ def extract(directory, structure=False):
     file = files[2]
     idf_id = ''
     for row in sheets(directory / file)['Hoja1']:
-        number = row.get('B', '')
+        number = clean(row.get('B', ''))
         if section_id(str(number)):
             idf_id = section_id(str(number))
-        if not str(number).isdigit():
+        # Headers and section labels are not equipment. CCTV rows without a
+        # number remain first-class assets so documentary gaps are visible.
+        if str(number).casefold() in {'#', 'numero', 'número', 'no.', 'no'}:
             continue
+        if not any(clean(row.get(column, '')) for column in ('C', 'D', 'E', 'F', 'G')):
+            continue
+        location = clean(row.get('C', ''))
+        serial = clean(row.get('D', ''))
+        model = clean(row.get('E', ''))
+        documented_ip = clean(row.get('F', ''))
+        mac = clean(row.get('G', ''))
         relocated = row.get('H') is True
-        destination = row.get('I', '')
-        add('cctv', provenance(file, row['row'], sheet='Hoja1'), number=number, name=f'Cámara {number}',
-            idf_id=idf_id, location=row.get('C', ''), serial=row.get('D', ''), model=row.get('E', ''),
-            documented_ip=row.get('F', ''), mac=row.get('G', ''), relocated=relocated,
+        destination = clean(row.get('I', ''))
+        display = f'Cámara {number}' if number else f'Cámara sin número — {location or model or serial or "sin identificación"}'
+        add('cctv', provenance(file, row['row'], sheet='Hoja1'), number=number, name=display,
+            idf_id=idf_id, location=location, serial=serial, model=model,
+            documented_ip=documented_ip, mac=mac, relocated=relocated,
             destination=destination, kind='equipment', rack='')
+        missing = [('number', number, 'Número de cámara'), ('location', location, 'ubicación'),
+                   ('documented_ip', documented_ip, 'IP'), ('serial', serial, 'serie'),
+                   ('model', model, 'modelo'), ('mac', mac, 'MAC')]
+        for _, value, label in missing:
+            if not value:
+                assets[-1]['issues'].append(f'{label} no informado en el documento.')
         if bool(destination) != relocated:
             assets[-1]['issues'].append('La casilla de reubicación y el destino escrito no coinciden.')
 

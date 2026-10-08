@@ -1,8 +1,12 @@
 import importlib.util
 import os
 import stat
+import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import Mock, MagicMock
+
+import pytest
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location("root_run", ROOT_DIR / "run.py")
@@ -74,6 +78,7 @@ def test_load_env_fallback(tmp_path, monkeypatch):
 def test_dashboard_environment_host_and_lan_rules(monkeypatch):
     monkeypatch.delenv("DASHBOARD_HOST", raising=False)
     monkeypatch.delenv("SGRS_LAN_ORIGIN", raising=False)
+    monkeypatch.setattr(run_module, "local_network_ip", lambda: "192.0.2.10")
 
     # 1. Sin host ni LAN origin: DASHBOARD_HOST=127.0.0.1 y LAN fallback al host IP
     res1 = run_module.dashboard_environment({}, 3000)
@@ -110,6 +115,8 @@ def test_is_pid_alive():
 def test_get_dashboard_port_verifies_process_liveness(monkeypatch):
     monkeypatch.delenv("DASHBOARD_PORT", raising=False)
     monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.setattr(run_module, "is_port_in_use", lambda port: False)
+    monkeypatch.setattr(run_module.socket, "socket", lambda: Mock())
 
     # 1. PID guardado vivo: reutiliza el puerto guardado (3001)
     monkeypatch.setattr(run_module, "load_pids", lambda: {"dashboard": os.getpid(), "dashboard_port": 3001})
@@ -122,3 +129,238 @@ def test_get_dashboard_port_verifies_process_liveness(monkeypatch):
     # Si 3000 está libre en la máquina de pruebas, devuelve 3000
     assert port_evaluated in (3000, 3001)
 
+
+def test_service_specs_include_four_components_and_inventory_override(monkeypatch):
+    monkeypatch.setenv("INVENTARIOS_PORT", "8012")
+    services = run_module.service_specs(3002)
+    assert [service["key"] for service in services] == [
+        "api_omni", "api_forti", "api_inventarios", "dashboard",
+    ]
+    assert [service["port"] for service in services] == [8000, 8001, 8012, 3002]
+
+
+def test_wait_for_services_requires_all_four_readiness_checks(monkeypatch):
+    services = run_module.service_specs(3000)
+    processes = {service["key"]: Mock(poll=Mock(return_value=None)) for service in services}
+    attempts = {service["key"]: 0 for service in services}
+
+    def readiness(service):
+        key = service["key"]
+        attempts[key] += 1
+        return attempts[key] >= (2 if key == "api_omni" else 1)
+
+    monkeypatch.setattr(run_module, "service_ready", readiness)
+    monkeypatch.setattr(run_module.time, "sleep", lambda delay: None)
+    run_module.wait_for_services(services, processes)
+    assert attempts == {"api_omni": 2, "api_forti": 1, "api_inventarios": 1, "dashboard": 1}
+
+
+def test_wait_for_services_rejects_provider_startup_failure(monkeypatch):
+    services = run_module.service_specs(3000)
+    processes = {service["key"]: Mock(poll=Mock(return_value=None)) for service in services}
+    processes["api_omni"].poll.return_value = 3
+    monkeypatch.setattr(run_module, "service_ready", lambda service: True)
+    with pytest.raises(RuntimeError, match="OmniVista falló al arrancar"):
+        run_module.wait_for_services(services, processes)
+
+
+def test_wait_for_services_times_out_without_claiming_success(monkeypatch):
+    service = run_module.service_specs(3000)[0]
+    process = Mock(poll=Mock(return_value=None))
+    monkeypatch.setattr(run_module, "service_ready", lambda spec: False)
+    with pytest.raises(RuntimeError, match="No quedaron listos"):
+        run_module.wait_for_services([service], {service["key"]: process}, timeout=0)
+
+
+def test_detached_start_launches_and_verifies_all_four_services(tmp_path, monkeypatch):
+    (tmp_path / "server.py").write_text("# Fixture del dashboard\n")
+    monkeypatch.setattr(run_module, "ROOT_DIR", tmp_path)
+    monkeypatch.setattr(run_module, "LOG_DIR", tmp_path / "logs")
+    monkeypatch.setattr(run_module, "MAIN_LOG", tmp_path / "logs/sgrs.log")
+    monkeypatch.setattr(run_module, "PID_FILE", tmp_path / "pids.json")
+    monkeypatch.setattr(run_module, "ensure_environment", lambda: None)
+    monkeypatch.setattr(run_module, "ensure_inventory_config", lambda py: None)
+    monkeypatch.setattr(run_module, "get_dashboard_port", lambda: 3002)
+    monkeypatch.setattr(run_module, "is_port_in_use", lambda port: False)
+    monkeypatch.setattr(run_module, "service_ready", lambda service: False)
+    monkeypatch.setattr(run_module, "get_env", lambda py: {})
+    monkeypatch.setenv("INVENTARIOS_PORT", "8002")
+    monkeypatch.setattr(run_module, "dashboard_environment", lambda env, port: {**env, "DASHBOARD_PORT": str(port)})
+    processes = [Mock(pid=pid) for pid in (401, 402, 403, 404)]
+    popen = Mock(side_effect=processes)
+    monkeypatch.setattr(run_module.subprocess, "Popen", popen)
+    verify = Mock()
+    monkeypatch.setattr(run_module, "wait_for_services", verify)
+
+    run_module.start_services(detached=True)
+
+    calls = popen.call_args_list
+    assert [Path(call.kwargs["cwd"]).name for call in calls] == ["API Forti", "API Omni", "API Inventarios", tmp_path.name]
+    assert calls[2].kwargs["env"]["INVENTARIOS_PORT"] == "8002"
+    assert calls[3].kwargs["env"]["DASHBOARD_PORT"] == "3002"
+    verify.assert_called_once()
+    assert set(verify.call_args.args[1]) == {"api_omni", "api_forti", "api_inventarios", "dashboard"}
+    assert run_module.load_pids()["api_inventarios"] == 403
+
+
+def test_start_recovers_failed_omni_while_other_registered_services_keep_running(tmp_path, monkeypatch):
+    (tmp_path / "server.py").write_text("# Fixture\n")
+    monkeypatch.setattr(run_module, "ROOT_DIR", tmp_path)
+    monkeypatch.setattr(run_module, "LOG_DIR", tmp_path / "logs")
+    monkeypatch.setattr(run_module, "MAIN_LOG", tmp_path / "logs/sgrs.log")
+    monkeypatch.setattr(run_module, "PID_FILE", tmp_path / "pids.json")
+    registry = {"api_forti": 401, "api_omni": 402, "api_inventarios": 403,
+                "dashboard": 404, "dashboard_port": 3002}
+    run_module.save_pids(registry)
+    monkeypatch.setattr(run_module, "ensure_environment", lambda: None)
+    monkeypatch.setattr(run_module, "ensure_inventory_config", lambda py: None)
+    monkeypatch.setattr(run_module, "get_dashboard_port", lambda: 3002)
+    monkeypatch.setattr(run_module, "is_port_in_use", lambda port: port in (8001, 8002, 3002))
+    monkeypatch.setattr(run_module, "is_pid_alive", lambda pid: pid in (401, 403, 404))
+    monkeypatch.setattr(run_module, "service_ready", lambda service: service["key"] != "api_omni")
+    monkeypatch.setattr(run_module, "validate_registered_process", lambda service, pid: None, raising=False)
+    monkeypatch.setattr(run_module, "get_env", lambda py: {})
+    monkeypatch.setenv("INVENTARIOS_PORT", "8002")
+    monkeypatch.setattr(run_module, "dashboard_environment", lambda env, port: {**env, "DASHBOARD_PORT": str(port)})
+    popen = Mock(return_value=Mock(pid=405))
+    monkeypatch.setattr(run_module.subprocess, "Popen", popen)
+    verify = Mock()
+    monkeypatch.setattr(run_module, "wait_for_services", verify)
+
+    run_module.start_services(detached=True)
+
+    popen.assert_called_once()
+    assert Path(popen.call_args.kwargs["cwd"]).name == "API Omni"
+    assert run_module.load_pids() == {**registry, "api_omni": 405}
+    verify.assert_called_once()
+
+
+def test_start_refuses_unregistered_inventory_listener_before_launching(tmp_path, monkeypatch):
+    monkeypatch.setattr(run_module, "ROOT_DIR", tmp_path)
+    monkeypatch.setattr(run_module, "LOG_DIR", tmp_path / "logs")
+    monkeypatch.setattr(run_module, "ensure_environment", lambda: None)
+    monkeypatch.setattr(run_module, "ensure_inventory_config", lambda py: None)
+    monkeypatch.setattr(run_module, "get_dashboard_port", lambda: 3000)
+    monkeypatch.setattr(run_module, "is_port_in_use", lambda port: port == 8002)
+    monkeypatch.setattr(run_module, "service_ready", lambda service: False)
+    monkeypatch.setattr(run_module, "load_pids", lambda: {})
+    monkeypatch.setenv("INVENTARIOS_PORT", "8002")
+    popen = Mock()
+    monkeypatch.setattr(run_module.subprocess, "Popen", popen)
+    with pytest.raises(RuntimeError, match="API Inventarios.*proceso no registrado"):
+        run_module.start_services(detached=True)
+    popen.assert_not_called()
+
+
+def test_startup_error_uses_only_current_launch_and_safe_diagnostic(tmp_path, monkeypatch):
+    log = tmp_path / "sgrs.log"
+    log.write_text(
+        "[SGRS] Inicio de sesión en segundo plano: earlier\n"
+        "[OV-AUTH] OmniVista rechazó el login (HTTP 401).\n"
+        "[SGRS] Inicio de sesión en segundo plano: current\n"
+        "[OV-AUTH] OmniVista rechazó el login (HTTP 403).\n"
+    )
+    monkeypatch.setattr(run_module, "MAIN_LOG", log)
+    service = run_module.service_specs(3000)[0]
+    assert run_module.provider_startup_error(service) == " OmniVista rechazó el login (HTTP 403)."
+    log.write_text("[SGRS] Inicio de sesión en segundo plano: current\n[OV-AUTH] unexpected-sensitive-data\n")
+    assert run_module.provider_startup_error(service) == ""
+
+
+def test_api_readiness_requires_healthy_json(monkeypatch):
+    response = MagicMock(status=200)
+    response.__enter__.return_value = response
+    response.read.return_value = b'{"status":"unhealthy"}'
+    opener = Mock()
+    opener.open.return_value = response
+    monkeypatch.setattr(run_module, "build_opener", lambda *args: opener)
+    service = run_module.service_specs(3000)[0]
+    assert run_module.service_ready(service) is False
+    response.read.return_value = b'{"status":"healthy"}'
+    assert run_module.service_ready(service) is True
+
+
+def test_status_reports_four_services_and_network_blocker(monkeypatch, capsys):
+    monkeypatch.setattr(run_module, "load_pids", lambda: {"dashboard_port": 3002})
+    monkeypatch.setattr(run_module, "service_ready", Mock(side_effect=PermissionError("network blocked")))
+    run_module.status_services()
+    output = capsys.readouterr().out
+    assert output.count("NO COMPROBABLE: SIN PERMISO DE RED") == 4
+    assert "API Inventarios" in output
+    assert "Dashboard React (3002)" in output
+    assert "LISTO" not in output
+
+
+def test_restart_does_not_stop_services_when_network_checks_are_blocked(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["run.py", "restart"])
+    stop = Mock()
+    monkeypatch.setattr(run_module, "stop_services", stop)
+    monkeypatch.setattr(run_module, "is_port_in_use", Mock(side_effect=PermissionError("network blocked")))
+    with pytest.raises(PermissionError):
+        run_module.main()
+    stop.assert_not_called()
+
+
+def test_stop_rejects_reused_pid_without_signaling_or_erasing_registry(tmp_path, monkeypatch):
+    if sys.platform != "linux":
+        pytest.skip("La identidad del proceso se comprueba con /proc en Linux")
+    registry = tmp_path / "pids.json"
+    registry.write_text('{"api_omni": 123}')
+    monkeypatch.setattr(run_module, "PID_FILE", registry)
+    # El propio pytest es un proceso vivo, pero no el run.py de API Omni.
+    monkeypatch.setattr(run_module, "load_pids", lambda: {"api_omni": os.getpid()})
+    monkeypatch.setattr(run_module, "is_pid_alive", lambda pid: True)
+    kill = Mock()
+    killpg = Mock()
+    monkeypatch.setattr(run_module.os, "kill", kill)
+    monkeypatch.setattr(run_module.os, "killpg", killpg)
+    with pytest.raises(RuntimeError, match="no corresponde"):
+        run_module.stop_services()
+    kill.assert_not_called()
+    killpg.assert_not_called()
+    assert registry.exists()
+
+
+def test_stop_includes_inventory_and_waits_before_erasing_registry(tmp_path, monkeypatch):
+    registry = tmp_path / "pids.json"
+    registry.write_text('{"api_inventarios": 123}')
+    monkeypatch.setattr(run_module, "PID_FILE", registry)
+    monkeypatch.setattr(run_module, "load_pids", lambda: {"api_inventarios": 123})
+    # Elegir la rama Windows evita leer un PID real y permite simular taskkill.
+    monkeypatch.setattr(run_module.sys, "platform", "win32")
+    monkeypatch.setattr(run_module, "is_pid_alive", Mock(side_effect=[True, True, False]))
+    monkeypatch.setattr(run_module.time, "sleep", lambda delay: None)
+    taskkill = Mock()
+    monkeypatch.setattr(run_module.subprocess, "run", taskkill)
+    run_module.stop_services()
+    assert taskkill.call_args.args[0] == ["taskkill", "/T", "/PID", "123"]
+    assert not registry.exists()
+
+
+def test_unknown_command_cannot_start_platform(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["run.py", "restar"])
+    start = Mock()
+    monkeypatch.setattr(run_module, "start_services", start)
+    with pytest.raises(RuntimeError, match="Comando desconocido"):
+        run_module.main()
+    start.assert_not_called()
+
+
+def test_open_uses_dashboard_registered_port(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["run.py", "open"])
+    monkeypatch.setattr(run_module, "load_pids", lambda: {"dashboard_port": 3002})
+    opened = Mock()
+    monkeypatch.setattr(run_module.webbrowser, "open", opened)
+    run_module.main()
+    opened.assert_called_once_with("http://localhost:3002")
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="El launcher SGRS usa Bash en Linux")
+def test_sgrs_launcher_resolves_symlink_from_another_directory(tmp_path):
+    launcher = tmp_path / "SGRS"
+    launcher.symlink_to(ROOT_DIR / "sgrs.sh")
+    result = subprocess.run([str(launcher), "help"], cwd=tmp_path, text=True,
+                            capture_output=True, timeout=10)
+    assert result.returncode == 0
+    assert "Inventarios" in result.stdout
+    assert "Dashboard" in result.stdout

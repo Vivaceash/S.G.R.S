@@ -13,7 +13,9 @@ Para desarrollo: `npm --prefix Dashboard run dev`; abrir `http://127.0.0.1:5173/
 
 Ver [guía del dashboard](Dashboard/README.md), [usuarios y conexiones](USUARIOS_Y_CONEXIONES.md), [contratos de interacción](UX-CONTRACT.md) y [plan general de seguridad](PLAN_USUARIOS_PRIVILEGIOS.md). El gateway incorpora cuentas locales y permisos viewer/admin/super-admin; crear la primera cuenta mediante `.venv/bin/python dashboard_access.py bootstrap`. MFA/SSO, ámbitos y cifrado de secretos en reposo siguen pendientes. El HTML/JS anterior se conserva como referencia, no como entrada de producción.
 
-La nueva [API Inventarios](</home/vivaceash/Projects/SGRS/API Inventarios/README.md>) centraliza CCTV, sus correcciones e historial, y enriquece cámaras con observaciones Forti/Omni y VLAN configurada. Scalar está en `http://localhost:8002/scalar`. La plataforma ya carga el proxy del dashboard y el corte CCTV desde Inventarios. Si el puerto 3000 está ocupado, el runner elige 3001. La vuelta al escritor anterior está en la guía de la API.
+La nueva [API Inventarios](</home/vivaceash/Projects/SGRS/API Inventarios/README.md>) centraliza CCTV, sus correcciones e historial, y enriquece cámaras con observaciones Forti/Omni y VLAN configurada. Scalar está en `http://192.168.38.250:8002/scalar`; Forti en `:8001/scalar` y Omni en `:8000/scalar`. La plataforma ya carga el proxy del dashboard y el corte CCTV desde Inventarios. Si el puerto 3000 está ocupado, el runner elige 3001. La vuelta al escritor anterior está en la guía de la API.
+
+Documentación de dominio: [glosario](GLOSSARY.md), [roadmap y recomendaciones de API](</home/vivaceash/Projects/SGRS/API Inventarios/ROADMAP.md>) y [decisión de fuente operativa](docs/adr/0001-inventarios-fuente-operativa-cctv.md).
 
 El [análisis de APIs y evolución del dashboard](ANALISIS_APIS_Y_EVOLUCION_DASHBOARD.md) documenta las 34 consultas de datos/diagnóstico, sus límites y las páginas propuestas. El rol Superusuario permanece interno; viewer/admin reciben un catálogo operativo de dos roles y la demo no muestra funciones internas. Esta documentación es técnica, no ayuda pública para ejecutivos.
 
@@ -229,8 +231,8 @@ Cada microservicio se configura mediante variables de entorno validadas con **Py
 | `APP_NAME` | `str` | `Fortinet FortiGate REST Integration API` | Nombre descriptivo del microservicio. |
 | `PORT` | `int` | `8001` | Puerto de escucha HTTP del servidor. |
 | `ENVIRONMENT` | `str` | `development` | Entorno de ejecución (`development` o `production`). |
-| `APP_API_KEY` | `str` | `admin` | Clave(s) de acceso API. Admite múltiples separadas por coma. |
-| `ALLOW_UNAUTHENTICATED` | `bool` | `false` | Si es `true`, omite autenticación (solo desarrollo). |
+| `APP_API_KEY` | `str` | `""` | Clave(s) de acceso API; se exige en cada consulta protegida. Admite múltiples separadas por coma. |
+| `ALLOW_UNAUTHENTICATED` | `bool` | `false` | Solo se permite en el entorno `test`; no abre desarrollo ni producción. |
 | `RATE_LIMIT_PER_MINUTE` | `int` | `120` | Máximo de peticiones permitidas por minuto por IP. |
 | `AUTH_RATE_LIMIT_PER_MINUTE` | `int` | `10` | Límite independiente para los endpoints de autenticación. |
 | `MAX_REQUEST_BODY_BYTES` | `int` | `1048576` | Tamaño máximo permitido del cuerpo HTTP (1 MB). |
@@ -253,8 +255,8 @@ Cada microservicio se configura mediante variables de entorno validadas con **Py
 | `SERVER_HOST` | `str` | `127.0.0.1` | Dirección de enlace local del servidor FastAPI. |
 | `SERVER_PORT` | `int` | `8000` | Puerto de escucha HTTP del servidor. |
 | `ENVIRONMENT` | `str` | `development` | Entorno de ejecución (`development` o `production`). |
-| `APP_API_KEY` | `str` | `admin` | Clave(s) de acceso API. Admite múltiples separadas por coma. |
-| `ALLOW_UNAUTHENTICATED` | `bool` | `false` | Omite validación de API Key si es `true`. |
+| `APP_API_KEY` | `str` | `""` | Clave(s) de acceso API; se exige en cada consulta protegida. Admite múltiples separadas por coma. |
+| `ALLOW_UNAUTHENTICATED` | `bool` | `false` | Solo se permite en el entorno `test`; no abre desarrollo ni producción. |
 | `RATE_LIMIT_PER_MINUTE` | `int` | `60` | Máximo de peticiones permitidas por minuto por IP. |
 | `AUTH_RATE_LIMIT_PER_MINUTE` | `int` | `10` | Límite independiente para los endpoints de autenticación. |
 | `MAX_REQUEST_BODY_BYTES` | `int` | `1048576` | Límite máximo de payload recibido (1 MB). |
@@ -265,9 +267,9 @@ Cada microservicio se configura mediante variables de entorno validadas con **Py
 | `OV_HOST` | `str` | `192.168.10.201` | Dirección IP del servidor Alcatel OmniVista 2500 NMS. |
 | `OV_PORT` | `int` | `443` | Puerto de comunicación con OmniVista. |
 | `OV_PROTOCOL` | `str` | `https` | Protocolo hacia el NMS. |
-| `OV_USERNAME` | `str` | `admin.red` | Usuario de servicio para sesión de respaldo en OmniVista. |
+| `OV_USERNAME` | `str` | `""` | Usuario de servicio usado para obtener el token de sesión al arrancar. |
 | `OV_PASSWORD` | `str` | `""` | Contraseña del usuario de servicio. |
-| `OV_API_KEY` | `str` | `""` | API Key generada en OmniVista (*External Applications*). |
+| `OV_API_KEY` | `str` | `""` | Obsoleta; no se usa. En producción su presencia invalida la configuración. |
 | `OV_VERIFY_SSL` | `bool` | `true` | Validación estricta de certificados TLS. |
 | `OV_CA_BUNDLE` | `str` | `""` | Ruta hacia el certificado CA corporativo. |
 
@@ -281,16 +283,37 @@ Cada microservicio se configura mediante variables de entorno validadas con **Py
 - Git instalado.
 
 ### 1. Inicio Rápido Unificado (Recomendado)
-Desde la raíz del repositorio, ejecuta el script orquestador:
-```powershell
-python run.py
-```
-Este script arrancará automáticamente **los tres servicios en paralelo**:
-- **API Alcatel OmniVista 2500** en `http://localhost:8000`
-- **API Fortinet FortiGate** en `http://localhost:8001`
-- **Dashboard Web (React + Vite)** en `http://localhost:5173`
+En este equipo, desde cualquier directorio de la terminal:
 
-Con **streaming unificado de logs etiquetados** (`[API-FORTI]`, `[API-OMNI]`, `[DASHBOARD]`). Para detener todos los servicios de forma ordenada, simplemente presiona **`Ctrl + C`** en la consola (el script limpiará el árbol de procesos en Windows mediante `taskkill /F /T` para liberar los puertos de inmediato).
+```bash
+SGRS
+SGRS status
+SGRS restart
+SGRS logs
+SGRS stop
+SGRS open
+```
+
+`SGRS` y `sgrs` apuntan a `sgrs.sh`, que delega en `run.py` usando el entorno virtual.
+Desde la raíz del repositorio también se puede ejecutar `python run.py` con los mismos comandos.
+El inicio predeterminado ejecuta los cuatro servicios en segundo plano:
+
+- **API Alcatel OmniVista 2500**: puerto `8000`.
+- **API Fortinet FortiGate**: puerto `8001`.
+- **API Inventarios**: puerto `8002`, configurable con `INVENTARIOS_PORT`.
+- **Dashboard React/Tailwind compilado**: puerto `3000` o alternativo `3001`/`3002` si está ocupado.
+
+El runner anuncia éxito únicamente después de que los cuatro servicios respondan por HTTP.
+Si un arranque queda incompleto, `SGRS` conserva los componentes registrados activos
+y vuelve a iniciar los que terminaron; no confunde Inventarios activo con un puerto ajeno.
+OmniVista autentica con `OV_USERNAME`/`OV_PASSWORD` al arrancar y Forti valida su `FORTIOS_API_TOKEN`.
+Si Omni falla, el error indica el estado HTTP o la causa de conexión sin exponer credenciales.
+Después de cambiar un `.env`, ejecutar `SGRS restart` para cargar la configuración nueva.
+`SGRS status` muestra disponibilidad HTTP, el PID registrado y la URL de cada componente.
+`SGRS open` abre el puerto real del Dashboard; `SGRS stop` detiene los procesos registrados.
+
+Para seguir los logs en primer plano usar `SGRS --foreground`; `Ctrl + C` detiene sus cuatro servicios.
+Los logs unificados se guardan en `logs/sgrs.log`.
 
 ---
 

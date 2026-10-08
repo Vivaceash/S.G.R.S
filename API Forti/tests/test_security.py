@@ -1,7 +1,11 @@
 import pytest
 import httpx
+from unittest.mock import AsyncMock, Mock
 from app.main import app
 from app.core.config import settings
+from app.core.config import Settings
+from app.clients.fortios import FortiOSClient
+from app.core.errors import FortiOSAuthError
 from app.security.sanitizer import sanitize_data
 
 VALID_KEY = settings.api_keys[0] if settings.api_keys else "admin"
@@ -28,6 +32,100 @@ def test_production_rejects_development_admin_key():
             ALLOWED_HOSTS=["api.example.test"],
             CORS_ORIGINS=["https://dashboard.example.test"],
         )
+
+
+def test_production_requires_fortios_provider_token():
+    """La API no puede declararse lista sin la credencial separada de FortiOS."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="FORTIOS_API_TOKEN"):
+        Settings(
+            _env_file=None,
+            ENVIRONMENT="production",
+            DEBUG=False,
+            APP_API_KEY="a" * 32,
+            FORTIOS_API_TOKEN="",
+            FORTIOS_VERIFY_SSL=True,
+            JWT_SECRET_KEY="a-production-jwt-secret-with-more-than-32-bytes",
+            ALLOWED_HOSTS=["api.example.test"],
+            CORS_ORIGINS=["https://dashboard.example.test"],
+        )
+
+
+@pytest.mark.anyio
+async def test_missing_app_key_fails_closed(monkeypatch):
+    """Sin APP_API_KEY configurada, una consulta nunca debe quedar abierta."""
+    monkeypatch.setattr(settings, "APP_API_KEY", None)
+    monkeypatch.setattr(settings, "API_SECRET_KEY", None)
+    monkeypatch.setattr(settings, "ALLOW_UNAUTHENTICATED", False)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/devices")
+
+    assert response.status_code == 503
+
+
+@pytest.mark.anyio
+async def test_fortios_client_requires_provider_token(monkeypatch):
+    """El token de FortiOS es independiente de APP_API_KEY y debe existir antes de consultar."""
+    monkeypatch.setattr(settings, "FORTIOS_API_TOKEN", "")
+    client = FortiOSClient()
+
+    with pytest.raises(FortiOSAuthError, match="FORTIOS_API_TOKEN"):
+        await client.request("GET", "api/v2/monitor/system/status")
+
+
+@pytest.mark.anyio
+async def test_fortios_client_forwards_only_provider_token(monkeypatch):
+    """APP_API_KEY autentica al gateway; FORTIOS_API_TOKEN autentica al appliance."""
+    monkeypatch.setattr(settings, "APP_API_KEY", "gateway-query-key")
+    monkeypatch.setattr(settings, "FORTIOS_API_TOKEN", "fortios-provider-token")
+
+    upstream_response = Mock(status_code=200)
+    upstream_response.json.return_value = {"status": "success", "results": []}
+    upstream = Mock(is_closed=False)
+    upstream.request = AsyncMock(return_value=upstream_response)
+    async_client_factory = Mock(return_value=upstream)
+    monkeypatch.setattr("app.clients.fortios.httpx.AsyncClient", async_client_factory)
+
+    client = FortiOSClient()
+    await client.request("GET", "api/v2/monitor/system/status")
+
+    headers = async_client_factory.call_args.kwargs["headers"]
+    assert headers["Authorization"] == "Bearer fortios-provider-token"
+    assert "gateway-query-key" not in headers["Authorization"]
+
+
+@pytest.mark.anyio
+async def test_fortios_startup_checks_provider_authentication(monkeypatch):
+    """El lifespan valida FortiOS antes de publicar la aplicación."""
+    calls = 0
+
+    async def fake_status():
+        nonlocal calls
+        calls += 1
+        return {"status": "success"}
+
+    monkeypatch.setattr("app.main.fortios_client.get_system_status", fake_status)
+
+    async with app.router.lifespan_context(app):
+        pass
+
+    assert calls == 1
+
+
+@pytest.mark.anyio
+async def test_fortios_startup_rejects_provider_authentication_failure(monkeypatch):
+    """Si FortiOS rechaza el token, el proceso no queda listo para recibir tráfico."""
+    async def failed_status():
+        raise FortiOSAuthError("token de prueba rechazado")
+
+    monkeypatch.setattr("app.main.fortios_client.get_system_status", failed_status)
+
+    with pytest.raises(RuntimeError, match="no está autenticado"):
+        async with app.router.lifespan_context(app):
+            pass
 
 
 @pytest.mark.anyio

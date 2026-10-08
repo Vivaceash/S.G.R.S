@@ -40,8 +40,8 @@ export function SecretInput({ label = 'contraseña', ...props }) {
   const [visible, setVisible] = useState(false);
   return <div className="secret-input"><input {...props} type={visible ? 'text' : 'password'} spellCheck={false} /><IconButton icon={visible ? EyeOff : Eye} label={`${visible ? 'Ocultar' : 'Mostrar'} ${label}`} aria-pressed={visible} disabled={props.disabled} onClick={() => setVisible(!visible)} /></div>;
 }
-export function Notice({ title, children, tone = 'info', action }) {
-  return <div className={`notice notice-${tone}`} role={tone === 'danger' ? 'alert' : undefined}><Info size={22} aria-hidden="true" /><div><strong>{title}</strong><p>{children}</p></div>{action}</div>;
+export function Notice({ title, children, tone = 'info', action, role }) {
+return <div className={`notice notice-${tone}`} role={role || (tone === 'danger' ? 'alert' : undefined)}><Info size={22} aria-hidden="true" /><div><strong>{title}</strong><p>{children}</p></div>{action}</div>;
 }
 export function Note({ title = 'Nota operativa', children }) {
   return <footer className="operational-note"><Info size={32} strokeWidth={1.5} aria-hidden="true" /><div><strong>{title}</strong><p>{children}</p></div><blockquote>“La tecnología al servicio de la salud y del bienestar de las y los trabajadores del Estado.”<cite>— ISSSTE</cite></blockquote></footer>;

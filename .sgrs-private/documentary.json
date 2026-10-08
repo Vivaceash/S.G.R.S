@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source_directory": "/home/vivaceash/Documents/redes",
-  "imported_at": "2026-09-17T23:07:23.743010+00:00",
+  "imported_at": "2026-10-08T15:59:48.432235+00:00",
   "sources": [
     {
       "file": "CheckList completo IDFs.docx",
@@ -18,10 +18,6 @@
     {
       "file": "CheckList CCTV.xlsx",
       "sha256": "d2e397ae36c25b4b8aad686a68d5b6c3c887362303870fc64283e28949d67e25"
-    },
-    {
-      "file": "Estructura.xlsm",
-      "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2"
     }
   ],
   "cabinets": [
@@ -9733,6 +9729,34 @@
       "rack": ""
     },
     {
+      "id": "718d7d55-2101-507c-821a-80def536760b",
+      "dataset": "cctv",
+      "source": {
+        "file": "Actualización CCTV.xlsx",
+        "sha256": "c4405da9d36beb21096e9f8bbac69a5b2c4ecb6993e3310319a2d312aaba4cf6",
+        "sheet": "Hoja1",
+        "row": 16
+      },
+      "issues": [
+        "Número de cámara no informado en el documento.",
+        "serie no informado en el documento.",
+        "modelo no informado en el documento.",
+        "MAC no informado en el documento."
+      ],
+      "number": "",
+      "name": "Cámara sin número — Lobby Residencia-Transplante",
+      "idf_id": "idf-1",
+      "location": "Lobby Residencia-Transplante",
+      "serial": "",
+      "model": "",
+      "documented_ip": "192.168.99.156",
+      "mac": "",
+      "relocated": false,
+      "destination": "",
+      "kind": "equipment",
+      "rack": ""
+    },
+    {
       "id": "3c2b5fd3-df94-5de7-83fd-6c1ab32038ad",
       "dataset": "cctv",
       "source": {
@@ -12495,6 +12519,31 @@
       "rack": ""
     },
     {
+      "id": "2c7218ad-3742-5542-86e1-b0a757c20f7e",
+      "dataset": "cctv",
+      "source": {
+        "file": "Actualización CCTV.xlsx",
+        "sha256": "c4405da9d36beb21096e9f8bbac69a5b2c4ecb6993e3310319a2d312aaba4cf6",
+        "sheet": "Hoja1",
+        "row": 157
+      },
+      "issues": [
+        "Número de cámara no informado en el documento."
+      ],
+      "number": "",
+      "name": "Cámara sin número — Caseta",
+      "idf_id": "idf-11",
+      "location": "Caseta",
+      "serial": "DS-2CD2783G2-IZS20240116AAWRAZ5736216",
+      "model": "DS-2CD2783G2-IZS",
+      "documented_ip": "192.168.99.152",
+      "mac": "e8:a0:ed:ab:95:d4",
+      "relocated": false,
+      "destination": "",
+      "kind": "equipment",
+      "rack": ""
+    },
+    {
       "id": "2ada24af-9336-5551-88e3-dc224e5f56ef",
       "dataset": "cctv",
       "source": {
@@ -12926,6 +12975,34 @@
       "model": "DS-2CD2955G0-ISU",
       "documented_ip": "192.168.99.153",
       "mac": "5C:34:5B:F8:09:8F",
+      "relocated": false,
+      "destination": "",
+      "kind": "equipment",
+      "rack": ""
+    },
+    {
+      "id": "f3002e04-d967-5815-858c-39f0eb1fe933",
+      "dataset": "cctv",
+      "source": {
+        "file": "Actualización CCTV.xlsx",
+        "sha256": "c4405da9d36beb21096e9f8bbac69a5b2c4ecb6993e3310319a2d312aaba4cf6",
+        "sheet": "Hoja1",
+        "row": 192
+      },
+      "issues": [
+        "Número de cámara no informado en el documento.",
+        "ubicación no informado en el documento.",
+        "IP no informado en el documento.",
+        "MAC no informado en el documento."
+      ],
+      "number": "",
+      "name": "Cámara sin número — DS-2CD2723G2-LIZS2U",
+      "idf_id": "mdf",
+      "location": "",
+      "serial": "DS-2CD2723G2-LIZS2U20240506AAWRFD7789329",
+      "model": "DS-2CD2723G2-LIZS2U",
+      "documented_ip": "",
+      "mac": "",
       "relocated": false,
       "destination": "",
       "kind": "equipment",
@@ -18239,659 +18316,8 @@
     }
   ],
   "structure": {
-    "networks": [
-      {
-        "vlan": "3",
-        "name": "\"Data\"",
-        "segment": "192.168.38.0/24-192.168.40.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 7
-        }
-      },
-      {
-        "vlan": "4",
-        "name": "\"Voice\"",
-        "segment": "10.151.232.254",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 8
-        }
-      },
-      {
-        "vlan": "5",
-        "name": "\"Wireless\"",
-        "segment": "192.168.5.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 9
-        }
-      },
-      {
-        "vlan": "10",
-        "name": "\"Management\"",
-        "segment": "192.168.10.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 10
-        }
-      },
-      {
-        "vlan": "15",
-        "name": "\"Admon-A-Vcenter-RISPAC\"",
-        "segment": "15.40.15.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 11
-        }
-      },
-      {
-        "vlan": "16",
-        "name": "\"SmartTV\"",
-        "segment": "15.40.10.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 12
-        }
-      },
-      {
-        "vlan": "17",
-        "name": "\"Printer\"",
-        "segment": "15.40.11.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 13
-        }
-      },
-      {
-        "vlan": "18",
-        "name": "\"Videoconferencia\"",
-        "segment": "15.40.18.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 14
-        }
-      },
-      {
-        "vlan": "19",
-        "name": "signos-vitales",
-        "segment": "15.40.19.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 15
-        }
-      },
-      {
-        "vlan": "20",
-        "name": "\"Enfermo-enfermera\"",
-        "segment": "15.40.20.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 16
-        }
-      },
-      {
-        "vlan": "21",
-        "name": "\"Control-acceso\"",
-        "segment": "15.40.21.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 17
-        }
-      },
-      {
-        "vlan": "22",
-        "name": "\"Biometricos\"",
-        "segment": "15.40.22.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 18
-        }
-      },
-      {
-        "vlan": "70",
-        "name": "\"Farmacia\"",
-        "segment": "192.168.70.0/27",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 19
-        }
-      },
-      {
-        "vlan": "77",
-        "name": "\"Banco de sangre\"",
-        "segment": "192.168.70.32/28",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 20
-        }
-      },
-      {
-        "vlan": "74",
-        "name": "\"laboratorio\"",
-        "segment": "192.168.70.64/27",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 21
-        }
-      },
-      {
-        "vlan": "85",
-        "name": "\"SSID-HUITZILOPO\"",
-        "segment": "15.8.85.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 22
-        }
-      },
-      {
-        "vlan": "90",
-        "name": "\"SSID-Quetzacoatl\"",
-        "segment": "15.40.1.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 23
-        }
-      },
-      {
-        "vlan": "91",
-        "name": "\"SSID-Tlaloc\"",
-        "segment": "15.40.2.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 24
-        }
-      },
-      {
-        "vlan": "92",
-        "name": "\"SSID-Ehecatl\"",
-        "segment": "15.40.3.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 25
-        }
-      },
-      {
-        "vlan": "93",
-        "name": "\"SSID-Tonatiuh\"",
-        "segment": "15.40.4.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 26
-        }
-      },
-      {
-        "vlan": "94",
-        "name": "\"SSID-Meztli\"",
-        "segment": "15.40.5.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 27
-        }
-      },
-      {
-        "vlan": "110",
-        "name": "\"CCTV\"",
-        "segment": "192.168.99.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 28
-        }
-      },
-      {
-        "vlan": "112",
-        "name": "\"Conexión AmbVirtualFisic-RISPAC\"",
-        "segment": "172.16.98.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 29
-        }
-      },
-      {
-        "vlan": "4000",
-        "name": "\"infinitum\"",
-        "segment": "192.168.215.0/24",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Fortinet",
-          "row": 30
-        }
-      }
-    ],
-    "camera_counts": [
-      {
-        "site": "1",
-        "installed": 11,
-        "planned": 11,
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "CCTV",
-          "row": 62
-        }
-      },
-      {
-        "site": "2",
-        "installed": 11,
-        "planned": 11,
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "CCTV",
-          "row": 63
-        }
-      },
-      {
-        "site": "3",
-        "installed": 12,
-        "planned": 12,
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "CCTV",
-          "row": 64
-        }
-      },
-      {
-        "site": "4",
-        "installed": 7,
-        "planned": 7,
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "CCTV",
-          "row": 65
-        }
-      },
-      {
-        "site": "5",
-        "installed": 5,
-        "planned": 5,
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "CCTV",
-          "row": 66
-        }
-      },
-      {
-        "site": "6",
-        "installed": 10,
-        "planned": 10,
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "CCTV",
-          "row": 67
-        }
-      },
-      {
-        "site": "7",
-        "installed": 16,
-        "planned": 16,
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "CCTV",
-          "row": 68
-        }
-      },
-      {
-        "site": "8",
-        "installed": 14,
-        "planned": 14,
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "CCTV",
-          "row": 69
-        }
-      },
-      {
-        "site": "9",
-        "installed": 11,
-        "planned": 11,
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "CCTV",
-          "row": 70
-        }
-      },
-      {
-        "site": "10",
-        "installed": 14,
-        "planned": 14,
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "CCTV",
-          "row": 71
-        }
-      },
-      {
-        "site": "11",
-        "installed": 24,
-        "planned": 24,
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "CCTV",
-          "row": 72
-        }
-      },
-      {
-        "site": "12",
-        "installed": 10,
-        "planned": 10,
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "CCTV",
-          "row": 73
-        }
-      },
-      {
-        "site": "MDF",
-        "installed": 9,
-        "planned": 9,
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "CCTV",
-          "row": 74
-        }
-      },
-      {
-        "site": "CASETA",
-        "installed": 1,
-        "planned": 1,
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "CCTV",
-          "row": 75
-        }
-      }
-    ],
-    "port_links": [
-      {
-        "port": "1",
-        "destination": "PBX Comnutador",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 6
-        }
-      },
-      {
-        "port": "2",
-        "destination": "PBX Comnutador",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 7
-        }
-      },
-      {
-        "port": "3",
-        "destination": "PBX Comnutador",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 8
-        }
-      },
-      {
-        "port": "4",
-        "destination": "PBX Comnutador",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 9
-        }
-      },
-      {
-        "port": "5",
-        "destination": "Infinitum",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 10
-        }
-      },
-      {
-        "port": "7",
-        "destination": "Fanvil PA2S-voceo",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 11
-        }
-      },
-      {
-        "port": "33",
-        "destination": "FortinManager-A",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 12
-        }
-      },
-      {
-        "port": "34",
-        "destination": "FortiAnalyzer-A",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 13
-        }
-      },
-      {
-        "port": "35",
-        "destination": "FortiDdos-A",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 14
-        }
-      },
-      {
-        "port": "36",
-        "destination": "FortinManager-B",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 15
-        }
-      },
-      {
-        "port": "37",
-        "destination": "FortiAnalyzer-B",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 16
-        }
-      },
-      {
-        "port": "38",
-        "destination": "FortiDdos-B",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 17
-        }
-      },
-      {
-        "port": "39",
-        "destination": "Enlace Principal HUAWEI/FORTINET",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 18
-        }
-      },
-      {
-        "port": "40",
-        "destination": "enlace principal FORTIGATE-A",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 19
-        }
-      },
-      {
-        "port": "41",
-        "destination": "enlace principal FORTIGATE-B",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 20
-        }
-      },
-      {
-        "port": "42",
-        "destination": "Enlace secundario",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 21
-        }
-      },
-      {
-        "port": "43",
-        "destination": "Enlace Secundario FORTIGATE-A",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 22
-        }
-      },
-      {
-        "port": "44",
-        "destination": "Enlace Secundario FORTIGATE-B",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 23
-        }
-      },
-      {
-        "port": "45",
-        "destination": "OmniVista-A",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 24
-        }
-      },
-      {
-        "port": "46",
-        "destination": "OmniVista-B",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 25
-        }
-      },
-      {
-        "port": "51",
-        "destination": "Enlace acelerador lineal (Infinitum por Fibra)",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 26
-        }
-      },
-      {
-        "port": "53",
-        "destination": "Enlace agregado-A",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 27
-        }
-      },
-      {
-        "port": "54",
-        "destination": "Enlace agregado -B",
-        "source": {
-          "file": "Estructura.xlsm",
-          "sha256": "6b1eae54afaffc57dc157cee09608239d79007068cc9d0e0b09f0f7bdd079cb2",
-          "sheet": "Switch Distribución",
-          "row": 28
-        }
-      }
-    ]
+    "networks": [],
+    "camera_counts": [],
+    "port_links": []
   }
 }

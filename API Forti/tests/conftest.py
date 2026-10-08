@@ -10,3 +10,6 @@ if "app" in sys.modules and not getattr(sys.modules["app"], "__file__", "").star
     for mod in list(sys.modules.keys()):
         if mod == "app" or mod.startswith("app."):
             del sys.modules[mod]
+
+from app.core.config import settings
+settings.ALLOWED_HOSTS = ["test", "localhost", "127.0.0.1"]

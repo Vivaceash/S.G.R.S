@@ -1,10 +1,12 @@
 # Plan de implementación — API Inventarios
 
-Fecha: 2026-10-06. Estado: API implementada; catálogo CCTV importado y servicio local en `127.0.0.1:8002`.
+Fecha: 2026-10-08. Estado: API implementada; catálogo CCTV importado, Dashboard integrado y servicio local en `127.0.0.1:8002`.
 
-La API, contratos Scalar, autenticación, SQLite, clientes Forti/Omni, rutas CCTV, consulta de VLAN en Forti, aprovisionamiento local, runner raíz y proxy del dashboard ya están implementados. Se importaron 150 cámaras actualizadas y 149 históricas; el dry-run encontró cero correcciones legacy pendientes y la importación creó respaldo. El corte reversible está activo: CCTV usa API Inventarios para lectura y escritura, con proxy de sesión/CSRF del dashboard. El runner reinició los servicios registrados y dejó la nueva API en el puerto 8002.
+La API, contratos Scalar, autenticación, SQLite, clientes Forti/Omni, rutas CCTV, consulta de VLAN en Forti, aprovisionamiento local, runner raíz y proxy del dashboard están implementados. Se importaron 150 cámaras actuales y 149 históricas; el catálogo API también expone 72 observaciones documentales, 14 gabinetes y la estructura derivada de `Estructura.xlsm`. El corte reversible está activo: CCTV usa API Inventarios para lectura y escritura, con proxy de sesión/CSRF del dashboard; el botón de cotejo usa jobs persistidos y conserva fallback legacy.
 
-Validado: 20 pruebas de API Inventarios, 85 pruebas de catálogo/inventario/acceso, 4 pruebas del contrato VLAN y build Vite. La consulta conectada amplia de Forti tuvo un fallo de entorno al leer políticas (`UnicodeDecodeError`); el contrato VLAN pasó. Playwright no se pudo ejecutar porque `/opt/brave-bin/brave` falta en este entorno. La cobertura de cámaras en proveedores reales aún requiere medición.
+Validado: 23 pruebas de API Inventarios y 150 pruebas de la suite raíz. El cotejo conectado real consultó cinco contratos proveedor-API con `HTTP 200`; la identidad documental aún requiere trabajo: 150 cámaras quedaron `not_observed` y 3,377 registros `only_api`. No se interpreta ausencia como equipo apagado.
+
+Backlog ampliado y recomendaciones: [`ROADMAP.md`](ROADMAP.md). Lenguaje de dominio: [`../GLOSSARY.md`](../GLOSSARY.md). Decisión de fuente operativa: [`../docs/adr/0001-inventarios-fuente-operativa-cctv.md`](../docs/adr/0001-inventarios-fuente-operativa-cctv.md).
 
 ## Objetivo y alcance
 

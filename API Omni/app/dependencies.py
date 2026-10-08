@@ -210,7 +210,8 @@ def verify_api_key(
     }:
         return True
 
-    if settings.ALLOW_UNAUTHENTICATED:
+    # Solo permitir el bypass en pruebas automatizadas; nunca en un proceso desplegado.
+    if settings.ALLOW_UNAUTHENTICATED and settings.ENVIRONMENT.strip().lower() == "test":
         return True
 
     client_ip = request.client.host if request.client else "unknown"

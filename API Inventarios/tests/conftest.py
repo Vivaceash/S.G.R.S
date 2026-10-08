@@ -23,11 +23,14 @@ def store(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, 'DASHBOARD_KEY', 'dashboard-test')
     monkeypatch.setattr(settings, 'ENABLE_2FA', False)
     monkeypatch.setattr(settings, 'REFRESH_SECONDS', 0)
+    monkeypatch.setattr(settings, 'ALLOWED_HOSTS', ['testserver', 'localhost', '127.0.0.1'])
     data = {'schema_version': 1, 'assets': [
         {'id': 'cam-1', 'dataset': 'cctv', 'name': 'Cámara 1', 'mac': 'AA:BB:CC:DD:EE:01', 'serial': 'CAM-1', 'documented_ip': '192.168.99.20', 'kind': 'equipment', 'idf_id': 'idf-1', 'relocated': False, 'destination': '', 'source': {}, 'issues': []},
         {'id': 'old-1', 'dataset': 'cctv_original', 'name': 'Histórica', 'mac': 'AA:BB:CC:DD:EE:01', 'source': {}, 'issues': []},
         {'id': 'ap-1', 'dataset': 'ap', 'name': 'AP'}],
-        'cabinets': [{'id': 'idf-1', 'name': 'IDF 1'}], 'sources': [], 'structure': {}, 'source_directory': '/private/files'}
+        'cabinets': [{'id': 'idf-1', 'name': 'IDF 1'}],
+        'observations': [{'idf_id': 'idf-1', 'text': 'Revisar canalización'}],
+        'sources': [], 'structure': {}, 'source_directory': '/private/files'}
     path = tmp_path / 'catalog.json'
     path.write_text(json.dumps(data))
     migrate(path, apply=True)

@@ -34,6 +34,14 @@ async def lifespan(app):
 
 app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION,
               description='Inventario CCTV documental, correcciones auditadas y observaciones de red Forti/Omni. La baja administrativa no apaga equipos.',
+              openapi_tags=[
+                  {'name': 'Salud', 'description': 'Comprobaciones públicas y autenticadas del servicio, almacenamiento y proveedores.'},
+                  {'name': 'Autenticación y 2FA', 'description': 'Estado de autenticación, enrolamiento TOTP y emisión/verificación de sesiones.'},
+                  {'name': 'CCTV', 'description': 'Catálogo, consulta, exportación, correcciones e historial de cámaras CCTV.'},
+                  {'name': 'Catálogos', 'description': 'Catálogos de gabinetes e información de redes documentadas y observadas.'},
+                  {'name': 'Fuentes documentales', 'description': 'Fuentes importadas y descarga controlada de los archivos originales.'},
+                  {'name': 'Cotejo de red', 'description': 'Ejecución y consulta de trabajos que comparan inventario documental contra Forti/Omni.'},
+              ],
               docs_url=None, redoc_url=None, openapi_url='/openapi.json' if settings.ENABLE_DOCS else None,
               lifespan=lifespan, responses={code: {'model': ErrorResponse} for code in (401, 403, 404, 409, 422, 503)})
 app.add_middleware(CORSMiddleware, allow_origins=settings.CORS_ORIGINS, allow_methods=['GET', 'POST', 'PATCH', 'OPTIONS'],
@@ -71,7 +79,8 @@ async def internal_error(request: Request, exc: Exception):
     return error(request, 500, 'No se pudo procesar la solicitud.', 'internal_error')
 
 
-@app.get('/health', tags=['Salud'])
+@app.get('/health', tags=['Salud'], summary='Comprobar disponibilidad',
+         description='Liveness probe público para balanceadores y monitores. No expone estado detallado de proveedores ni del almacenamiento.')
 def health():
     return {'status': 'healthy', 'app': settings.APP_NAME, 'version': settings.APP_VERSION}
 

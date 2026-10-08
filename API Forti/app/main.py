@@ -83,6 +83,12 @@ async def lifespan(app: FastAPI):
         if not settings.FORTIOS_VERIFY_SSL and not settings.FORTIOS_CA_BUNDLE:
             logger.warning("⚠️  [ALERTA DE SEGURIDAD] FORTIOS_VERIFY_SSL está desactivado en producción. Se recomienda habilitar TLS estricto o configurar FORTIOS_CA_BUNDLE.")
 
+    try:
+        await fortios_client.get_system_status()
+    except Exception as exc:
+        logger.error("FortiOS no autenticó durante el arranque (%s).", type(exc).__name__)
+        raise RuntimeError("FortiOS no está autenticado; el servicio no puede quedar listo.") from exc
+
     keepalive_task = asyncio.create_task(_fortios_telemetry_keepalive())
     yield
     keepalive_task.cancel()

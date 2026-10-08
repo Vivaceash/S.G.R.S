@@ -1045,7 +1045,7 @@ if __name__ == "__main__":
         try:
             server = ThreadedHTTPServer((bind_host, p), Handler)
             PORT = p
-            display_host = "localhost" if bind_host in ("127.0.0.1", "0.0.0.0", "") else bind_host
+            display_host = os.environ.get("SGRS_SERVER_IP", "192.168.38.250") if bind_host in ("127.0.0.1", "0.0.0.0", "") else bind_host
             print("====================================================")
             print(f"  S.G.R.S Servidor Multi-hilo Activo en Puerto {PORT}")
             print(f"  Dashboard disponible en: http://{display_host}:{PORT}")

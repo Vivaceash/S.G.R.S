@@ -50,6 +50,7 @@ def snapshot():
                        'version': f'{revision}:{edit["version"] if edit else 0}',
                        'corrected_at': edit['updated_at'] if edit else None, 'network': net})
     return {'assets': assets, 'revision': revision, 'cabinets': data.get('cabinets', []),
+            'observations': data.get('observations', []),
             'sources': [s for s in data.get('sources', []) if s['file'] in DOCUMENTS],
             'structure': data.get('structure', {})}
 
@@ -121,7 +122,7 @@ def summary(rows):
 def export_csv(rows):
     stream = io.StringIO(newline='')
     writer = csv.writer(stream)
-    fields = ('id', 'name', 'dataset', 'idf_id', 'location', 'model', 'serial', 'mac', 'documented_ip', 'decommissioned', 'relocated', 'destination')
+    fields = ('id', 'name', 'number', 'dataset', 'idf_id', 'location', 'model', 'serial', 'mac', 'documented_ip', 'decommissioned', 'relocated', 'destination')
     writer.writerow((*fields, 'observed_ip', 'network_status', 'comparison', 'vlan_id', 'observed_at', 'stale'))
     def cell(value):
         text = '' if value is None else str(value)

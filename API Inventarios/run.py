@@ -11,5 +11,6 @@ if __name__ == '__main__':
     if not private_env.exists():
         subprocess.run([sys.executable, str(BASE / 'scripts/configure_local.py')], check=True)
         os.execv(sys.executable, [sys.executable, __file__])
-    print(f'{settings.APP_NAME} — http://localhost:{settings.PORT}/scalar')
+    display_host = os.environ.get('SGRS_SERVER_IP', '192.168.38.250')
+    print(f'{settings.APP_NAME} — http://{display_host}:{settings.PORT}/scalar')
     uvicorn.run('app.main:app', host=settings.HOST, port=settings.PORT, reload=settings.DEBUG, workers=1)

@@ -14,7 +14,9 @@ El resultado privado es `.sgrs-private/documentary.json` (ignorado por Git). Los
 
 `--structure` requiere `msoffcrypto-tool` en el entorno del importador y solicita la contraseña interactivamente. El XLSM se descifra en memoria; no se ejecutan macros. Solo se admiten las celdas de resumen de VLAN, distribución y conteos CCTV. No guardar contraseñas en scripts, argumentos, logs o el repositorio.
 
-La extracción comprobada contiene 302 renglones IDF (8 contenedores/racks), 126 AP, 150 cámaras actualizadas y 149 cámaras del inventario histórico. Son conjuntos de fuentes diferentes, no un total de equipos únicos. Hay 14 gabinetes documentales; PACS continúa separado de IDF 13. AP122 permanece sin gabinete confirmado. Se conservan los conflictos de reubicación, duplicados e inconsistencias de SITE.
+La extracción comprobada contiene 302 renglones IDF (8 contenedores/racks), 126 AP, 153 cámaras actualizadas y 149 cámaras del inventario histórico. Son conjuntos de fuentes diferentes, no un total de equipos únicos. Hay 14 gabinetes documentales; PACS continúa separado de IDF 13. AP122 permanece sin gabinete confirmado. Se conservan los conflictos de reubicación, duplicados e inconsistencias de SITE.
+
+Las 153 cámaras incluyen 150 numeradas y tres filas CCTV sin número que ahora se conservan como activos con `number` vacío: fila 16 (`Lobby Residencia-Transplante`, IP `192.168.99.156`), fila 157 (`Caseta`, IP `192.168.99.152`) y fila 192 (serie `...FD7789329`, modelo `DS-2CD2723G2-LIZS2U`, sin ubicación/IP/MAC). La API los marca mediante `issues` para completar la fuente; no asigna números artificiales.
 
 Se extraen 72 observaciones IDF: la lectura XML incluye la nota «Pintura levantada» de una tabla anidada que no aparecía en las 71 observaciones del primer análisis. La tabla anidada no se cuenta como gabinete adicional.
 

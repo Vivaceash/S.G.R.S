@@ -20,7 +20,7 @@ HOST=127.0.0.1
 ENVIRONMENT=development
 
 # Seguridad de nuestra API (Cabecera X-API-Key obligatoria para clientes)
-APP_API_KEY=admin
+APP_API_KEY=pon_una_clave_larga_y_aleatoria
 
 # Conexión con FortiGate
 FORTIOS_HOST=192.168.1.1
@@ -56,13 +56,15 @@ Para proteger la API contra accesos no autorizados e inyecciones:
 1. **Autenticación `X-API-Key`**:
    Envía la cabecera HTTP en cada petición:
    ```http
-   X-API-Key: admin
+   X-API-Key: pon_una_clave_larga_y_aleatoria
    ```
 2. **Rate Limiting**: Protección integrada con límite de peticiones por minuto para prevenir saturación o DoS.
 3. **Cabeceras de Seguridad**: Middleware que inyecta `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection` y `Referrer-Policy`.
 
-`admin` se conserva únicamente para el entorno local de desarrollo. Al seleccionar
-`ENVIRONMENT=production`, el servicio rechaza esa clave, configuraciones de depuración,
+El `APP_API_KEY` del gateway es distinto de `FORTIOS_API_TOKEN`: el primero lo presenta
+el cliente en cada consulta y el segundo solo autentica contra FortiOS. El servicio
+valida el token de FortiOS durante el arranque y no queda listo si la autenticación falla.
+En `ENVIRONMENT=production` también rechaza claves débiles, configuración de depuración,
 TLS sin validar, hosts comodín, secretos JWT débiles y enrolamiento 2FA abierto.
 
 ---

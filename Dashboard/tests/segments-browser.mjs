@@ -35,8 +35,13 @@ try {
   data.devices.push({ name: 'Histórico sin reserva', ip: '192.168.20.3', status: 'offline' });
   data.devices.push({ name: 'Activo con IP pendiente', ip: '—', status: 'online', ip_source: 'unconfirmed', interface: data.segments[0].interface });
   let role = 'super-admin';
+  let principalSegments = null;
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/dashboard/preferences') {
+      if (route.request().method() === 'POST') principalSegments = route.request().postDataJSON().principal_segments;
+      return route.fulfill({ json: { principal_segments: principalSegments } });
+    }
     const payload = path === '/api/auth/session' ? { user: { id: 'segments-test', name: 'Prueba', username: 'prueba', role }, capabilities: ['dashboard.read', 'inventory.read'], roles: [] }
       : path === '/api/forti/network/dhcp-pools' ? { success: true, data: { pools: data.segments } }
         : data[path.slice(5)] ?? {};
@@ -52,6 +57,10 @@ try {
   await page.getByRole('button', { name: 'Quitar Tonatiuh', exact: true }).click();
   await page.getByRole('button', { name: 'Guardar selección' }).click();
   assert.equal(await page.locator('.segment-card').count(), 2);
+  assert.deepEqual(principalSegments, [
+    JSON.stringify([data.segments[0].id, data.segments[0].interface]),
+    JSON.stringify([data.segments[2].id, data.segments[2].interface]),
+  ]);
   await page.reload();
   await page.locator('.segment-card').first().waitFor();
   assert.equal(await page.locator('.segment-card').count(), 2);

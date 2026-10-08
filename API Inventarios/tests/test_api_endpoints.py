@@ -22,6 +22,12 @@ def test_scalar_and_openapi_are_independent(client, monkeypatch):
     schema = client.get('/openapi.json').json()
     assert '/api/v1/cctv/cameras/{asset_id}' in schema['paths']
     assert 'APIKeyHeader' in schema['components']['securitySchemes']
+    operations = [operation for path in schema['paths'].values() for operation in path.values() if isinstance(operation, dict)]
+    assert len(schema['paths']) == 19
+    assert len(operations) == 20
+    assert all(operation.get('summary') and operation.get('description') for operation in operations)
+    assert {tag['name'] for tag in schema['tags']} == {'Salud', 'Autenticación y 2FA', 'CCTV', 'Catálogos', 'Fuentes documentales', 'Cotejo de red'}
+    assert 'openapi.json' in client.get('/scalar').text
     monkeypatch.setattr(settings, 'ENABLE_DOCS', False)
     assert client.get('/scalar').status_code == 404
     assert client.get('/docs').status_code == 404
@@ -38,6 +44,17 @@ def test_auth_fields_pagination_and_export(client):
     assert client.get('/api/v1/cctv/export', headers=READ).status_code == 403
     assert client.get('/api/v1/cctv/export', headers={'Authorization': 'Bearer export-test'}).status_code == 200
     assert client.get('/api/v1/cctv/cameras?limit=501', headers=READ).status_code == 422
+
+
+def test_catalog_exposes_documentary_observations(client):
+    data = client.get('/api/v1/cctv/catalog', headers=READ).json()['data']
+    assert data['observations'] == [{'idf_id': 'idf-1', 'text': 'Revisar canalización'}]
+
+
+def test_camera_contract_exposes_documentary_number(client):
+    camera = client.get('/api/v1/cctv/cameras/cam-1', headers=READ).json()['data']
+    assert camera['number'] == ''
+    assert 'number' in client.get('/openapi.json').json()['components']['schemas']['Camera']['properties']
 
 
 def test_corrections_are_versioned_and_historical_read_only(client):

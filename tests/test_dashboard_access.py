@@ -471,6 +471,34 @@ def test_routes_access_control(local_store):
     assert status == 403
 
 
+def test_dashboard_preferences_routes_are_authenticated_and_persisted(local_store):
+    from dashboard_routes import AccessRoutes
+
+    class MockRoutes(AccessRoutes):
+        def _boundary(self, mutation=False):
+            pass
+
+        def _authorize(self, mutation=False):
+            self.identity = {"user": local_store, "capabilities": access.capabilities("super-admin"), "csrf": "csrf"}
+
+        def _send_json(self, payload, status=200):
+            self.response = (status, payload)
+
+    handler = MockRoutes()
+    handler.path = "/api/dashboard/preferences"
+    assert handler.access_get() is True
+    assert handler.response == (200, {"principal_segments": None})
+
+    selected = ['[10,"Meztli"]', '[30,"Tláloc"]']
+    handler._body = lambda: {"principal_segments": selected}
+    assert handler.access_post() is True
+    assert handler.response == (200, {"principal_segments": selected})
+
+    handler.path = "/api/dashboard/preferences"
+    assert handler.access_get() is True
+    assert handler.response == (200, {"principal_segments": selected})
+
+
 def test_login_and_session_return_allowed_pages(local_store):
     token, identity = access.login({"username": "root.local", "password": "Ejemplo-local-2026"}, "127.0.0.1")
     assert "allowed_pages" in identity
@@ -482,6 +510,18 @@ def test_login_and_session_return_allowed_pages(local_store):
     assert "allowed_pages" in sess
     assert "allowed_pages" in sess["user"]
     assert sess["allowed_pages"] == identity["allowed_pages"]
+
+
+def test_dashboard_principal_segments_persist_for_user_across_logins(local_store):
+    selected = ['[10,"Meztli"]', '[30,"Tláloc"]']
+    assert access.dashboard_preferences(local_store["id"]) == {"principal_segments": None}
+
+    saved = access.save_dashboard_preferences(local_store["id"], selected)
+
+    assert saved == {"principal_segments": selected}
+    token, identity = access.login({"username": "root.local", "password": "Ejemplo-local-2026"}, "127.0.0.1")
+    assert access.dashboard_preferences(identity["user"]["id"]) == saved
+    assert access.session(f"sgrs_session={token}")["user"]["id"] == local_store["id"]
 
 
 def test_origins_supports_multiple_origins_and_ports(monkeypatch):
@@ -648,4 +688,3 @@ def test_data_contract_users_and_privileges_projection(local_store):
         access.save_user({"username": "hacker.user", "name": "Hacker", "role": "admin",
                           "password": "Ejemplo-local-2026"}, soporte_user["id"])
     assert err.value.status == 403
-
