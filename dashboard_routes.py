@@ -7,6 +7,7 @@ import json
 import os
 import re
 import socket
+import subprocess
 import time
 from urllib.parse import urlsplit, parse_qs
 from integration_health import upstream_healthy
@@ -51,10 +52,25 @@ def reserved_read_allowed(path):
         re.fullmatch(pattern, path) for pattern in RESERVED_READ_DETAILS))
 
 
+def lan_interface_addresses():
+    """IPv4 interfaces and their directly connected LAN networks."""
+    try:
+        result = subprocess.run(["ip", "-j", "address", "show"], capture_output=True,
+                                text=True, timeout=2, check=True)
+        return [ipaddress.ip_interface(f"{address['local']}/{address.get('prefixlen', 32)}")
+                for interface in json.loads(result.stdout)
+                for address in interface.get("addr_info", [])
+                if address.get("family") == "inet" and address.get("scope") == "global"]
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+        return []
+
+
 class AccessRoutes:
     def _lan_client_allowed(self, client_ip):
         """Allow HTTP sessions only from private clients or configured LAN CIDRs."""
         if client_ip.is_private or client_ip.is_loopback:
+            return True
+        if any(client_ip in interface.network for interface in lan_interface_addresses()):
             return True
         configured = os.environ.get("SGRS_LAN_CLIENT_CIDRS", "")
         for value in re.split(r"[\s,;]+", configured.strip()):
@@ -139,6 +155,8 @@ class AccessRoutes:
         # Auto-include host LAN interfaces (Wi-Fi, Ethernet) for QR code mobile access
         try:
             host_ips = set()
+            # DNS and the default route do not enumerate secondary LAN NICs.
+            host_ips.update(str(interface.ip) for interface in lan_interface_addresses())
             try:
                 _, _, ips = socket.gethostbyname_ex(socket.gethostname())
                 host_ips.update(ips)

@@ -49,7 +49,8 @@ Una sustitución documental posterior requiere preparar el nuevo JSON con el imp
 - `POST /api/v1/reconciliation/jobs`; consulta el resultado en `GET /api/v1/reconciliation/jobs/{id}`.
 - `/api/v1/catalogs/networks` combina resumen documental y redes observadas, con procedencia.
 - `/api/v1/sources` y `/sources/{sha256}/download`.
-- `GET /health` es liveness público. La API no muestra inventario ni salud detallada de proveedores sin credencial.
+- `GET /health` y `GET /api/v1/system/health` son públicos y no requieren clave.
+- Todas las consultas `/api/v1/cctv/*` requieren autenticación, incluidas catálogo, resumen, exportación e historiales. La clave temporal de consulta es `admin`, enviada en `X-API-Key` o `Authorization: Bearer`. Las modificaciones requieren una credencial con permiso de escritura.
 
 `192.168.99.x` ayuda a localizar dispositivos, pero VLAN y máscara vienen de la configuración consultada en FortiGate. El octeto de la IP no se interpreta como VLAN. Una relación obtenida por interfaz observada se distingue de una inferida por subred. Estado de inventario, observación de red y salud de video son dimensiones distintas.
 

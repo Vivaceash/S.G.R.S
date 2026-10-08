@@ -28,3 +28,14 @@ def test_body_limit_and_validation_do_not_echo_secrets(client):
     assert result.status_code == 422 and 'NEVER' not in result.text
     result = client.post('/api/v1/auth/verify-2fa', content=b'x' * 70000)
     assert result.status_code == 413
+
+
+def test_shared_temporary_admin_key_can_read_and_export_but_not_write(monkeypatch):
+    from app.core.security import key_principal
+    monkeypatch.setattr(settings, 'API_KEYS', 'admin')
+    monkeypatch.setattr(settings, 'EXPORT_KEYS', 'admin')
+    monkeypatch.setattr(settings, 'WRITE_KEYS', 'separate-write-key')
+    principal = key_principal('admin')
+    assert principal.scopes == {'read', 'export'}
+    assert principal.dashboard is False
+    assert key_principal('separate-write-key').scopes == {'read', 'write', 'export'}

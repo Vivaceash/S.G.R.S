@@ -40,17 +40,28 @@ async def test_unauthenticated_request_rejected():
 
 
 @pytest.mark.anyio
-async def test_diagnostics_require_auth_but_minimal_health_is_public():
-    """Solo el liveness mínimo es público; los diagnósticos exigen credenciales."""
+async def test_public_health_and_authenticated_dhcp_pool(monkeypatch):
+    """Salud pública; DHCP requiere clave, al igual que las demás consultas."""
     transport = httpx.ASGITransport(app=app)
+    async def fake_status():
+        return {"results": {"hostname": "test", "version": "test", "serial": "ABCDEF123456"}}
+    async def fake_request(*args, **kwargs):
+        return {"results": [], "vdom": "root"}
+    async def fake_leases(*args, **kwargs):
+        return {"results": [], "vdom": "root"}
+    monkeypatch.setattr("app.routers.health.fortios_client.get_system_status", fake_status)
+    monkeypatch.setattr("app.routers.network.fortios_client.request", fake_request)
+    monkeypatch.setattr("app.routers.network.fortios_client.get_dhcp_leases", fake_leases)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         r_health = await client.get("/api/v1/health")
-        assert r_health.status_code == 401
+        assert r_health.status_code == 200
 
         r_pools = await client.get("/api/v1/network/dhcp-pools")
         assert r_pools.status_code == 401
+        assert (await client.get("/api/v1/network/dhcp-pools", headers={"X-API-Key": VALID_KEY})).status_code == 200
         r_leases = await client.get("/api/v1/network/dhcp-leases")
         assert r_leases.status_code == 401
+
 
 
 @pytest.mark.anyio

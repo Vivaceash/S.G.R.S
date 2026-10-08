@@ -119,3 +119,10 @@ API Inventarios/.private/.env
 !API Inventarios/app/middleware/security.py
 !API Inventarios/app/security/logging.py
 !API Inventarios/app/core/sessions.py
+
+# Configuración y bases autorizadas para despliegue en Israel
+!.sgrs-private/inventarios-connection.json
+!.sgrs-private/inventarios-active.json
+!.sgrs-private/dashboard-before-inventarios-*.sqlite3
+!API Inventarios/.private/
+!API Inventarios/.private/**

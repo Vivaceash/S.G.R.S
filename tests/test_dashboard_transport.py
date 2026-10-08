@@ -3,9 +3,25 @@ from email.message import Message
 from io import BytesIO
 
 import pytest
+import json
+from types import SimpleNamespace
 
 from dashboard_access import AccessError
 from dashboard_routes import AccessRoutes
+
+
+@pytest.mark.parametrize('server_ip,client_ip', [('10.20.0.250', '10.30.1.20'),
+                                               ('172.20.0.250', '172.21.1.20'),
+                                               ('192.168.38.250', '192.168.99.20'),
+                                               ('11.20.1.250', '11.20.1.20')])
+def test_all_server_lan_interfaces_allow_same_origin_sessions(monkeypatch, server_ip, client_ip):
+    addresses = [{'addr_info': [{'family': 'inet', 'scope': 'global', 'local': ip, 'prefixlen': 24}]}
+                 for ip in ('10.20.0.250', '172.20.0.250', '192.168.38.250', '11.20.1.250')]
+    monkeypatch.setattr('dashboard_routes.subprocess.run',
+                        lambda *args, **kwargs: SimpleNamespace(stdout=json.dumps(addresses)))
+    route = handler(monkeypatch, peer=client_ip, host=server_ip + ':3000',
+                    origin='http://' + server_ip + ':3000')
+    route._boundary(mutation=True)
 
 
 def handler(monkeypatch, *, public="", peer="127.0.0.1", host="localhost:3000",
