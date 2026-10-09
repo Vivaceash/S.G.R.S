@@ -7,7 +7,7 @@ from dashboard_device_history import (
     is_device_online,
     record_device_presence,
     get_longest_connected_devices,
-    MAX_STEP_SECONDS,
+    DEFAULT_TOLERANCE_SECONDS,
 )
 from dashboard_routes import AccessRoutes
 
@@ -126,10 +126,40 @@ def test_device_presence_outage_bounding(tmp_path, monkeypatch):
 
     # Long outage gap (e.g. 10000 seconds later)
     res = record_device_presence([dev], now=11000)
-    # The increment should be bounded by MAX_STEP_SECONDS to avoid inflating during power outages
-    assert res[mac]["current_session_seconds"] == MAX_STEP_SECONDS
-    assert res[mac]["total_connected_seconds"] == MAX_STEP_SECONDS
+    # A stale online sample cannot prove the device stayed connected during the outage.
+    assert res[mac]["current_session_seconds"] == 0
+    assert res[mac]["total_connected_seconds"] == 0
     assert res[mac]["last_seen_at"] == 11000
+
+
+def test_device_presence_stale_online_record_starts_new_session_after_gap(tmp_path, monkeypatch):
+    monkeypatch.setattr(access, "PRIVATE", tmp_path)
+    mac = "00:11:22:33:44:55"
+    dev = {"mac": mac, "ip": "10.0.0.5", "name": "PC-STALE", "os": "Windows 11", "is_online": True}
+
+    record_device_presence([dev], now=1000)
+    record_device_presence([dev], now=1060)
+
+    # A later online sample cannot prove the device stayed connected during the gap.
+    res = record_device_presence([dev], now=1060 + DEFAULT_TOLERANCE_SECONDS + 1)
+
+    assert res[mac]["first_connected_at"] == 1060 + DEFAULT_TOLERANCE_SECONDS + 1
+    assert res[mac]["current_session_seconds"] == 0
+    assert res[mac]["total_connected_seconds"] == 60
+    assert res[mac]["last_seen_at"] == 1060 + DEFAULT_TOLERANCE_SECONDS + 1
+
+
+def test_device_presence_restart_preserves_recent_session(tmp_path, monkeypatch):
+    monkeypatch.setattr(access, "PRIVATE", tmp_path)
+    mac = "00:11:22:33:44:55"
+    dev = {"mac": mac, "ip": "10.0.0.5", "os": "Windows 11", "is_online": True}
+    record_device_presence([dev], now=1000)
+    record_device_presence([dev], now=1060)
+    # Reopening persistent storage must not reset a recent session.
+    res = record_device_presence([dev], now=1100)
+    assert res[mac]["first_connected_at"] == 1000
+    assert res[mac]["current_session_seconds"] == 100
+    assert res[mac]["total_connected_seconds"] == 100
 
 
 def test_device_presence_tolerance_and_offline_marking(tmp_path, monkeypatch):
@@ -367,6 +397,8 @@ def test_server_api_devices_attaches_uptime_fields(tmp_path, monkeypatch):
         def _send_json(self, data, status=200):
             self.response = (status, data)
 
+    record_device_presence(forti_response["data"]["devices"], now=1000)
+    record_device_presence(forti_response["data"]["devices"], now=1060)
     h = DummyHandler()
     h.do_GET()
 
@@ -378,13 +410,13 @@ def test_server_api_devices_attaches_uptime_fields(tmp_path, monkeypatch):
     assert "uptime_seconds" in dev
     assert "first_connected_at" in dev
     assert "total_connected_seconds" in dev
-    assert dev["uptime_seconds"] == 0
-    assert dev["total_connected_seconds"] == 0
-    assert dev["first_connected_at"] is not None
+    assert dev["uptime_seconds"] == 60
+    assert dev["total_connected_seconds"] == 60
+    assert dev["first_connected_at"] == 1000
 
     with access.database() as db:
         row = db.execute("SELECT * FROM device_connection_history WHERE mac = '00:11:22:33:44:55'").fetchone()
         assert row is not None
+        assert row["last_seen_at"] == 1060  # Reading the API must not record a pulse.
         assert row["hostname"] == "PC-TEST-UPTIME"
         assert row["is_online"] == 1
-

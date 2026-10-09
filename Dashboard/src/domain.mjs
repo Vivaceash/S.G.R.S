@@ -77,6 +77,11 @@ export const ROLE_PAGE_DEFAULTS = {
   'super-admin': ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
   viewer: ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'aps', 'cctv', 'altas'],
 };
+export function canViewPageId(pageId, allowedPages) {
+  if (!Array.isArray(allowedPages)) return false;
+  if (pageId === 'entrada') return allowedPages.includes('idf');
+  return allowedPages.includes(pageId);
+}
 export const segmentKey = segment => JSON.stringify([segment.id ?? '', segment.interface ?? '']);
 const ipv4 = value => {
   const parts = String(value ?? '').trim().split('.');

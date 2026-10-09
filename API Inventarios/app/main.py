@@ -90,8 +90,9 @@ def docs(request: Request):
     if not settings.ENABLE_DOCS:
         raise InventoryError(404, 'Documentación deshabilitada.')
     return get_scalar_api_reference(openapi_url=app.openapi_url, title=settings.APP_NAME + ' - Scalar',
-                                    servers=[{'url': str(request.base_url).rstrip('/')}], persist_auth=False,
-                                    show_sidebar=True, default_open_all_tags=True, hide_models=False)
+                                    servers=[{'url': str(request.base_url).rstrip('/')}], persist_auth=True,
+                                    show_sidebar=True, default_open_all_tags=True, hide_models=False,
+                                    with_default_fonts=False)
 
 
 @app.get('/', include_in_schema=False)

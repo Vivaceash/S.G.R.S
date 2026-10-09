@@ -1,5 +1,6 @@
 import json
 import errno
+import ipaddress
 import os
 import re
 import shutil
@@ -14,6 +15,7 @@ import webbrowser
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import ProxyHandler, build_opener
+from urllib.parse import urlsplit
 
 # Configurar salida estándar con UTF-8 para PowerShell / Bash
 if hasattr(sys.stdout, "reconfigure"):
@@ -188,6 +190,83 @@ def local_network_ip() -> str:
             return probe.getsockname()[0]
         except OSError:
             return "127.0.0.1"
+
+
+def lan_ipv4_addresses() -> list[str]:
+    """Return every active non-loopback IPv4 address on this host."""
+    addresses = set()
+    try:
+        if sys.platform != "win32":
+            import fcntl
+            import struct
+
+            for _, interface_name in socket.if_nameindex():
+                try:
+                    request = struct.pack("256s", interface_name.encode()[:15])
+                    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+                        response = fcntl.ioctl(probe, 0x8915, request)
+                    value = socket.inet_ntoa(response[20:24])
+                    parsed = ipaddress.ip_address(value)
+                    if parsed.is_loopback or parsed.is_link_local or parsed.is_unspecified or parsed.is_multicast:
+                        continue
+                    addresses.add(str(parsed))
+                except (OSError, ValueError):
+                    continue
+    except (AttributeError, OSError, ValueError, TypeError):
+        pass
+
+    if not addresses:
+        fallback = local_network_ip()
+        if fallback != "127.0.0.1":
+            addresses.add(fallback)
+    return sorted(addresses)
+
+
+def _network_tokens(value: str | None) -> list[str]:
+    return [token for token in re.split(r"[\s,;]+", (value or "").strip()) if token]
+
+
+def _ordered_unique(values):
+    return list(dict.fromkeys(value for value in values if value))
+
+
+def api_environment(env: dict, dashboard_port: int, service: str) -> dict:
+    """Bind API services to LAN and derive hosts/CORS from active interfaces."""
+    configured_origins = _network_tokens(env.get("SGRS_LAN_ORIGIN"))
+    configured_hosts = []
+    for origin in configured_origins:
+        try:
+            hostname = urlsplit(origin).hostname
+        except ValueError:
+            hostname = None
+        if hostname and hostname not in ("0.0.0.0", "::"):
+            configured_hosts.append(hostname)
+
+    hosts = _ordered_unique(
+        ["localhost", "127.0.0.1", "::1", env.get("SGRS_SERVER_IP", "")]
+        + configured_hosts
+        + lan_ipv4_addresses()
+    )
+    ports = _ordered_unique([3000, 3001, 3002, dashboard_port])
+    origins = _ordered_unique(
+        configured_origins
+        + [f"http://{host}:{port}" for host in hosts if host not in ("localhost", "127.0.0.1", "::1") for port in ports]
+        + [f"http://{host}" for host in hosts if host not in ("localhost", "127.0.0.1", "::1")]
+    )
+    result = {**env, "SGRS_LAN_ORIGIN": ",".join(origins)}
+    if service == "inventarios":
+        result.update({
+            "INVENTARIOS_HOST": "0.0.0.0",
+            "INVENTARIOS_ALLOWED_HOSTS": json.dumps(hosts),
+            "INVENTARIOS_CORS_ORIGINS": json.dumps(origins),
+        })
+    else:
+        result.update({
+            "SERVER_HOST" if service == "omni" else "HOST": "0.0.0.0",
+            "ALLOWED_HOSTS": ",".join(hosts),
+            "CORS_ORIGINS": ",".join(origins),
+        })
+    return result
 
 
 def dashboard_environment(env: dict, port: int) -> dict:
@@ -666,9 +745,9 @@ def start_services(detached: bool = True):
         else:
             popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
 
-        env_forti = {**env, "PORT": "8001"}
-        env_omni = {**env, "PORT": "8000"}
-        env_inventory = {**env, "INVENTARIOS_PORT": str(get_inventory_port())}
+        env_forti = {**api_environment(env, dash_port, "forti"), "PORT": "8001"}
+        env_omni = {**api_environment(env, dash_port, "omni"), "PORT": "8000"}
+        env_inventory = {**api_environment(env, dash_port, "inventarios"), "INVENTARIOS_PORT": str(get_inventory_port())}
         env_dash = dashboard_environment(env, dash_port)
 
         def launch(key, cwd, entry, service_env):
@@ -758,9 +837,9 @@ def start_services(detached: bool = True):
     if sys.platform != "win32":
         popen_fg["start_new_session"] = True
 
-    env_forti = {**env, "PORT": "8001"}
-    env_omni = {**env, "PORT": "8000"}
-    env_inventory = {**env, "INVENTARIOS_PORT": str(get_inventory_port())}
+    env_forti = {**api_environment(env, dash_port, "forti"), "PORT": "8001"}
+    env_omni = {**api_environment(env, dash_port, "omni"), "PORT": "8000"}
+    env_inventory = {**api_environment(env, dash_port, "inventarios"), "INVENTARIOS_PORT": str(get_inventory_port())}
     env_dash = dashboard_environment(env, dash_port)
 
     proc_forti = subprocess.Popen([py_exe, "run.py"], cwd=str(forti_dir), **{**popen_fg, "env": env_forti})

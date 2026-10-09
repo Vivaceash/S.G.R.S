@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { csvCell, makeCsv, paginate, selectRows, inventoryFromIdfs, reportsFromData, roleLabel, AVAILABLE_PAGES, ROLE_PAGE_DEFAULTS, formatDeviceType, BASE_ROLE_CATALOG, getEffectiveRoles, formatUptime, getSaturationStatus, getSaturationLabel, makeExcelWorkbook, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, escapeXml, sanitizeWorksheetName, EXCEL_MIME_TYPE, SUPPORT_ALLOWED_NETWORKS, isSupportSegment, getSupportSegments, normalizeText, usersForDemo, projectUsersForActor, getCardRoles, getUserFilterRoles, countUsersForRoleCard } from '../src/domain.mjs';
+import { csvCell, makeCsv, paginate, selectRows, inventoryFromIdfs, reportsFromData, roleLabel, AVAILABLE_PAGES, ROLE_PAGE_DEFAULTS, formatDeviceType, BASE_ROLE_CATALOG, getEffectiveRoles, formatUptime, getSaturationStatus, getSaturationLabel, makeExcelWorkbook, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, escapeXml, sanitizeWorksheetName, EXCEL_MIME_TYPE, SUPPORT_ALLOWED_NETWORKS, isSupportSegment, getSupportSegments, normalizeText, usersForDemo, projectUsersForActor, getCardRoles, getUserFilterRoles, countUsersForRoleCard, canViewPageId } from '../src/domain.mjs';
 import { createDemo } from '../src/demo.mjs';
 
 test('Incidencias sin ID conservan su identidad y la resolución sustituye solo su origen', () => {
@@ -101,6 +101,12 @@ test('Matriz de acceso desacoplada: admin accede a usuarios sin can(users.manage
   assert.equal(isRouteAllowed('soporte', 'soporte', soportePages), true, 'Soporte debe poder acceder a #soporte');
   assert.equal(isRouteAllowed('usuarios', 'soporte', soportePages), false, 'Soporte no debe poder acceder a #usuarios');
   assert.equal(isRouteAllowed('conexiones', 'soporte', soportePages), false, 'Soporte no debe poder acceder a #conexiones');
+});
+
+test('Gestión Meztli requiere permiso explícito', () => {
+  assert.equal(canViewPageId('gestion-meztli', ['disponibilidad']), false);
+  assert.equal(canViewPageId('gestion-meztli', ['gestion-meztli']), true);
+  assert.equal(canViewPageId('entrada', ['idf']), true);
 });
 
 test('BASE_ROLE_CATALOG y getEffectiveRoles normalizan roles institucionales y excluyen viewer', () => {

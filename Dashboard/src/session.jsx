@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { LogIn, ShieldCheck } from 'lucide-react';
 import { Button, Field, Loading, Notice, SecretInput } from './components.jsx';
 import { useForm } from './forms.jsx';
-import { request, setCsrfToken, ROLE_PAGE_DEFAULTS, roleLabel, BASE_ROLE_CATALOG, getEffectiveRoles } from './domain.mjs';
+import { request, setCsrfToken, ROLE_PAGE_DEFAULTS, roleLabel, BASE_ROLE_CATALOG, getEffectiveRoles, canViewPageId } from './domain.mjs';
 
 const SessionContext = createContext(null);
 export const useSession = () => useContext(SessionContext);
@@ -134,13 +134,7 @@ export function SessionProvider({ children }) {
     || ROLE_PAGE_DEFAULTS[userRole]
     || ROLE_PAGE_DEFAULTS.admin;
 
-  const canViewPage = pageId => {
-    if (!Array.isArray(allowedPages)) return false;
-    if (pageId === 'entrada') return allowedPages.includes('idf');
-    // Existing accounts that can consult IPs inherit this operational view.
-    if (pageId === 'gestion-meztli') return allowedPages.includes(pageId) || allowedPages.includes('disponibilidad');
-    return allowedPages.includes(pageId);
-  };
+  const canViewPage = pageId => canViewPageId(pageId, allowedPages);
 
   const sessionRoles = getEffectiveRoles(current?.roles);
 

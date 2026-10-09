@@ -1134,6 +1134,7 @@ export default function App() {
   const mutationLock = useRef(false);
   const reportSyncBusy = useRef(false);
   const meztliSyncBusy = useRef(false);
+  const devicesSyncBusy = useRef(false);
   const toastTimer = useRef(null);
   const currentRoute = useRef(route);
   currentRoute.current = route;
@@ -1260,6 +1261,46 @@ export default function App() {
       window.removeEventListener("visibilitychange", onVisible);
     };
   }, [demo]);
+  // Uptime de soporte depende de pulsos de /api/devices. Mantener sólo la
+  // carga inicial deja el contador congelado y puede conservar una fotografía
+  // antigua mientras el usuario sigue en la vista.
+  useEffect(() => {
+    if (demo || route.path !== "soporte" || loading) return undefined;
+    let active = true;
+    const syncDevices = async () => {
+      if (!active || document.hidden || devicesSyncBusy.current) return;
+      devicesSyncBusy.current = true;
+      try {
+        const devices = await request("/api/devices");
+        if (!active || !Array.isArray(devices)) return;
+        setData((old) =>
+          JSON.stringify(old.devices) === JSON.stringify(devices)
+            ? old
+            : { ...old, devices, updatedAt: new Date().toISOString() },
+        );
+        setErrors((old) => {
+          if (!old.devices) return old;
+          const { devices: _devices, ...rest } = old;
+          return rest;
+        });
+      } catch {
+        // Conservamos la última respuesta válida; el siguiente pulso reintenta.
+      } finally {
+        devicesSyncBusy.current = false;
+      }
+    };
+    syncDevices();
+    const onVisible = () => {
+      if (!document.hidden) syncDevices();
+    };
+    const timer = window.setInterval(syncDevices, 60000);
+    window.addEventListener("visibilitychange", onVisible);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [demo, route.path, loading]);
   // La tabla de Meztli representa concesiones DHCP activas, no un catálogo
   // estático. Antes sólo se consultaba al abrir la aplicación, por lo que la
   // vista conservaba una fotografía inicial aunque FortiGate ya tuviera altas

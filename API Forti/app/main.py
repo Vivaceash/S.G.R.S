@@ -254,6 +254,8 @@ if settings.ENABLE_DOCS:
             openapi_url=app.openapi_url,
             title=f"{settings.APP_NAME} - Scalar Docs",
             servers=[{"url": base_url, "description": f"Servidor API ({base_url})"}],
+            persist_auth=True,
+            with_default_fonts=False,
         )
 
     @app.get("/docs", include_in_schema=False)
