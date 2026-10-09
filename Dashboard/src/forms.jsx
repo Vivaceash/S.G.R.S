@@ -32,7 +32,7 @@ export function useForm(initial, validate, onSave, onDirty, retrySafe = false) {
 const requiredErrors = (values, names) => Object.fromEntries(names.filter(key => !String(values[key] ?? '').trim()).map(key => [key, 'Completa este campo para continuar.']));
 
 export function ResolveReport({ row, save }) {
-  const f = useForm({}, () => ({}), save);
+  const f = useForm({}, () => ({}), () => save(row));
   return <form noValidate ref={f.form} onSubmit={f.submit} aria-busy={f.busy}>
     <Notice title="Resolver incidencia">Confirma que el inconveniente de {row.idf} fue atendido. El reporte y su evidencia se conservan; se registra quién resolvió la incidencia y cuándo.</Notice>
     {f.error && <Notice title="Resolución sin confirmar" tone="danger">{f.error}</Notice>}

@@ -2832,14 +2832,17 @@ td .button { min-height: 31px; font-size: 11px; padding: 6px 13px; border-radius
   flex-shrink: 0;
 }
 
-.audit-table-consolidated table { min-width: 1120px; }
-.audit-table-consolidated th,
-.audit-table-consolidated td { padding: 16px; font-size: 16px; line-height: 1.5; }
-.audit-table-consolidated :is(.audit-idf-tag, .audit-folio-pill, .audit-device-subtext, .audit-activity-content strong, .audit-desc-text, .audit-actor-name, .audit-date-subtext, .audit-temp-pill, .badge, .audit-actions-group .button, .table-footer) { font-size: 16px; line-height: 1.5; }
-.audit-table-consolidated :is(.audit-activity-content strong, .audit-actor-name, .audit-date-subtext) { white-space: normal; overflow-wrap: anywhere; }
-.audit-table-consolidated .audit-actions-group .button { min-height: 44px; }
-.audit-table-consolidated :is(.audit-toolbar input, .audit-toolbar select) { font-size: 16px; }
-.audit-table-consolidated .audit-toolbar .select-field { flex-basis: 180px; }
+/* Readable typography shared by individual, consolidated and system logs. */
+:is(.audit-table, .project-audit-table) table { min-width: 1280px; table-layout: fixed; white-space: normal; }
+:is(.audit-table, .project-audit-table) :is(th, td) { padding: 16px; font-size: 18px; line-height: 1.5; }
+:is(.audit-table, .project-audit-table) :is(.audit-idf-tag, .audit-activity-content strong, .audit-actor-name, .project-audit-action-info strong, .project-audit-target-pill, .font-mono) { font-size: 18px; line-height: 1.5; }
+:is(.audit-table, .project-audit-table) :is(.audit-folio-pill, .audit-device-subtext, .audit-desc-text, .audit-date-subtext, .audit-temp-pill, .audit-photo-badge, .severity-tag, .badge, .audit-actions-group .button, .table-footer, .pagination button, .audit-toolbar input, .audit-toolbar select, .audit-toolbar label, .audit-toolbar .button, .project-audit-action-info small) { font-size: 16px; line-height: 1.5; }
+:is(.audit-table, .project-audit-table) :is(.audit-activity-content strong, .audit-actor-name, .audit-date-subtext, .project-audit-target-pill, .project-audit-action-info small) { white-space: normal; overflow-wrap: anywhere; }
+:is(.audit-table, .project-audit-table) .audit-actor-avatar { width: 32px; height: 32px; flex-shrink: 0; font-size: 16px; }
+:is(.audit-table, .project-audit-table) .audit-actions-group { flex-wrap: wrap; }
+:is(.audit-table, .project-audit-table) .audit-actions-group .button { min-height: 44px; }
+:is(.audit-table, .project-audit-table) .audit-toolbar .select-field { flex-basis: 180px; }
+:is(.audit-table, .project-audit-table) .table-footer { flex-wrap: wrap; }
 .idf-card:disabled { cursor: default; }
 .idf-card:disabled:hover { transform: none; }
 

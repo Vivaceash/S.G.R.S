@@ -20,6 +20,15 @@ try {
       const path = url.pathname;
       requests.push(path + url.search);
       if (path === '/api/auth/session') return route.fulfill({ json: identity });
+      if (path === '/api/reports/resolve' && route.request().method() === 'POST') {
+        const body = route.request().postDataJSON();
+        if (body.idf_id !== 'idf-3' || body.record_key !== 'a'.repeat(64)) {
+          return route.fulfill({ status: 422, json: { error: 'Selecciona una incidencia vigente de la bitácora.' } });
+        }
+        const incident = { ...fixture.reports['idf-3'].incidents[0], status: 'resolved', record_key: 'b'.repeat(64), resolved_at: '2026-10-09T12:30:00Z' };
+        fixture.reports['idf-3'].incidents = [incident];
+        return route.fulfill({ json: { status: 'success', incident } });
+      }
       if (path === '/api/idfs' && url.searchParams.get('view') === 'general') {
         return route.fulfill({ json: fixture.idfs.map(idf => ({ id: idf.id, name: idf.name, incidents: idf.incidents || [], device_count: (idf.devices || []).length, offline_count: 0 })) });
       }
@@ -37,7 +46,7 @@ try {
       assert.equal(await page.locator('.audit-kpi').count(), 0);
       assert.equal(await page.getByRole('tab').count(), 0);
       assert.equal(await page.getByRole('button', { name: /^IDF-03:/ }).isDisabled(), true);
-      assert.equal(await page.locator('.audit-activity-content strong').first().evaluate(el => getComputedStyle(el).fontSize), '16px');
+      assert.equal(await page.locator('.audit-activity-content strong').first().evaluate(el => getComputedStyle(el).fontSize), '18px');
       await page.getByRole('button', { name: 'Ver', exact: true }).first().click();
       assert.equal(await page.getByRole('button', { name: 'Confirmar resolución', exact: true }).count(), 0);
       await page.keyboard.press('Escape');
@@ -68,13 +77,31 @@ try {
         assert.equal(await page.getByRole('button', { name: 'Confirmar resolución', exact: true }).count(), 0);
         await page.keyboard.press('Escape');
         await page.getByRole('button', { name: /^IDF-03:/ }).click();
-        assert.equal(await page.locator('.audit-activity-content strong').first().evaluate(el => getComputedStyle(el).fontSize), '12.5px');
+        assert.equal(await page.locator('.audit-activity-content strong').first().evaluate(el => getComputedStyle(el).fontSize), '18px');
       } else {
         assert.equal(await all.count(), 0);
         assert.equal(await page.getByRole('table', { name: 'Bitácora consolidada de visitas a IDFs' }).count(), 0);
       }
       assert.ok(requests.includes('/api/idfs'));
       assert.ok(requests.includes('/api/reports'));
+      // Resolve the actual incident from the eye/detail modal, not the row shortcut.
+      const incidentRow = page.getByRole('row').filter({ hasText: 'Incidencia pendiente' });
+      await incidentRow.getByRole('button', { name: 'Ver', exact: true }).click();
+      const resolution = page.waitForResponse(response => new URL(response.url()).pathname === '/api/reports/resolve' && response.request().method() === 'POST');
+      await page.getByRole('button', { name: 'Confirmar resolución', exact: true }).click();
+      const response = await resolution;
+      assert.deepEqual(response.request().postDataJSON(), { idf_id: 'idf-3', record_key: 'a'.repeat(64) }, 'Detail confirmation must submit the selected incident identifiers');
+      assert.equal(response.status(), 200);
+      await page.getByRole('button', { name: 'Confirmar resolución', exact: true }).waitFor({ state: 'detached' });
+      await incidentRow.getByText('Resuelto', { exact: true }).waitFor();
+      assert.equal(await incidentRow.getByRole('button', { name: 'Resolver', exact: true }).count(), 0);
+      for (const width of [375, 1440]) {
+        await page.setViewportSize({ width, height: 1000 });
+        assert.equal(await incidentRow.locator('.audit-activity-content strong').evaluate(el => getComputedStyle(el).fontSize), '18px');
+        assert.equal(await incidentRow.locator('.audit-desc-text').evaluate(el => getComputedStyle(el).fontSize), '16px');
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Individual log scroll must stay inside the page');
+      }
+      console.log('PASS IDF detail confirmation saves and updates the incident');
     } else {
       await page.getByRole('heading', { name: 'Dashboard Operativo', exact: true }).waitFor();
       assert.equal(await page.getByRole('link', { name: /^Registro IDF/ }).count(), 0);
@@ -89,6 +116,18 @@ try {
   await page.getByRole('button', { name: 'Crear usuario', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Bitácora IDF general', exact: true }).waitFor();
   console.log('PASS independent IDF overview checkbox in user permissions');
+  await page.keyboard.press('Escape');
+  await page.goto(`${base}/?demo=1&role=super-admin#bitacora`);
+  await page.getByRole('table', { name: 'Historial de movimientos y eventos registrados' }).waitFor();
+  for (const width of [375, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const selector of ['.project-audit-action-info strong', '.audit-actor-name', '.project-audit-target-pill', '.font-mono']) {
+      assert.equal(await page.locator(`.project-audit-table ${selector}`).first().evaluate(el => getComputedStyle(el).fontSize), '18px');
+    }
+    assert.equal(await page.locator('.project-audit-action-info small').first().evaluate(el => getComputedStyle(el).fontSize), '16px');
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'System log scroll must stay inside the page');
+  }
+  console.log('PASS readable system and IDF logs on mobile and desktop');
 } finally {
   await browser.close();
 }
