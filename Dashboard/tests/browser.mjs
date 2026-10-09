@@ -24,7 +24,7 @@ try {
   await page.screenshot({ path: `${output}/dashboard.png`, fullPage: true });
   assert.equal(apiCalls, 0, 'Demo must never call real APIs');
   report('Demostración aislada de APIs');
-  for (const [route, title, screenshot] of [['altas', 'Gestión de Altas de Red', 'altas'], ['dispositivos', 'Dispositivos de Red', 'dispositivos'], ['disponibilidad', 'Direcciones IP', 'direcciones-ip'], ['idf', 'Registro IDF', 'reportes-idf'], ['bitacora', 'Bitácora de Registros', 'bitacora']]) {
+  for (const [route, title, screenshot] of [['altas', 'Gestión de Altas de Red', 'altas'], ['dispositivos', 'Dispositivos de Red', 'dispositivos'], ['disponibilidad', 'Direcciones IP', 'direcciones-ip'], ['idf', 'Registro IDF', 'reportes-idf'], ['bitacora', 'Bitácora General de Movimientos', 'bitacora']]) {
     await page.goto(`${demoUrl}#${route}`);
     await page.getByRole('heading', { name: title, exact: true }).waitFor();
     if (route === 'altas') assert.equal(await page.getByRole('button', { name: 'Nueva alta', exact: true }).count(), 0, 'Gestión de altas debe ser solo consulta');
@@ -62,15 +62,31 @@ try {
   await page.getByRole('button', { name: 'Seguir editando', exact: true }).click();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Enviar reporte de incidencia', exact: true }).click();
-  await page.getByRole('heading', { name: 'Bitácora de Registros', exact: true }).waitFor();
-  await page.getByRole('cell', { name: 'Persona de prueba', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Bitácora General de Movimientos', exact: true }).waitFor();
+  await page.getByRole('table', { name: 'Historial de movimientos y eventos registrados' }).waitFor();
   assert.equal(apiCalls, 0);
   report('Validación accesible, guardia de borrador y creación de visita');
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`${demoUrl}#idf`);
   await page.getByRole('heading', { name: 'Registro IDF', exact: true }).waitFor();
+  assert.equal(await page.getByText('Selecciona un IDF para consultar su operación', { exact: true }).count(), 1);
+  assert.equal(await page.getByRole('table', { name: 'Bitácora consolidada de visitas a IDFs' }).count(), 1);
+  assert.equal(await page.getByRole('tab').count(), 0);
+  report('Registro IDF inicia en Bitácora consolidada');
+  await page.getByRole('button', { name: /^IDF-03:/ }).click();
+  await page.locator('.idf-cards.is-selected').waitFor();
+  assert.equal(await page.locator('.idf-cards.is-selected').count(), 1);
+  assert.deepEqual(await page.getByRole('tab').allTextContents(), ['Bitácora', 'Inventario', 'Código QR']);
+  assert.equal((await page.evaluate(() => JSON.parse(sessionStorage.getItem('sgrs:idf-view:demo-admin')).selectedId)), 'idf-3');
+  await page.getByRole('button', { name: 'Ver todos los IDF', exact: true }).click();
+  await page.locator('.idf-cards.is-overview').waitFor();
+  assert.equal(await page.locator('.idf-cards.is-overview').count(), 1);
   await page.getByRole('button', { name: /^IDF-03:/ }).click();
   await page.getByRole('tab', { name: 'Código QR', exact: true }).click();
+  const qrBefore = await page.locator('.qr-template-code img').getAttribute('src');
+  await page.getByRole('tab', { name: 'Bitácora', exact: true }).click();
+  await page.getByRole('tab', { name: 'Código QR', exact: true }).click();
+  assert.equal(await page.locator('.qr-template-code img').getAttribute('src'), qrBefore);
   assert.equal(await page.getByRole('button', { name: 'Detectar IP', exact: true }).isDisabled(), true);
   await page.getByLabel('Dirección del servidor', { exact: true }).fill('192.0.2.20:3000');
   assert.equal(apiCalls, 0, 'IDF and QR demo must never detect the real server IP');
@@ -87,12 +103,13 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Crear usuario', exact: true }).isEnabled(), true);
   for (const route of ['inventario', 'conexiones']) {
     await page.goto(`${demoUrl}#${route}`);
-    await page.getByRole('heading', { name: 'No tienes permiso para esta sección' }).waitFor();
+    await page.waitForTimeout(150);
+    assert.notEqual(new URL(page.url()).hash, `#${route}`, `${route} no debe permanecer accesible para admin`);
     assert.doesNotMatch(await page.locator('body').innerText(), /super[- ]?admin|superusuario/i);
     assert.equal(await page.getByRole('link', { name: 'Conexiones API', exact: true }).count(), 0);
   }
   await page.locator('.account-button').click();
-  assert.equal(await page.locator('.role-list > div').count(), 2);
+  assert.equal(await page.getByRole('dialog', { name: 'Acceso y privilegios' }).count(), 1);
   assert.doesNotMatch(await page.getByRole('dialog', { name: 'Acceso y privilegios' }).innerText(), /super/i);
   await page.keyboard.press('Escape');
   assert.equal(apiCalls, 0);
@@ -149,7 +166,7 @@ try {
   assert.equal(await page.getByLabel('Ingeniero responsable').inputValue(), identity.user.name);
   failPost = false;
   await page.getByRole('button', { name: 'Enviar reporte de incidencia', exact: true }).click();
-  await page.getByRole('heading', { name: 'Bitácora de Registros', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Bitácora General de Movimientos', exact: true }).waitFor();
   assert.equal(posts, 2);
   assert.equal(await page.locator('tbody img').count(), 0);
   report('403 preserva formulario; guardado confirmado; doble envío bloqueado; texto externo escapado');

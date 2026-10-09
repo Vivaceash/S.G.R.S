@@ -663,14 +663,13 @@ export function AuditLog({
   canExport,
   canResolve,
   onResolve,
+  consolidated = false,
 }) {
   const state = useListState(idfView ? 'reportes-idf' : 'bitacora');
   const [resolvingId, setResolvingId] = useState(null);
 
   useEffect(() => {
-    if (filterIdf) {
-      state.setFilter('idf', filterIdf);
-    }
+    state.setFilter('idf', filterIdf || '');
   }, [filterIdf]);
 
   const enrichedRecords = useMemo(() => {
@@ -940,7 +939,7 @@ export function AuditLog({
 
   return (
     <>
-      {!idfView && (
+      {!idfView && !consolidated && (
         <PageHeading
           eyebrow="Trazabilidad operativa · Cuartos de telecomunicaciones"
           title="Bitácora de Visitas e Incidencias en IDF"
@@ -951,7 +950,7 @@ export function AuditLog({
 
 
 
-      {!idfView && (
+      {(!idfView || consolidated) && (
         <section className="audit-kpi-grid" aria-label="Resumen de la bitácora IDF">
           {auditKpis.map(({ id, label, value, caption, icon: Icon, tone, pct, isActive, onClick }) => (
             <button
@@ -973,7 +972,7 @@ export function AuditLog({
       )}
 
       <DataTable
-        title={idfView ? 'Reportes enviados desde móvil' : 'Bitácora institucional de visitas a IDFs'}
+        title={consolidated ? 'Bitácora consolidada de visitas a IDFs' : idfView ? 'Reportes enviados desde móvil' : 'Bitácora institucional de visitas a IDFs'}
         className="audit-table"
         rows={enrichedRecords}
         rowKey="key"
@@ -984,7 +983,6 @@ export function AuditLog({
         loading={loading}
         error={errors.reports || errors.idfs}
         onRetry={refresh}
-        onRowClick={row => openEditor('report-detail', row)}
         toolbar={
           <div className="audit-toolbar">
             <SearchField

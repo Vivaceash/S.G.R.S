@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
   Building2,
@@ -63,6 +63,7 @@ import {
   formatDeviceType,
   formatLocation,
   statusNames,
+  IDF_VIEW_SESSION_PREFIX,
 } from "./domain.mjs";
 import { createDemo } from "./demo.mjs";
 import { useSession } from "./session.jsx";
@@ -78,7 +79,100 @@ import {
   useTelemetryCatalog,
 } from "./telemetry.jsx";
 import { generateSvg } from "../qrcode.js";
+import qrTemplate from "./assets/plantilla_qr.jpg";
 import { DocumentaryInventory } from "./inventory.jsx";
+
+const QR_HOST_STORAGE_KEY = "sgrs:qr-host";
+const QR_SVG_STORAGE_PREFIX = "sgrs:qr-svg:v1:";
+const qrSvgCache = new Map();
+
+function readQrHost() {
+  if (typeof localStorage !== "undefined") {
+    try {
+      const saved = localStorage.getItem(QR_HOST_STORAGE_KEY);
+      if (saved) return saved;
+    } catch {}
+  }
+  if (typeof sessionStorage !== "undefined") {
+    try {
+      const legacy = sessionStorage.getItem("sgrs_qr_host");
+      if (legacy) {
+        try { localStorage.setItem(QR_HOST_STORAGE_KEY, legacy); } catch {}
+        return legacy;
+      }
+    } catch {}
+  }
+  return "";
+}
+
+function saveQrHost(value) {
+  try { localStorage.setItem(QR_HOST_STORAGE_KEY, value); } catch {}
+}
+
+function stableHash(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+function cachedQrSource(value, size) {
+  const cacheKey = `${value}|${size}`;
+  const memoryValue = qrSvgCache.get(cacheKey);
+  if (memoryValue) return memoryValue;
+  const storageKey = `${QR_SVG_STORAGE_PREFIX}${stableHash(cacheKey)}`;
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
+    if (saved?.value === value && saved?.size === size && saved?.src) {
+      qrSvgCache.set(cacheKey, saved.src);
+      return saved.src;
+    }
+  } catch {}
+  const svg = generateSvg(value, {
+    size,
+    margin: 4,
+    colorDark: "#222222",
+    colorLight: "#ffffff",
+  });
+  const source = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  qrSvgCache.set(cacheKey, source);
+  try {
+    localStorage.setItem(storageKey, JSON.stringify({ value, size, src: source }));
+  } catch {}
+  return source;
+}
+
+function buildQrValue(row, demo, host) {
+  const base = host?.trim() || readQrHost() || location.host;
+  let url;
+  try {
+    url = new URL(
+      /^https?:\/\//i.test(base) ? base : `${location.protocol}//${base}`,
+    );
+  } catch {
+    url = new URL(`${location.protocol}//${location.host}`);
+  }
+  // mobile_token is an HMAC of the permanent IDF id on the server. It is
+  // intentionally reused so every printed IDF QR keeps the same capability.
+  url.searchParams.set("mobile", "1");
+  url.searchParams.set("idf", row.id);
+  if (row.mobile_token) url.searchParams.set("token", row.mobile_token);
+  if (demo) url.searchParams.set("demo", "1");
+  url.hash = "reporte";
+  return url.toString();
+}
+
+function updateWithViewTransition(update) {
+  const reducedMotion = typeof matchMedia === "function" &&
+    matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!reducedMotion && typeof document.startViewTransition === "function") {
+    document.startViewTransition(update);
+  } else {
+    update();
+  }
+}
 
 const emptyData = () => ({
   segments: [],
@@ -184,6 +278,8 @@ function Nav({
       </a>
     );
   };
+  const canSeeNavigationPage = (path) =>
+    canViewPage(path) && (path !== "bitacora" || can("activity.read"));
 
   if (administration) {
     const adminVisible = adminItems.filter(([path]) => {
@@ -193,7 +289,7 @@ function Nav({
         (!can || !can("integrations.manage"))
       )
         return false;
-      return canViewPage(path);
+      return canSeeNavigationPage(path);
     });
     if (!adminVisible.length) return null;
     return (
@@ -211,13 +307,13 @@ function Nav({
         "dispositivos",
         "disponibilidad",
         "bitacora",
-      ].includes(path) && canViewPage(path),
+      ].includes(path) && canSeeNavigationPage(path),
   );
   const group2 = navItems.filter(
-    ([path]) => ["idf", "aps", "cctv"].includes(path) && canViewPage(path),
+    ([path]) => ["idf", "aps", "cctv"].includes(path) && canSeeNavigationPage(path),
   );
   const group3 = navItems.filter(
-    ([path]) => ["altas", "gestion-meztli"].includes(path) && canViewPage(path),
+    ([path]) => ["altas", "gestion-meztli"].includes(path) && canSeeNavigationPage(path),
   );
 
   return (
@@ -275,39 +371,68 @@ function ServiceStatus({ health, demo }) {
     </div>
   );
 }
-function QrCard({ row, demo, toast, host, compact = false, size = 300 }) {
-  const storedHost =
-    typeof sessionStorage !== "undefined"
-      ? sessionStorage.getItem("sgrs_qr_host")
-      : null;
-  // El QR debe conservar el origen seleccionado por el operador. Forzar una
-  // IP detectada aquí puede sustituir una dirección LAN válida por una VPN.
-  const base = host?.trim() || storedHost || location.host;
-  // A manually saved malformed address must not make the entire QR panel fail.
-  // Fall back to the address that loaded the dashboard so an operator can edit it.
-  let url;
-  try {
-    url = new URL(
-      /^https?:\/\//i.test(base) ? base : `${location.protocol}//${base}`,
+function QrCard({
+  row,
+  demo,
+  toast,
+  host,
+  compact = false,
+  size = 300,
+  template = false,
+}) {
+  const value = useMemo(
+    () => buildQrValue(row, demo, host),
+    [row.id, row.mobile_token, demo, host],
+  );
+  const idfNumber = String(row.id || "").match(/idf[-\s]?0*(\d+)/i)?.[1];
+  const printableIdf = idfNumber ? `IDF-${Number(idfNumber)}` : row.name;
+  const qrSrc = useMemo(() => cachedQrSource(value, size), [value, size]);
+  const copyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast("Enlace copiado.");
+    } catch {
+      toast(
+        "No se pudo copiar. Selecciona el enlace para copiarlo manualmente.",
+      );
+    }
+  };
+
+  if (template) {
+    return (
+      <div className="qr-card qr-template-card">
+        <div
+          className="qr-template-sheet"
+          role="img"
+          aria-label={`Planilla carta con código QR para registrar una visita a ${row.name}`}
+        >
+          <img
+            className="qr-template-background"
+            src={qrTemplate}
+            alt=""
+            aria-hidden="true"
+          />
+          <div className="qr-template-code">
+            <img src={qrSrc} alt={`Código QR para registrar una visita a ${row.name}`} />
+          </div>
+          <span className="qr-template-idf-label">{printableIdf}</span>
+        </div>
+        <div className="qr-template-meta qr-template-screen-only">
+          <strong>{row.name}</strong>
+          <span>Planilla carta · QR de bitácora IDF</span>
+          <div className="qr-url-row">
+            <a className="qr-url" href={value}>
+              {value}
+            </a>
+            <Button icon={Copy} onClick={copyUrl}>
+              Copiar
+            </Button>
+          </div>
+        </div>
+      </div>
     );
-  } catch {
-    url = new URL(`${location.protocol}//${location.host}`);
   }
-  // Keep the mobile capability in the query string. Some phone scanners and
-  // in-app browsers discard or alter URL fragments (#...), leaving the SPA
-  // without the IDF/token and stuck on its initial screen.
-  url.searchParams.set("mobile", "1");
-  url.searchParams.set("idf", row.id);
-  if (row.mobile_token) url.searchParams.set("token", row.mobile_token);
-  url.hash = "reporte";
-  if (demo) url.searchParams.set("demo", "1");
-  const value = url.toString();
-  const svg = generateSvg(value, {
-    size,
-    margin: 4,
-    colorDark: "#222222",
-    colorLight: "#ffffff",
-  });
+
   return (
     <div className={`qr-card ${compact ? "qr-card-compact" : ""}`}>
       {!compact && (
@@ -320,26 +445,14 @@ function QrCard({ row, demo, toast, host, compact = false, size = 300 }) {
       <img
         width={size}
         height={size}
-        src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`}
+        src={qrSrc}
         alt={`Código QR para registrar una visita a ${row.name}`}
       />
       <div className="qr-url-row">
         <a className="qr-url" href={value}>
           {value}
         </a>
-        <Button
-          icon={Copy}
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(value);
-              toast("Enlace copiado.");
-            } catch {
-              toast(
-                "No se pudo copiar. Selecciona el enlace para copiarlo manualmente.",
-              );
-            }
-          }}
-        >
+        <Button icon={Copy} onClick={copyUrl}>
           Copiar
         </Button>
       </div>
@@ -694,42 +807,79 @@ function DeviceDetail({ row, demo, canReadTraffic = false }) {
 function IdfHub({
   data,
   records,
+  demo,
+  userId,
   navigate,
   openEditor,
   canWrite,
   canEditInventory,
+  canViewActivity,
   notify,
   onResolve,
   loading,
   errors,
   refresh,
 }) {
-  const [selectedId, setSelectedId] = useState("");
-  const [tab, setTab] = useState("inventory");
+  const viewStorageKey = `${IDF_VIEW_SESSION_PREFIX}${userId || "anonymous"}`;
+  const [viewState, setViewState] = useState(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(viewStorageKey) || "null");
+      return {
+        selectedId: typeof saved?.selectedId === "string" ? saved.selectedId : "",
+        tab: typeof saved?.tab === "string" ? saved.tab : canViewActivity ? "activity" : "inventory",
+      };
+    } catch {
+      return { selectedId: "", tab: canViewActivity ? "activity" : "inventory" };
+    }
+  });
+  const selectedId = viewState.selectedId;
+  const tab = viewState.tab;
   const [host, setHost] = useState(
-    () =>
-      (typeof sessionStorage !== "undefined" &&
-        sessionStorage.getItem("sgrs_qr_host")) ||
-      location.host,
+    () => readQrHost() || location.host,
   );
   const [detectingHost, setDetectingHost] = useState(false);
-  const selected =
-    data.idfs.find((idf) => idf.id === selectedId) || data.idfs[0];
-  const selectedRecords = selected
-    ? records
-        .filter((record) => record.idfId === selected.id)
-        .sort(
-          (a, b) =>
-            (Date.parse(b.date) || -Infinity) -
-            (Date.parse(a.date) || -Infinity),
-        )
-    : [];
+  const idfs = useMemo(
+    () => data.idfs.filter((idf) => idf.id !== "idf-13" && idf.name !== "IDF 13"),
+    [data.idfs],
+  );
+  const canViewQr = canViewActivity && canWrite;
+  const selected = idfs.find((idf) => idf.id === selectedId) || null;
+  const availableTab = canViewActivity
+    ? tab === "qr" && !canViewQr
+      ? "activity"
+      : tab
+    : "inventory";
   const unresolved = (idf) =>
     records.filter(
       (record) => record.idfId === idf.id && record.status !== "resolved",
     ).length;
-  // Keep the operator's current task while switching between IDFs.
-  const choose = (id) => setSelectedId(id);
+  const updateViewState = (next) => {
+    setViewState((current) => ({ ...current, ...next }));
+  };
+  const choose = (id) => updateWithViewTransition(() => updateViewState({
+    selectedId: id,
+    tab: canViewActivity ? "activity" : "inventory",
+  }));
+  const showAll = () => updateWithViewTransition(() => updateViewState({
+    selectedId: "",
+    tab: canViewActivity ? "activity" : "inventory",
+  }));
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(viewStorageKey, JSON.stringify(viewState));
+    } catch {}
+  }, [viewStorageKey, viewState]);
+  useEffect(() => {
+    if (!canViewActivity && idfs.length && !selectedId) {
+      updateViewState({ selectedId: idfs[0].id, tab: "inventory" });
+    }
+  }, [canViewActivity, idfs, selectedId]);
+  useEffect(() => {
+    if (selectedId && !selected) updateViewState({ selectedId: "" });
+  }, [selectedId, selected]);
+  useEffect(() => {
+    if (availableTab !== tab) updateViewState({ tab: availableTab });
+  }, [availableTab, tab]);
   const detectHost = async () => {
     setDetectingHost(true);
     try {
@@ -747,9 +897,7 @@ function IdfHub({
         ? reportedHost
         : `${reportedHost}${location.port ? `:${location.port}` : ""}`;
       setHost(detectedHost);
-      try {
-        sessionStorage.setItem("sgrs_qr_host", detectedHost);
-      } catch {}
+      saveQrHost(detectedHost);
       notify("IP de red detectada. El QR se actualizó para el teléfono.");
     } catch {
       notify(
@@ -760,139 +908,174 @@ function IdfHub({
     }
   };
   useEffect(() => {
+    if (demo || !canViewQr) return;
     if (
-      !sessionStorage.getItem("sgrs_qr_host") ||
+      !readQrHost() ||
       /^(localhost|127(?:\.\d{1,3}){3})(?::|$)/i.test(host)
     ) {
       detectHost();
     }
-  }, []);
+  }, [demo, canViewQr, host]);
   // Do not overwrite the address selected by the operator every time the QR
   // tab opens. A gateway/VPN route can report a different interface even
   // though the selected LAN address is the one reachable by the phone.
   useEffect(() => {
+    if (demo || !canViewQr) return;
     if (
       tab === "qr" &&
       /^(localhost|127(?:\.\d{1,3}){3})(?::|$)/i.test(host)
     ) {
       detectHost();
     }
-  }, [tab, host]);
-  if (!selected)
+  }, [demo, canViewQr, tab, host]);
+  if (!idfs.length)
     return (
       <>
         <PageHeading
           eyebrow="Distribución y gabinetes"
           title="Registro IDF"
-          description="Consulta de inventario, incidencias y acceso móvil por código QR"
+          description="Bitácora consolidada e inventario físico por gabinete"
           updatedAt={data.updatedAt}
         />
-        <Loading label="Cargando gabinetes IDF…" />
+        {loading ? <Loading label="Cargando gabinetes IDF…" /> : <Empty title="Sin IDF disponibles">No hay gabinetes disponibles para este usuario.</Empty>}
       </>
     );
-  const devices = data.resources.filter(
-    (resource) => resource.idfId === selected.id,
-  );
+  const devices = selected
+    ? data.resources.filter((resource) => resource.idfId === selected.id)
+    : [];
+  const renderIdfCards = () => idfs.map((idf) => {
+    const alerts = unresolved(idf);
+    const active = idf.id === selected?.id;
+    const idfDevices = data.resources.filter((resource) => resource.idfId === idf.id);
+    const deviceCount = idfDevices.length;
+    const offlineCount = idfDevices.filter((device) => device.status === "offline").length;
+    const statusText = alerts
+      ? `${alerts} ${alerts === 1 ? "alerta pendiente" : "alertas pendientes"}`
+      : offlineCount
+        ? `${offlineCount} ${offlineCount === 1 ? "equipo fuera de línea" : "equipos fuera de línea"}`
+        : "Operativo";
+    return (
+      <button
+        type="button"
+        key={idf.id}
+        aria-label={`${idf.name || idf.id}: ${statusText}`}
+        className={`idf-card ${active ? "is-active" : ""} ${alerts ? "has-alert" : ""} ${offlineCount ? "has-offline" : ""}`}
+        onClick={() => choose(idf.id)}
+      >
+        <span className="idf-card-top">
+          <strong>{idf.name || idf.id}</strong>
+          <span className="idf-card-status">
+            <i />
+            {alerts ? "Atención" : offlineCount ? "Revisión" : "Operativo"}
+          </span>
+        </span>
+        <span className="idf-card-metrics">
+          <span>
+            <b>{alerts}</b>
+            <small>Alertas</small>
+          </span>
+          <span>
+            <b>{deviceCount}</b>
+            <small>Equipos</small>
+          </span>
+          <span className="idf-card-offline">
+            <b>{offlineCount}</b>
+            <small title="Equipos fuera de línea">Sin línea</small>
+          </span>
+        </span>
+      </button>
+    );
+  });
   return (
     <>
       <PageHeading
         eyebrow="Distribución y gabinetes"
         title="Registro IDF"
-        description="Inventario físico, incidencias y reportes móviles por gabinete"
+        description={selected
+          ? `Bitácora, inventario y acceso móvil de ${selected.name || selected.id}`
+          : "Bitácora consolidada e inventario físico por gabinete"}
         updatedAt={data.updatedAt}
       />
       <section className="idf-console" aria-label="Centro de operación de IDF">
-        <div className="idf-console-tabs">
+        {!selected && canViewActivity && (
+          <div className="idf-overview-intro">
+            <p className="eyebrow">Vista consolidada</p>
+            <h2>Selecciona un IDF para consultar su operación</h2>
+            <p>La bitácora muestra todos los registros mientras eliges un gabinete.</p>
+          </div>
+        )}
+        {selected && (
+          <div className="idf-console-tabs">
           <div
             className="idf-console-tablist"
             role="tablist"
             aria-label="Vista del IDF"
           >
+            {canViewActivity && (
+              <button
+                role="tab"
+                aria-selected={availableTab === "activity"}
+                onClick={() => updateViewState({ tab: "activity" })}
+              >
+                Bitácora
+              </button>
+            )}
             <button
               role="tab"
-              aria-selected={tab === "inventory"}
-              onClick={() => setTab("inventory")}
+              aria-selected={availableTab === "inventory"}
+              onClick={() => updateViewState({ tab: "inventory" })}
             >
               Inventario
             </button>
-            <button
-              role="tab"
-              aria-selected={tab === "activity"}
-              onClick={() => setTab("activity")}
-            >
-              Bitácora
-            </button>
-            <button
-              role="tab"
-              aria-selected={tab === "qr"}
-              onClick={() => setTab("qr")}
-            >
-              Código QR
-            </button>
+            {canViewQr && (
+              <button
+                role="tab"
+                aria-selected={availableTab === "qr"}
+                onClick={() => updateViewState({ tab: "qr" })}
+              >
+                Código QR
+              </button>
+            )}
           </div>
-          <Button
-            variant="primary"
-            className="idf-report-action"
-            onClick={() =>
-              navigate(`entrada?idf=${encodeURIComponent(selected.id)}`)
-            }
-            disabled={!canWrite}
-          >
-            + Levantar reporte
-          </Button>
+          <div className="idf-console-actions">
+            <Button variant="secondary" onClick={showAll}>
+              Ver todos los IDF
+            </Button>
+            {canViewActivity && (
+              <Button
+                variant="primary"
+                className="idf-report-action"
+                onClick={() => navigate(`entrada?idf=${encodeURIComponent(selected.id)}`)}
+                disabled={!canWrite}
+              >
+                + Levantar reporte
+              </Button>
+            )}
+          </div>
+          </div>
+        )}
+        <div className={`idf-cards ${selected ? "is-selected" : "is-overview"}`}>
+          {renderIdfCards()}
         </div>
-        <div className="idf-cards">
-          {data.idfs
-            .filter((idf) => idf.id !== "idf-13" && idf.name !== "IDF 13")
-            .map((idf) => {
-              const alerts = unresolved(idf);
-              const active = idf.id === selected.id;
-              const idfDevices = data.resources.filter(
-                (resource) => resource.idfId === idf.id,
-              );
-              const deviceCount = idfDevices.length;
-              const offlineCount = idfDevices.filter(
-                (device) => device.status === "offline",
-              ).length;
-              const statusText = alerts
-                ? `${alerts} ${alerts === 1 ? "alerta pendiente" : "alertas pendientes"}`
-                : offlineCount
-                  ? `${offlineCount} ${offlineCount === 1 ? "equipo fuera de línea" : "equipos fuera de línea"}`
-                  : "Operativo";
-              return (
-                <button
-                  type="button"
-                  key={idf.id}
-                  aria-label={`${idf.name || idf.id}: ${statusText}`}
-                  className={`idf-card ${active ? "is-active" : ""} ${alerts ? "has-alert" : ""} ${offlineCount ? "has-offline" : ""}`}
-                  onClick={() => choose(idf.id)}
-                >
-                  <span className="idf-card-top">
-                    <strong>{idf.name || idf.id}</strong>
-                    <span className="idf-card-status">
-                      <i />
-                      {alerts ? "Atención" : offlineCount ? "Revisión" : "Operativo"}
-                    </span>
-                  </span>
-                  <span className="idf-card-metrics">
-                    <span>
-                      <b>{alerts}</b>
-                      <small>Alertas</small>
-                    </span>
-                    <span>
-                      <b>{deviceCount}</b>
-                      <small>Equipos</small>
-                    </span>
-                    <span className="idf-card-offline">
-                      <b>{offlineCount}</b>
-                      <small title="Equipos fuera de línea">Sin línea</small>
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-        </div>
-        {tab === "inventory" && (
+        {!selected && canViewActivity && (
+          <section className="idf-panel idf-consolidated-panel">
+            <AuditLog
+              data={data}
+              records={records}
+              navigate={navigate}
+              openEditor={openEditor}
+              loading={loading}
+              errors={errors}
+              refresh={refresh}
+              idfView={true}
+              consolidated
+              canWrite={canWrite}
+              canResolve={canWrite}
+              onResolve={onResolve}
+            />
+          </section>
+        )}
+        {selected && availableTab === "inventory" && (
           <section className="idf-panel">
             {devices.length ? (
               <div className="idf-device-table">
@@ -970,7 +1153,7 @@ function IdfHub({
             )}
           </section>
         )}
-        {tab === "activity" && (
+        {selected && availableTab === "activity" && (
           <section className="idf-panel idf-audit-panel">
             <AuditLog
               data={data}
@@ -988,7 +1171,7 @@ function IdfHub({
             />
           </section>
         )}
-        {tab === "qr" && (
+        {selected && availableTab === "qr" && (
           <section className="idf-panel idf-qr-panel">
             <div className="qr-showcase">
               <div className="qr-showcase-copy">
@@ -1010,16 +1193,11 @@ function IdfHub({
                       value={host}
                       onChange={(e) => {
                         setHost(e.target.value);
-                        try {
-                          sessionStorage.setItem(
-                            "sgrs_qr_host",
-                            e.target.value,
-                          );
-                        } catch {}
+                        saveQrHost(e.target.value);
                       }}
                       placeholder="192.168.1.25:3001"
                     />
-                    <Button onClick={detectHost} busy={detectingHost}>
+                    <Button onClick={detectHost} busy={detectingHost} disabled={demo}>
                       Detectar IP
                     </Button>
                   </div>
@@ -1066,11 +1244,12 @@ function IdfHub({
               <div className="qr-card-frame">
                 <QrCard
                   row={selected}
-                  demo={false}
+                  demo={demo}
                   toast={notify}
                   host={host}
                   compact
-                  size={240}
+                  size={720}
+                  template
                 />
               </div>
             </div>
@@ -1709,10 +1888,15 @@ export default function App() {
     canExport: can("inventory.export"),
     onResolve: resolveDirect,
   };
+  const canViewActivity = Boolean(
+    canViewPage?.("bitacora") && can("activity.read"),
+  );
 
   const effectivePath = route.path === "entrada" ? "idf" : route.path;
   const isAllowed =
-    (route.path === "conexiones"
+    (route.path === "bitacora"
+      ? canViewActivity
+      : route.path === "conexiones"
       ? canViewPage?.("conexiones") &&
         (user?.role === "super-admin" || can("integrations.manage"))
       : canViewPage?.(effectivePath)) ||
@@ -1760,10 +1944,13 @@ export default function App() {
       <IdfHub
         data={data}
         records={records}
+        demo={demo}
+        userId={user?.id}
         navigate={navigate}
         openEditor={openEditor}
         canWrite={can("idf.visits.write")}
         canEditInventory={can("inventory.write")}
+        canViewActivity={canViewActivity}
         notify={notify}
         onResolve={resolveDirect}
         loading={loading}
@@ -1777,6 +1964,7 @@ export default function App() {
         key={`${route.path}-${demo}`}
         {...shared}
         route={route.path}
+        canViewActivity={canViewActivity}
         mutate={mutate}
         notify={notify}
         onDirty={setDirty}
@@ -1793,10 +1981,13 @@ export default function App() {
       <IdfHub
         data={data}
         records={records}
+        demo={demo}
+        userId={user?.id}
         navigate={navigate}
         openEditor={openEditor}
         canWrite={can("idf.visits.write")}
         canEditInventory={can("inventory.write")}
+        canViewActivity={canViewActivity}
         notify={notify}
         onResolve={resolveDirect}
         loading={loading}
@@ -1944,7 +2135,7 @@ export default function App() {
       !can("integrations.manage")
     )
       return false;
-    return canViewPage?.(path);
+    return canViewPage?.(path) && (path !== "bitacora" || canViewActivity);
   });
 
   return (
