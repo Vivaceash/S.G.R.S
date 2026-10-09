@@ -28,15 +28,15 @@ SESSION_SECONDS = 8 * 3600
 IDLE_SECONDS = 30 * 60
 
 AVAILABLE_PAGES = (
-    "resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf",
+    "resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf", "bitacora-idf",
     "aps", "cctv", "altas", "soporte", "usuarios", "conexiones"
 )
 
 ROLE_PAGE_DEFAULTS = {
     "soporte": ["soporte"],
-    "admin": ["resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf", "aps", "cctv", "altas", "usuarios"],
-    "super-admin": ["resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf", "aps", "cctv", "altas", "soporte", "usuarios", "conexiones"],
-    "viewer": ["resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf", "aps", "cctv", "altas"],
+    "admin": ["resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf", "bitacora-idf", "aps", "cctv", "altas", "usuarios"],
+    "super-admin": ["resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf", "bitacora-idf", "aps", "cctv", "altas", "soporte", "usuarios", "conexiones"],
+    "viewer": ["resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf", "bitacora-idf", "aps", "cctv", "altas"],
 }
 
 ROLE_CATALOG = {
@@ -117,6 +117,27 @@ def session_identity(row, csrf):
     }
 
 
+def identity_pages(identity):
+    raw = identity.get("allowed_pages", identity.get("user", {}).get("allowed_pages"))
+    return parse_allowed_pages(raw, identity["user"]["role"])
+
+
+def migrate_idf_overview_pages(db):
+    """Preserve existing overview access once; later explicit revocations stay revoked."""
+    migration = "idf-overview-page-v1"
+    if db.execute("SELECT 1 FROM dashboard_migrations WHERE id=?", (migration,)).fetchone():
+        return
+    claimed = db.execute("INSERT OR IGNORE INTO dashboard_migrations(id, applied_at) VALUES (?,?)",
+                         (migration, int(time.time())))
+    if not claimed.rowcount:
+        return
+    for row in db.execute("SELECT id, role, allowed_pages FROM users").fetchall():
+        pages = parse_allowed_pages(row["allowed_pages"], row["role"])
+        if "idf" in pages and "bitacora" in pages and "bitacora-idf" not in pages:
+            db.execute("UPDATE users SET allowed_pages=?, version=version+1 WHERE id=?",
+                       (json.dumps([*pages, "bitacora-idf"]), row["id"]))
+
+
 @contextmanager
 def database(write=False):
     PRIVATE.mkdir(mode=0o700, exist_ok=True)
@@ -146,6 +167,8 @@ def database(write=False):
             user_id TEXT PRIMARY KEY,
             principal_segments TEXT NOT NULL,
             updated_at INTEGER NOT NULL);
+          CREATE TABLE IF NOT EXISTS dashboard_migrations (
+            id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL);
           CREATE TABLE IF NOT EXISTS attempts (bucket TEXT NOT NULL, created_at INTEGER NOT NULL);
           CREATE TABLE IF NOT EXISTS audit (
             id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL,
@@ -186,6 +209,7 @@ def database(write=False):
             db.execute("ALTER TABLE device_connection_history ADD COLUMN serial TEXT")
         if write:
             db.execute("BEGIN IMMEDIATE")
+        migrate_idf_overview_pages(db)
         yield db
         db.commit()
     except Exception:

@@ -69,7 +69,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`${demoUrl}#idf`);
   await page.getByRole('heading', { name: 'Registro IDF', exact: true }).waitFor();
-  assert.equal(await page.getByText('Selecciona un IDF para consultar su operación', { exact: true }).count(), 1);
+  assert.equal(await page.locator('.idf-console > .idf-cards:first-child').count(), 1);
   assert.equal(await page.getByRole('table', { name: 'Bitácora consolidada de visitas a IDFs' }).count(), 1);
   assert.equal(await page.getByRole('tab').count(), 0);
   report('Registro IDF inicia en Bitácora consolidada');

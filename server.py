@@ -26,7 +26,7 @@ except ImportError:
 
 from dashboard_access import connection, connection_headers, AccessError
 from dashboard_routes import AccessRoutes
-from dashboard_reports import ReportRoutes, report_key, tagged_reports
+from dashboard_reports import ReportRoutes, report_key, tagged_reports, idf_overview
 from integration_health import upstream_healthy
 from dashboard_history import start_collector
 from dashboard_inventory import cabinets_with_documentary
@@ -314,7 +314,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
         path = getattr(self, 'path', '')
 
         # 1. Reportes y telemetría QR
-        if path == '/api/reports':
+        if urlsplit(path).path == '/api/reports':
             try:
                 with _file_lock:
                     with open(REPORTS_FILE, 'r', encoding='utf-8') as f:
@@ -324,16 +324,20 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 self._send_json({"error": "No se pudo completar la operación."}, 500)
 
         # 2. Catálogo completo de IDFs y Racks
-        elif path == '/api/idfs':
+        elif urlsplit(path).path == '/api/idfs':
             try:
                 with _file_lock:
                     with open(IDFS_FILE, 'r', encoding='utf-8') as f:
                         data = json.load(f)
+                cabinets = cabinets_with_documentary(data)
+                if self.idf_read_view == 'general':
+                    self._send_json(idf_overview(cabinets))
+                    return
                 self._send_json([{
                     **idf,
                     **({'mobile_token': self.mobile_token(idf.get('id'))} if 'idf.visits.write' in self.identity['capabilities'] else {}),
                     'incidents': [{**r, 'record_key': report_key(r)} for r in idf.get('incidents', [])]
-                } for idf in cabinets_with_documentary(data)])
+                } for idf in cabinets])
             except Exception as e:
                 self._send_json({"error": "No se pudo completar la operación."}, 500)
 

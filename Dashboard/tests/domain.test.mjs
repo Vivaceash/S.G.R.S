@@ -109,6 +109,16 @@ test('Gestión Meztli requiere permiso explícito', () => {
   assert.equal(canViewPageId('entrada', ['idf']), true);
 });
 
+test('Vista general IDF comparte navegación, pero no autoriza entrada individual', () => {
+  assert.ok(AVAILABLE_PAGES.some(page => page.id === 'bitacora-idf' && page.label === 'Bitácora IDF general'));
+  assert.equal(canViewPageId('idf', ['bitacora-idf']), true);
+  assert.equal(canViewPageId('entrada', ['bitacora-idf']), false);
+  assert.equal(canViewPageId('bitacora', ['bitacora-idf']), false);
+  assert.equal(canViewPageId('idf', ['idf']), true);
+  assert.equal(canViewPageId('bitacora-idf', ['idf']), false);
+  assert.equal(canViewPageId('idf', []), false);
+});
+
 test('BASE_ROLE_CATALOG y getEffectiveRoles normalizan roles institucionales y excluyen viewer', () => {
   // 1. Catálogo base
   assert.equal(BASE_ROLE_CATALOG.length, 3);

@@ -13,7 +13,7 @@ const demoSession = {
     username: 'admin.demo',
     role: 'super-admin',
     active: true,
-    allowed_pages: ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
+    allowed_pages: ROLE_PAGE_DEFAULTS['super-admin'],
   },
   capabilities: [
     'dashboard.read', 'inventory.read', 'idf.read', 'activity.read',
@@ -25,7 +25,7 @@ const demoSession = {
     { id: 'admin', title: 'admin', description: 'Administra la operación: inventario, visitas e incidencias de IDF y gestión de usuarios.' },
     { id: 'super-admin', title: 'Admin', description: 'Gestiona cuentas, privilegios modulares, conexiones y consultas técnicas.' },
   ],
-  allowed_pages: ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
+  allowed_pages: ROLE_PAGE_DEFAULTS['super-admin'],
 };
 
 function Login({ onLogin, onBootstrap, setup, setupAllowed, error, retry, expired }) {

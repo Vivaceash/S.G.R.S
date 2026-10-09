@@ -19,7 +19,8 @@ from dashboard_device_history import get_longest_connected_devices
 
 from dashboard_access import (AccessError, SESSION_SECONDS, database, session, login,
                               list_users, project_hidden_actors, save_user, connection, connection_values,
-                              save_connection, audit, dashboard_preferences, save_dashboard_preferences)
+                              save_connection, audit, dashboard_preferences, save_dashboard_preferences,
+                              identity_pages)
 
 
 # Explicit read surface: adding an upstream route never grants access implicitly.
@@ -251,6 +252,19 @@ class AccessRoutes:
         if self.identity["user"]["role"] != "super-admin" or "users.manage" not in self.identity["capabilities"]:
             raise AccessError(403, "No tienes permiso para acceder a esta sección.")
 
+    def _require_pages(self, pages, capability):
+        if capability not in self.identity["capabilities"] or not set(pages).intersection(identity_pages(self.identity)):
+            raise AccessError(403, "No tienes permiso para consultar o modificar este recurso.")
+
+    def _require_idf_read(self, path):
+        views = parse_qs(urlsplit(self.path).query, keep_blank_values=True).get("view", ["individual"])
+        if len(views) != 1 or views[0] not in ("general", "individual"):
+            raise AccessError(422, "Vista IDF no válida.")
+        view = views[0]
+        self._require_pages(("bitacora-idf" if view == "general" else "idf",),
+                            "activity.read" if path == "/api/reports" or view == "general" else "idf.read")
+        return view
+
     def access_get(self):
         if not self.path.startswith("/api/"):
             return False
@@ -267,6 +281,11 @@ class AccessRoutes:
                 self.mobile_report_context(self.path)
                 return True
             self._authorize()
+            if path in ("/api/idfs", "/api/reports"):
+                self.idf_read_view = self._require_idf_read(path)
+                return False
+            if path.startswith(("/api/inventory/", "/api/inventarios/")):
+                self._require_pages(("idf", "aps", "cctv"), "inventory.read")
             if path == "/api/dashboard/preferences":
                 self._send_json(dashboard_preferences(self.identity["user"]["id"]))
                 return True
@@ -327,6 +346,7 @@ class AccessRoutes:
                 self._send_json({"connections": [connection(name, public=True) for name in ("forti", "omni", "inventarios")]})
                 return True
             if path == "/api/audit":
+                self._require_pages(("bitacora",), "activity.read")
                 reports_file = Path("data/reports.json")
                 reports_data = {}
                 if reports_file.is_file():
@@ -406,6 +426,7 @@ class AccessRoutes:
             if path in normal:
                 return False
             if path.startswith("/api/reports/evidence/"):
+                self._require_pages(("idf", "bitacora-idf"), "activity.read")
                 if self.identity["user"]["role"] == "viewer":
                     raise AccessError(403, "La evidencia requiere un perfil operativo.")
                 self.send_evidence(path.rsplit("/", 1)[-1], inline=urlsplit(self.path).query == "view=1")
@@ -447,6 +468,8 @@ class AccessRoutes:
                 return True
             self._authorize(mutation=True)
             actor = self.identity["user"]["id"]
+            if path.startswith(("/api/inventory/", "/api/inventarios/")):
+                self._require_pages(("idf", "aps", "cctv"), "inventory.read")
             if path == "/api/dashboard/preferences":
                 self._send_json(save_dashboard_preferences(actor, self._body().get("principal_segments")))
                 return True
@@ -464,13 +487,11 @@ class AccessRoutes:
                 self._send_json(inventories_api.save(self._body(), actor))
                 return True
             if path == '/api/reports/resolve':
-                if 'idf.visits.write' not in self.identity['capabilities']:
-                    raise AccessError(403, 'No tienes permiso para resolver incidencias.')
+                self._require_pages(("idf",), "idf.visits.write")
                 self.resolve_report(self._body())
                 return True
             if path == '/api/inventory/asset':
-                if 'inventory.write' not in self.identity['capabilities']:
-                    raise AccessError(403, 'No tienes permiso para modificar el inventario.')
+                self._require_pages(("idf", "aps", "cctv"), "inventory.write")
                 self._send_json(inventory.save_asset(self._body(), actor))
                 return True
             if path == '/api/aps/map/save':
@@ -522,11 +543,12 @@ class AccessRoutes:
                                      "message": "La API respondió a la consulta autenticada." if ok else "La API rechazó la credencial." if code in (401, 403) else "No se pudo confirmar la conexión. Revisa URL, TLS y disponibilidad de la API."})
                 return True
             if path == "/api/reports":
-                if "idf.visits.write" not in self.identity["capabilities"]:
-                    raise AccessError(403, "El rol viewer solo puede consultar los reportes.")
+                self._require_pages(("idf",), "idf.visits.write")
                 self.save_report(self._body())
                 return True
             if path in ("/api/ips/update", "/api/idfs/device") and "inventory.write" in self.identity["capabilities"]:
+                if path == "/api/idfs/device":
+                    self._require_pages(("idf",), "inventory.write")
                 return False
             raise AccessError(403, "No tienes permiso para realizar esta operación.")
         except AccessError as exc:

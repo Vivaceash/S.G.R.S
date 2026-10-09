@@ -28,6 +28,16 @@ def tagged_reports(groups):
             {**value, 'incidents': [tag(r) for r in value.get('incidents', [])]} for key, value in groups.items()}
 
 
+def idf_overview(cabinets):
+    """Expose cabinet labels, counts and log entries without inventory or QR credentials."""
+    return [{
+        'id': cabinet['id'], 'name': cabinet.get('name') or cabinet['id'],
+        'device_count': len(cabinet.get('devices', [])),
+        'offline_count': sum(device.get('status') == 'offline' for device in cabinet.get('devices', [])),
+        'incidents': [{**row, 'record_key': report_key(row)} for row in cabinet.get('incidents', [])],
+    } for cabinet in cabinets]
+
+
 def _mobile_secret():
     path = PRIVATE / "mobile-report.key"
     try:

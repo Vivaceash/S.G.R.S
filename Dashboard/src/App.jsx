@@ -814,6 +814,8 @@ function IdfHub({
   canWrite,
   canEditInventory,
   canViewActivity,
+  canViewOverview,
+  canOpenIdfs,
   notify,
   onResolve,
   loading,
@@ -832,7 +834,7 @@ function IdfHub({
       return { selectedId: "", tab: canViewActivity ? "activity" : "inventory" };
     }
   });
-  const selectedId = viewState.selectedId;
+  const selectedId = canOpenIdfs ? viewState.selectedId : "";
   const tab = viewState.tab;
   const [host, setHost] = useState(
     () => readQrHost() || location.host,
@@ -870,13 +872,13 @@ function IdfHub({
     } catch {}
   }, [viewStorageKey, viewState]);
   useEffect(() => {
-    if (!canViewActivity && idfs.length && !selectedId) {
-      updateViewState({ selectedId: idfs[0].id, tab: "inventory" });
+    if (!canViewOverview && canOpenIdfs && idfs.length && !selectedId) {
+      updateViewState({ selectedId: idfs[0].id, tab: canViewActivity ? "activity" : "inventory" });
     }
-  }, [canViewActivity, idfs, selectedId]);
+  }, [canViewOverview, canOpenIdfs, canViewActivity, idfs, selectedId]);
   useEffect(() => {
-    if (selectedId && !selected) updateViewState({ selectedId: "" });
-  }, [selectedId, selected]);
+    if (selectedId && !selected && !loading && !errors.idfs) updateViewState({ selectedId: "" });
+  }, [selectedId, selected, loading, errors.idfs]);
   useEffect(() => {
     if (availableTab !== tab) updateViewState({ tab: availableTab });
   }, [availableTab, tab]);
@@ -947,8 +949,10 @@ function IdfHub({
     const alerts = unresolved(idf);
     const active = idf.id === selected?.id;
     const idfDevices = data.resources.filter((resource) => resource.idfId === idf.id);
-    const deviceCount = idfDevices.length;
-    const offlineCount = idfDevices.filter((device) => device.status === "offline").length;
+    const deviceCount = canOpenIdfs ? idfDevices.length : idf.device_count || 0;
+    const offlineCount = canOpenIdfs
+      ? idfDevices.filter((device) => device.status === "offline").length
+      : idf.offline_count || 0;
     const statusText = alerts
       ? `${alerts} ${alerts === 1 ? "alerta pendiente" : "alertas pendientes"}`
       : offlineCount
@@ -959,6 +963,8 @@ function IdfHub({
         type="button"
         key={idf.id}
         aria-label={`${idf.name || idf.id}: ${statusText}`}
+        aria-pressed={active}
+        disabled={!canOpenIdfs}
         className={`idf-card ${active ? "is-active" : ""} ${alerts ? "has-alert" : ""} ${offlineCount ? "has-offline" : ""}`}
         onClick={() => choose(idf.id)}
       >
@@ -997,13 +1003,9 @@ function IdfHub({
         updatedAt={data.updatedAt}
       />
       <section className="idf-console" aria-label="Centro de operación de IDF">
-        {!selected && canViewActivity && (
-          <div className="idf-overview-intro">
-            <p className="eyebrow">Vista consolidada</p>
-            <h2>Selecciona un IDF para consultar su operación</h2>
-            <p>La bitácora muestra todos los registros mientras eliges un gabinete.</p>
-          </div>
-        )}
+        <div className={`idf-cards ${selected ? "is-selected" : "is-overview"}`}>
+          {renderIdfCards()}
+        </div>
         {selected && (
           <div className="idf-console-tabs">
           <div
@@ -1038,9 +1040,11 @@ function IdfHub({
             )}
           </div>
           <div className="idf-console-actions">
-            <Button variant="secondary" onClick={showAll}>
-              Ver todos los IDF
-            </Button>
+            {canViewOverview && (
+              <Button variant="secondary" onClick={showAll}>
+                Ver todos los IDF
+              </Button>
+            )}
             {canViewActivity && (
               <Button
                 variant="primary"
@@ -1054,10 +1058,7 @@ function IdfHub({
           </div>
           </div>
         )}
-        <div className={`idf-cards ${selected ? "is-selected" : "is-overview"}`}>
-          {renderIdfCards()}
-        </div>
-        {!selected && canViewActivity && (
+        {!selected && canViewOverview && (
           <section className="idf-panel idf-consolidated-panel">
             <AuditLog
               data={data}
@@ -1069,8 +1070,8 @@ function IdfHub({
               refresh={refresh}
               idfView={true}
               consolidated
-              canWrite={canWrite}
-              canResolve={canWrite}
+              canWrite={false}
+              canResolve={false}
               onResolve={onResolve}
             />
           </section>
@@ -1262,6 +1263,12 @@ function IdfHub({
 export default function App() {
   const { demo, setDemo, user, can, signOut, allowedPages, canViewPage } =
     useSession();
+  const canOpenIdfs = Boolean(allowedPages?.includes("idf") && can("idf.read"));
+  const canViewIdfOverview = Boolean(allowedPages?.includes("bitacora-idf") && can("activity.read"));
+  const idfDataView = canOpenIdfs ? "" : canViewIdfOverview ? "?view=general" : null;
+  const canReadIdfReports = Boolean((canOpenIdfs || canViewIdfOverview) && can("activity.read"));
+  const reportsPath = canReadIdfReports ? `/api/reports${idfDataView}` : null;
+  const canReadAudit = Boolean(canViewPage("bitacora") && can("activity.read"));
   const catalog = useTelemetryCatalog(!demo && can("traffic.read"));
   const [demoUsers, setDemoUsers] = useState(initialDemoUsers);
   const [demoConnections, setDemoConnections] = useState(
@@ -1273,7 +1280,7 @@ export default function App() {
     ? "resumen"
     : allowedPages?.includes("soporte")
       ? "soporte"
-      : allowedPages?.[0] || "resumen";
+      : (allowedPages?.[0] === "bitacora-idf" ? "idf" : allowedPages?.[0]) || "resumen";
 
   const [route, setRoute] = useState(() => {
     const initial = readRoute();
@@ -1346,14 +1353,14 @@ export default function App() {
     setLoading(true);
     const timer = setTimeout(() => controller.abort(), 12000);
     const endpoints = {
-      idfs: "/api/idfs",
+      ...(idfDataView !== null ? { idfs: `/api/idfs${idfDataView}` } : {}),
       ips: "/api/ips",
       devices: "/api/devices",
       meztliLeases: "/api/forti/network/dhcp-leases",
-      reports: "/api/reports",
+      ...(reportsPath ? { reports: reportsPath } : {}),
       health: "/api/health",
       segments: "/api/forti/network/dhcp-pools",
-      audit: "/api/audit",
+      ...(canReadAudit ? { audit: "/api/audit" } : {}),
     };
     const results = await Promise.allSettled(
       Object.values(endpoints).map((path) =>
@@ -1392,6 +1399,9 @@ export default function App() {
     setData((old) => {
       const merged = {
         ...old,
+        idfs: idfDataView === null ? [] : old.idfs,
+        reports: reportsPath ? old.reports : {},
+        audit: canReadAudit ? old.audit : [],
         ...next,
         updatedAt: Object.keys(next).length
           ? new Date().toISOString()
@@ -1401,7 +1411,7 @@ export default function App() {
     });
     setErrors(failures);
     setLoading(false);
-  }, [demo, notify]);
+  }, [demo, notify, idfDataView, reportsPath, canReadAudit]);
   useEffect(() => {
     if (!demo) refresh();
     return () => {
@@ -1410,13 +1420,13 @@ export default function App() {
     };
   }, [demo, refresh]);
   useEffect(() => {
-    if (demo) return undefined;
+    if (demo || !reportsPath) return undefined;
     let active = true;
     const syncReports = async () => {
       if (!active || document.hidden || reportSyncBusy.current) return;
       reportSyncBusy.current = true;
       try {
-        const reports = await request("/api/reports");
+        const reports = await request(reportsPath);
         if (!active) return;
         setData((old) =>
           JSON.stringify(old.reports) === JSON.stringify(reports)
@@ -1439,7 +1449,7 @@ export default function App() {
       window.clearInterval(timer);
       window.removeEventListener("visibilitychange", onVisible);
     };
-  }, [demo]);
+  }, [demo, reportsPath]);
   // Uptime de soporte depende de pulsos de /api/devices. Mantener sólo la
   // carga inicial deja el contador congelado y puede conservar una fotografía
   // antigua mientras el usuario sigue en la vista.
@@ -1558,7 +1568,7 @@ export default function App() {
     if (!allowedPages || !allowedPages.length) return;
     const currentPath = route.path;
     const effective =
-      currentPath === "entrada"
+      currentPath === "bitacora-idf"
         ? "idf"
         : currentPath.startsWith("consulta/")
           ? "consulta"
@@ -1572,7 +1582,7 @@ export default function App() {
     if (!pathAllowed) {
       const target = allowedPages.includes("soporte")
         ? "soporte"
-        : allowedPages[0] || "resumen";
+        : (allowedPages[0] === "bitacora-idf" ? "idf" : allowedPages[0]) || "resumen";
       go(target);
     }
   }, [allowedPages, route.path, user?.role]);
@@ -1606,7 +1616,7 @@ export default function App() {
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty, modalDirty]);
-  const openEditor = (kind, row) => {
+  const openEditor = (kind, row, { readOnly = false } = {}) => {
     if (
       ["ip", "release", "resource", "stock", "request"].includes(kind) &&
       !can("inventory.write")
@@ -1618,7 +1628,7 @@ export default function App() {
     setDiscardModal(false);
     setReleaseError("");
     setReleaseUncertain(false);
-    setModal({ kind, row });
+    setModal({ kind, row, readOnly });
   };
   const closeModal = () => {
     if (mutationLock.current) return;
@@ -1892,7 +1902,7 @@ export default function App() {
     canViewPage?.("bitacora") && can("activity.read"),
   );
 
-  const effectivePath = route.path === "entrada" ? "idf" : route.path;
+  const effectivePath = route.path;
   const isAllowed =
     (route.path === "bitacora"
       ? canViewActivity
@@ -1948,9 +1958,11 @@ export default function App() {
         userId={user?.id}
         navigate={navigate}
         openEditor={openEditor}
-        canWrite={can("idf.visits.write")}
-        canEditInventory={can("inventory.write")}
-        canViewActivity={canViewActivity}
+        canWrite={canOpenIdfs && can("idf.visits.write")}
+        canEditInventory={canOpenIdfs && can("inventory.write")}
+        canViewActivity={canOpenIdfs && can("activity.read")}
+        canViewOverview={canViewIdfOverview}
+        canOpenIdfs={canOpenIdfs}
         notify={notify}
         onResolve={resolveDirect}
         loading={loading}
@@ -1985,9 +1997,11 @@ export default function App() {
         userId={user?.id}
         navigate={navigate}
         openEditor={openEditor}
-        canWrite={can("idf.visits.write")}
-        canEditInventory={can("inventory.write")}
-        canViewActivity={canViewActivity}
+        canWrite={canOpenIdfs && can("idf.visits.write")}
+        canEditInventory={canOpenIdfs && can("inventory.write")}
+        canViewActivity={canOpenIdfs && can("activity.read")}
+        canViewOverview={canViewIdfOverview}
+        canOpenIdfs={canOpenIdfs}
         notify={notify}
         onResolve={resolveDirect}
         loading={loading}
@@ -2577,12 +2591,13 @@ export default function App() {
               </a>
             </figure>
           )}
-        {modal?.kind === "report-resolve" && (
+        {modal?.kind === "report-resolve" && canOpenIdfs && can("idf.visits.write") && (
           <ResolveReport row={modal.row} save={resolveReport} />
         )}
         {modal?.kind === "report-detail" &&
           modal.row.status !== "resolved" &&
-          can("idf.visits.write") &&
+          !modal.readOnly &&
+          canOpenIdfs && can("idf.visits.write") &&
           (demo || modal.row.record_key) && (
             <ResolveReport row={modal.row} save={resolveReport} />
           )}

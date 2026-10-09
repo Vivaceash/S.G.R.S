@@ -66,13 +66,15 @@ HTTP se acepta solo para loopback (`localhost`/`127.0.0.1`); para otros destinos
 
 Las configuraciones guardadas prevalecen sobre `FORTI_API_URL`/`OMNI_API_URL`. Antes del primer guardado se usan esas variables y `FORTI_API_KEY`/`OMNI_API_KEY`, con fallback a `APP_API_KEY` si está definida. Ya no se inserta la clave `admin` por defecto desde el gateway.
 
-## Registro IDF: dos usos, una ruta
+## Registro IDF: vista general y acceso individual
 
-- **Hasta 850 px:** Registro IDF abre directamente el formulario de `bitacora.png`, sin listado de gabinetes. Incluye IDF, responsable, motivo, temperatura y fecha, evidencia y declaración de inconvenientes. La fecha definitiva y el responsable se asignan en el servidor; no se confía en los valores declarados por el cliente. En demo el responsable se puede escribir para explorar la plantilla.
-- **Más de 850 px:** Registro IDF muestra únicamente reportes/incidencias, métricas, filtros, actualización y detalle. No ofrece crear, editar ni borrar reportes.
-- Los enlaces anteriores `#reporte?idf=...` y `#entrada?idf=...` siguen abriendo el contexto del IDF. Cambiar el ancho de pantalla no concede permisos; la API autoriza por rol, no por user-agent.
-- Tras guardar en móvil se abre la bitácora. En escritorio, Actualizar reportes obtiene lo recibido. No hay sincronización push.
-- El formulario permanece montado durante un cambio de ancho para conservar el borrador en memoria. Al volver al móvil puede continuarse.
+La entrada del menú conserva «Registro IDF». En los permisos modulares se asignan por separado «Bitácora IDF general» (`bitacora-idf`) y «Registro IDF» (`idf`). El permiso de «Bitácora» corresponde al historial general de movimientos y no es requisito para consultar la bitácora de un gabinete.
+
+- «Bitácora IDF general» habilita la página sin gabinete seleccionado, con tarjetas IDF arriba, filtros y tabla a 16 px, sin KPI. Permite consultar detalles; no permite abrir inventarios, emitir QR ni resolver incidencias. Con este permiso solamente, las tarjetas IDF son informativas.
+- «Registro IDF» permite seleccionar gabinetes y consultar su bitácora e inventario. El registro de incidencias, su resolución y el QR siguen sujetos a las capacidades del rol. Si no se asigna la vista general, se abre un gabinete y no se ofrece volver a la tabla consolidada.
+- La API comprueba permisos y capacidades. `/api/idfs?view=general` entrega nombres, cantidades y entradas de bitácora, sin inventario ni credenciales QR; `/api/reports?view=general` requiere el permiso de vista general. Las consultas sin `view=general` requieren acceso individual. Evidencias, escrituras y rutas de inventario tienen controles adicionales.
+- La migración `idf-overview-page-v1` conserva una sola vez el acceso de cuentas que antes tenían simultáneamente `idf` y `bitacora`. Las revocaciones posteriores del nuevo permiso se respetan. Los valores predeterminados de admin, super-admin y viewer incluyen ambos permisos; soporte conserva sus permisos actuales. El código anterior ignora el permiso adicional y la tabla de migraciones, por lo que volver a la versión anterior no requiere borrar datos.
+- Los enlaces `#reporte?idf=...` y `#entrada?idf=...` conservan el formulario de incidencia y requieren acceso individual. Cambiar el ancho de pantalla no concede permisos. La fecha y la identidad definitivas se asignan en el servidor; en demo puede escribirse el responsable. Los reportes se actualizan mediante consultas periódicas.
 
 Se admite una fotografía PNG/JPG de hasta 10 MB por registro, validando tipo, firma y tamaño en el servidor. Se guarda fuera del directorio público y solo admin/super-admin pueden descargarla desde el detalle. Se entrega como archivo adjunto, nunca como HTML ni SVG ejecutable. No se procesa ni reencodea la imagen: antivirus, eliminación de EXIF y procesamiento seguro deben añadirse antes de abrir cargas a un entorno no confiable.
 

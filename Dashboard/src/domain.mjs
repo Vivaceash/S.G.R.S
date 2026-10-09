@@ -17,6 +17,7 @@ export const AVAILABLE_PAGES = [
   { id: 'gestion-meztli', label: 'Gestión Meztli' },
   { id: 'bitacora', label: 'Bitácora' },
   { id: 'idf', label: 'Registro IDF' },
+  { id: 'bitacora-idf', label: 'Bitácora IDF general' },
   { id: 'aps', label: 'Access Points' },
   { id: 'cctv', label: 'CCTV' },
   { id: 'altas', label: 'Gestión de altas' },
@@ -81,13 +82,14 @@ export function countUsersForRoleCard(users, roleId, actorRole) {
 
 export const ROLE_PAGE_DEFAULTS = {
   soporte: ['soporte'],
-  admin: ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'usuarios'],
-  'super-admin': ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
-  viewer: ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'aps', 'cctv', 'altas'],
+  admin: ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'bitacora-idf', 'aps', 'cctv', 'altas', 'usuarios'],
+  'super-admin': ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'bitacora-idf', 'aps', 'cctv', 'altas', 'soporte', 'usuarios', 'conexiones'],
+  viewer: ['resumen', 'dispositivos', 'disponibilidad', 'gestion-meztli', 'bitacora', 'idf', 'bitacora-idf', 'aps', 'cctv', 'altas'],
 };
 export function canViewPageId(pageId, allowedPages) {
   if (!Array.isArray(allowedPages)) return false;
   if (pageId === 'entrada') return allowedPages.includes('idf');
+  if (pageId === 'idf') return allowedPages.includes('idf') || allowedPages.includes('bitacora-idf');
   return allowedPages.includes(pageId);
 }
 export const segmentKey = segment => JSON.stringify([segment.id ?? '', segment.interface ?? '']);

@@ -857,7 +857,7 @@ export function AuditLog({
                 className="audit-photo-badge"
                 onClick={e => {
                   e.stopPropagation();
-                  openEditor('report-detail', r);
+                  openEditor('report-detail', r, { readOnly: consolidated });
                 }}
                 title="Ver fotografía adjunta"
               >
@@ -894,7 +894,7 @@ export function AuditLog({
         <div className="audit-actions-group" onClick={e => e.stopPropagation()}>
           <Button
             icon={Eye}
-            onClick={() => openEditor('report-detail', r)}
+            onClick={() => openEditor('report-detail', r, { readOnly: consolidated })}
             title="Ver detalle completo"
           >
             Ver
@@ -950,7 +950,7 @@ export function AuditLog({
 
 
 
-      {(!idfView || consolidated) && (
+      {!idfView && !consolidated && (
         <section className="audit-kpi-grid" aria-label="Resumen de la bitácora IDF">
           {auditKpis.map(({ id, label, value, caption, icon: Icon, tone, pct, isActive, onClick }) => (
             <button
@@ -973,7 +973,7 @@ export function AuditLog({
 
       <DataTable
         title={consolidated ? 'Bitácora consolidada de visitas a IDFs' : idfView ? 'Reportes enviados desde móvil' : 'Bitácora institucional de visitas a IDFs'}
-        className="audit-table"
+        className={`audit-table ${consolidated ? 'audit-table-consolidated' : ''}`}
         rows={enrichedRecords}
         rowKey="key"
         columns={columns}
