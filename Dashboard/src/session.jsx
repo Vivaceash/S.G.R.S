@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { LogIn, ShieldCheck } from 'lucide-react';
 import { Button, Field, Loading, Notice, SecretInput } from './components.jsx';
 import { useForm } from './forms.jsx';
-import { request, setCsrfToken, ROLE_PAGE_DEFAULTS, roleLabel, BASE_ROLE_CATALOG, getEffectiveRoles, canViewPageId } from './domain.mjs';
+import { request, setCsrfToken, ROLE_PAGE_DEFAULTS, roleLabel, BASE_ROLE_CATALOG, getEffectiveRoles, canViewPageId, clearIdfViewSession } from './domain.mjs';
 
 const SessionContext = createContext(null);
 export const useSession = () => useContext(SessionContext);
@@ -82,12 +82,17 @@ export function SessionProvider({ children }) {
     return () => { alive = false; clearTimeout(timeout); controller.abort(); };
   }, [demo, revision]);
   useEffect(() => {
-    const onExpired = () => { if (!demo) setExpired(true); };
+    const onExpired = () => {
+      if (!demo) {
+        clearIdfViewSession(identity?.user?.id);
+        setExpired(true);
+      }
+    };
     const check = () => { if (!demo && !expired) setRevision(value => value+1); };
     window.addEventListener('sgrs-session-expired', onExpired);
     window.addEventListener('focus', check);
     return () => { window.removeEventListener('sgrs-session-expired', onExpired); window.removeEventListener('focus', check); };
-  }, [demo, expired]);
+  }, [demo, expired, identity?.user?.id]);
   const setDemo = value => {
     setCsrfToken(''); setDemoState(value); setError(''); setExpired(false); setIdentity(null); setReady(value);
     const url = new URL(location.href); if (value) url.searchParams.set('demo', '1'); else url.searchParams.delete('demo');
@@ -97,7 +102,12 @@ export function SessionProvider({ children }) {
     const result = await request('/api/auth/login', { body: values }); setCsrfToken(result.csrf); setIdentity(result); setExpired(false); setReady(true); setError('');
   };
   const bootstrap = async values => { const result = await request('/api/auth/bootstrap', { body: values }); setCsrfToken(result.csrf); setIdentity(result); setSetup(false); setExpired(false); setReady(true); setError(''); };
-  const signOut = async () => { if (!demo) await request('/api/auth/logout', { body: {} }); setCsrfToken(''); setIdentity(null); setExpired(false); };
+  const signOut = async () => {
+    const userId = identity?.user?.id;
+    if (!demo) await request('/api/auth/logout', { body: {} });
+    clearIdfViewSession(userId);
+    setCsrfToken(''); setIdentity(null); setExpired(false);
+  };
   const [demoRole, setDemoRole] = useState(() => new URLSearchParams(location.search).get('role') || 'super-admin');
   const switchDemoRole = newRole => {
     if (ROLE_PAGE_DEFAULTS[newRole]) {

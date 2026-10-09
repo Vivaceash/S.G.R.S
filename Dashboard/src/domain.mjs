@@ -1,6 +1,14 @@
 export const LOCALE = 'es-MX';
 export const TIME_ZONE = 'America/Mexico_City';
+export const IDF_VIEW_SESSION_PREFIX = 'sgrs:idf-view:';
 export const roleLabel = role => role === 'super-admin' ? 'Admin' : role === 'admin' ? 'Administrador' : role === 'soporte' ? 'Soporte' : (role || '');
+
+export function clearIdfViewSession(userId) {
+  if (typeof sessionStorage === 'undefined' || !userId) return;
+  try {
+    sessionStorage.removeItem(`${IDF_VIEW_SESSION_PREFIX}${userId}`);
+  } catch {}
+}
 
 export const AVAILABLE_PAGES = [
   { id: 'resumen', label: 'Dashboard Operativo' },

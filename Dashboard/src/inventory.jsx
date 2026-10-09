@@ -125,7 +125,7 @@ function AssetForm({ asset, cabinets, onSave, onDirty, onBusy, onCancel }) {
   </form>;
 }
 
-export function DocumentaryInventory({ route, demo, navigate, canWrite, canExport, mutate, notify, onDirty, openEditor, data }) {
+export function DocumentaryInventory({ route, demo, navigate, canWrite, canExport, canViewActivity, mutate, notify, onDirty, openEditor, data }) {
   const [catalog, setCatalog] = useState(emptyCatalog);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -494,7 +494,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
             {(network?.assets[selected.id]?.observations || []).map((o, i) => <Notice key={i} title={`Observación de ${o.provider}`}>IP: {o.ip || 'no informada'} · Estado: {o.status} · Interfaz: {o.interface || 'no informada'} · {dateTime(o.observed_at)}</Notice>)}
             {catalog.observations.filter(o => o.idf_id === selected.idf_id).length > 0 && <><h3>Observaciones históricas del gabinete</h3><ul>{catalog.observations.filter(o => o.idf_id === selected.idf_id).map((o, i) => <li key={i}>{o.text}</li>)}</ul></>}
             <div className="form-actions">
-              {data.idfs.some(c => c.id === selected.idf_id) && <Button onClick={() => { setModal(null); openEditor('qr', data.idfs.find(c => c.id === selected.idf_id)); }}>Código QR del gabinete</Button>}
+              {canViewActivity && data.idfs.some(c => c.id === selected.idf_id) && <Button onClick={() => { setModal(null); openEditor('qr', data.idfs.find(c => c.id === selected.idf_id)); }}>Código QR del gabinete</Button>}
               {canWrite && selected.dataset === 'cctv' && <Button icon={Power} variant={selected.decommissioned ? 'primary' : 'danger'} onClick={() => toggleCamera(selected)}>{selected.decommissioned ? 'Activar en inventario' : 'Marcar como retirada'}</Button>}
               {canWrite && selected.dataset !== 'cctv_original' && <Button variant="primary" onClick={() => setModal({ type: 'edit', asset: selected })}>Corregir datos físicos</Button>}
             </div>
