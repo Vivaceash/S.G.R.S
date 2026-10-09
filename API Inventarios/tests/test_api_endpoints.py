@@ -17,7 +17,10 @@ def test_scalar_and_openapi_are_independent(client, monkeypatch):
     assert client.get('/health').status_code == 200
     assert client.get('/api/v1/system/health').status_code == 200
     assert client.get('/api/v1/cctv/cameras').status_code == 401
-    assert 'Scalar' in client.get('/docs').text
+    docs = client.get('/docs').text
+    assert 'Scalar' in docs
+    assert 'persistAuth' in docs
+    assert '"withDefaultFonts": false' in docs
     assert client.get('/scalar').status_code == 200
     schema = client.get('/openapi.json').json()
     assert '/api/v1/cctv/cameras/{asset_id}' in schema['paths']

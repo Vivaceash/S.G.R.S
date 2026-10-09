@@ -104,6 +104,25 @@ def test_dashboard_environment_host_and_lan_rules(monkeypatch):
     assert res4["SGRS_LAN_ORIGIN"] == "http://192.168.38.250:3000,http://192.168.38.250"
 
 
+def test_api_environment_discovers_all_active_interfaces(monkeypatch):
+    monkeypatch.setattr(run_module, "lan_ipv4_addresses", lambda: ["15.40.2.15", "100.124.6.37"])
+    env = {
+        "SGRS_SERVER_IP": "192.168.38.250",
+        "SGRS_LAN_ORIGIN": "http://192.168.38.250:3000",
+    }
+
+    result = run_module.api_environment(env, 3000, "omni")
+
+    assert result["SERVER_HOST"] == "0.0.0.0"
+    assert set(result["ALLOWED_HOSTS"].split(",")) >= {"192.168.38.250", "15.40.2.15", "100.124.6.37"}
+    origins = set(result["CORS_ORIGINS"].split(","))
+    assert {"http://15.40.2.15:3000", "http://100.124.6.37:3000"} <= origins
+
+    inventory = run_module.api_environment(env, 3000, "inventarios")
+    assert inventory["INVENTARIOS_HOST"] == "0.0.0.0"
+    assert "15.40.2.15" in inventory["INVENTARIOS_ALLOWED_HOSTS"]
+
+
 def test_is_pid_alive():
     assert run_module.is_pid_alive(os.getpid()) is True
     assert run_module.is_pid_alive(9999999) is False

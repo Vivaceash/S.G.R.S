@@ -272,7 +272,7 @@ def verify_api_key(
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Clave de API no válida o expirada.",
+            detail="Clave de API no válida. Usa APP_API_KEY de esta API en X-API-Key; no la credencial de OmniVista ni la contraseña del dashboard.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

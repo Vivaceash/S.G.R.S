@@ -43,3 +43,15 @@ async def test_fortigate_live_endpoint(endpoint):
         assert response.status_code in (200, 503)
         data = response.json()
         assert "success" in data
+
+
+def test_scalar_docs_persist_authentication():
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    with TestClient(app, base_url="http://localhost") as client:
+        response = client.get("/docs")
+
+    assert response.status_code == 200
+    assert "persistAuth" in response.text
+    assert '"withDefaultFonts": false' in response.text

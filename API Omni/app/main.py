@@ -138,7 +138,9 @@ async def scalar_docs(request: Request):
         servers=[{"url": base_url, "description": f"Servidor API ({base_url})"}],
         show_sidebar=True,
         default_open_all_tags=True,
-        persist_auth=False,
+        # Keep the interactive client's configured X-API-Key across reloads.
+        persist_auth=True,
+        with_default_fonts=False,
         hide_models=False,
     )
 

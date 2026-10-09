@@ -287,7 +287,7 @@ async def verify_api_key(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "error": "Forbidden",
-                "message": "Clave de API no válida o expirada para este servicio.",
+                "message": "Clave de API no válida. Usa APP_API_KEY de esta API en X-API-Key; no el token de FortiGate ni la contraseña del dashboard.",
             },
         )
 

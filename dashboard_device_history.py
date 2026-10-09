@@ -1,6 +1,7 @@
-"""Device connection history and uptime tracking for SGRS Support Dashboard.
+"""Device connection history and observed connection time for SGRS Support Dashboard.
 
-Persists device presence streaks and cumulative connection time in SQLite.
+Persists observed sessions and cumulative connection history in SQLite.
+The server collector owns presence updates independently of user sessions.
 """
 import re
 import time
@@ -150,7 +151,7 @@ def record_device_presence(devices, now=None, tolerance=DEFAULT_TOLERANCE_SECOND
     """Record and update presence pulse, continuous uptime, and cumulative connection time.
 
     - Normalizes MAC addresses.
-    - If device was already online:
+    - If device was already online and observed within `tolerance`:
       - Increments current_session_seconds and total_connected_seconds by (now - last_seen_at)
         capped at MAX_STEP_SECONDS.
       - Updates last_seen_at = now, ip, hostname, vendor.
@@ -258,8 +259,9 @@ def record_device_presence(devices, now=None, tolerance=DEFAULT_TOLERANCE_SECOND
                 target_hostname = hostname or prev["hostname"]
                 target_vendor = vendor or prev["vendor"]
 
-                if prev["is_online"] == 1:
-                    # Equipment was already online: increment session & total
+                gap_seconds = max(0, now - int(prev["last_seen_at"]))
+                if prev["is_online"] == 1 and gap_seconds <= tolerance:
+                    # Equipment was observed recently: increment session & total.
                     raw_delta = max(0, now - prev["last_seen_at"])
                     delta = min(raw_delta, MAX_STEP_SECONDS)
                     current_session = prev["current_session_seconds"] + delta
@@ -279,7 +281,7 @@ def record_device_presence(devices, now=None, tolerance=DEFAULT_TOLERANCE_SECOND
                         now, current_session, total_connected, now, clean_mac
                     ))
                 else:
-                    # Equipment was offline and just reconnected: start fresh session
+                    # Equipment was offline or stale and just reconnected: start fresh session.
                     db.execute("""
                         UPDATE device_connection_history
                         SET ip = ?, hostname = ?, device_type = ?, vendor = ?, serial = ?,

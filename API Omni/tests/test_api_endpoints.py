@@ -45,6 +45,8 @@ def test_scalar_docs_endpoint():
     assert response.status_code == 200
     assert "scalar" in response.text.lower()
     assert "swagger-ui" not in response.text.lower()
+    assert "persistAuth" in response.text
+    assert '"withDefaultFonts": false' in response.text
 
     # /scalar y /swagger deben redirigir a /docs
     res_scalar = client.get("/scalar", follow_redirects=False)

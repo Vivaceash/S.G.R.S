@@ -1188,7 +1188,7 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
   const [networkQuery, setNetworkQuery] = useState('');
   const [computerQuery, setComputerQuery] = useState('');
   const [printerQuery, setPrinterQuery] = useState('');
-  const [computerSort, setComputerSort] = useState('standard');
+  const [computerSort, setComputerSort] = useState('uptime');
 
   const [exportOpen, setExportOpen] = useState(false);
   const [exportComputers, setExportComputers] = useState(true);
@@ -1541,9 +1541,9 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
                         {pc.mac && <span className="font-mono text-muted text-xs">{pc.mac}</span>}
                       </div>
                       {pc.uptime_seconds != null && (
-                        <span className="support-uptime-badge" title={`Tiempo continuo conectado: ${formatUptime(pc.uptime_seconds)}`}>
+                        <span className="support-uptime-badge" title={`Tiempo observado conectado por SGRS: ${formatUptime(pc.uptime_seconds)}`}>
                           <Clock size={12} aria-hidden="true" />
-                          <span>Conectado: {formatUptime(pc.uptime_seconds)}</span>
+                          <span>Observado: {formatUptime(pc.uptime_seconds)}</span>
                         </span>
                       )}
                     </div>

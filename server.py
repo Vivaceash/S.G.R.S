@@ -30,7 +30,8 @@ from dashboard_reports import ReportRoutes, report_key, tagged_reports
 from integration_health import upstream_healthy
 from dashboard_history import start_collector
 from dashboard_inventory import cabinets_with_documentary
-from dashboard_device_history import record_device_presence, normalize_mac, format_device_type, format_uptime
+from dashboard_device_history import normalize_mac, format_device_type, format_uptime
+from dashboard_presence_collector import presence_snapshot, start_presence_collector
 from dashboard_security import sanitize_upstream
 
 # Lock global para proteger lecturas/escrituras concurrentes a archivos JSON
@@ -606,7 +607,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                                 "raw": dev,
                             })
                         try:
-                            presence_map = record_device_presence(mapped_devices)
+                            presence_map = presence_snapshot()
                             for d in mapped_devices:
                                 clean_mac = normalize_mac(d.get("mac"))
                                 hist = presence_map.get(clean_mac)
@@ -617,12 +618,12 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                                     if hist.get("serial") and hist.get("serial") != "—" and (not d.get("serial") or d.get("serial") == "—"):
                                         d["serial"] = hist.get("serial")
                                 else:
-                                    d["uptime_seconds"] = 0
+                                    d["uptime_seconds"] = None
                                     d["first_connected_at"] = None
                                     d["total_connected_seconds"] = 0
                         except Exception:
                             for d in mapped_devices:
-                                d.setdefault("uptime_seconds", 0)
+                                d.setdefault("uptime_seconds", None)
                                 d.setdefault("first_connected_at", None)
                                 d.setdefault("total_connected_seconds", 0)
                         devices_data = mapped_devices
@@ -1055,10 +1056,12 @@ if __name__ == "__main__":
             print("====================================================")
             started = True
             stop_metrics = start_collector(lambda service, path: _configured_request(connection(service), path, timeout=12))
+            stop_presence = start_presence_collector(lambda service, path: _configured_request(connection(service), path, timeout=12))
             try:
                 server.serve_forever()
             finally:
                 stop_metrics.set()
+                stop_presence.set()
                 server.server_close()
             break
         except OSError as e:
