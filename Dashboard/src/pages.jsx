@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, ArrowRight, ArrowUpDown, Building2, Camera, Check, CheckCircle2, Eye, Thermometer, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Copy, Download, FileText, Grid, HardDrive, Headset, Info, Laptop, Layers3, List, Monitor, Network, Package, Plus, Printer, Radio, RotateCcw, Router, Server, ShieldCheck, Smartphone, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X, LogIn, LogOut, UserPlus, KeyRound, PlugZap, MapPin, MapPinOff } from 'lucide-react';
+import { Activity, AlertCircle, ArrowRight, ArrowUpDown, Building2, Calendar, Camera, Check, CheckCircle2, Eye, Thermometer, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Copy, Download, FileText, Grid, HardDrive, Headset, Info, Laptop, Layers3, List, Monitor, Network, Package, Plus, Printer, Radio, RotateCcw, Router, Server, ShieldCheck, Smartphone, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X, LogIn, LogOut, UserPlus, KeyRound, PlugZap, MapPin, MapPinOff } from 'lucide-react';
 import { Badge, Button, DataTable, Dialog, Empty, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, downloadExcel, useListState } from './components.jsx';
 import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getOverviewSegmentDevices, isMeztliSegment, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, getSupportSegments, normalizeText } from './domain.mjs';
+import { useSession } from './session.jsx';
 
 export function PageHeading({ eyebrow, title, description, updatedAt, children, headingId = 'page-title' }) {
   const hasActions = Boolean(children);
@@ -184,12 +185,137 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
   </>;
 }
 export function Requests({ demo }) {
+  const [tab, setTab] = useState('oficios'); // 'oficios' | 'all'
+  const { canViewSubmodule } = useSession();
+  const canViewOficios = canViewSubmodule('altas', 'oficios');
+  const canViewAll = canViewSubmodule('altas', 'all');
+  const visibleTab = (tab === 'oficios' && canViewOficios) || (tab === 'all' && canViewAll) ? tab : canViewOficios ? 'oficios' : 'all';
   const usersState = useListState('altas-usuarios');
+  const oficiosState = useListState('altas-oficios');
   const [snapshot, setSnapshot] = useState({ users: [], sources: {}, loading: !demo, error: '', updatedAt: null });
   const [selectedUser, setSelectedUser] = useState(null);
+  const [editingConcessionUser, setEditingConcessionUser] = useState(null);
+  const [concessionDate, setConcessionDate] = useState('');
+  const [concessionBusy, setConcessionBusy] = useState(false);
+  const [concessionError, setConcessionError] = useState('');
   const [revision, setRevision] = useState(0);
+  const [now, setNow] = useState(Date.now());
+
+  // Abre el modal para modificar concesión cargando la fecha en formato YYYY-MM-DD
+  const openConcessionModal = user => {
+    setConcessionError('');
+    setEditingConcessionUser(user);
+    const ts = user.dateOfEffective ? Number(user.dateOfEffective) : (Date.now() + 7 * 86400000);
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, '0');
+    const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    setConcessionDate(dateStr);
+  };
+
+  const handleSaveConcession = async () => {
+    if (!editingConcessionUser || !concessionDate) return;
+    // Fija la fecha al final del día seleccionado (23:59:59) en la hora local
+    const [year, month, day] = concessionDate.split('-').map(Number);
+    if (!year || !month || !day) {
+      setConcessionError('Fecha no válida.');
+      return;
+    }
+    const targetDate = new Date(year, month - 1, day, 23, 59, 59, 999);
+    const targetTs = targetDate.getTime();
+    if (isNaN(targetTs)) {
+      setConcessionError('Fecha no válida.');
+      return;
+    }
+    setConcessionBusy(true);
+    setConcessionError('');
+    try {
+      if (demo) {
+        setSnapshot(prev => ({
+          ...prev,
+          users: prev.users.map(u => u.username === editingConcessionUser.username ? { ...u, dateOfEffective: targetTs, customConcession: true } : u)
+        }));
+        setEditingConcessionUser(null);
+      } else {
+        const res = await request('/api/altas/concession', {
+          body: {
+            username: editingConcessionUser.username,
+            dateOfEffective: targetTs,
+            reason: 'Modificación de tiempo de concesión por administrador'
+          }
+        });
+        if (!res.success) {
+          throw new Error(res.error || 'No se pudo guardar la concesión.');
+        }
+        setSnapshot(prev => {
+          const nextUsers = prev.users.map(u => {
+            if (String(u.username).toLowerCase() === String(editingConcessionUser.username).toLowerCase()) {
+              return { ...u, dateOfEffective: targetTs, customConcession: true };
+            }
+            return u;
+          });
+          return { ...prev, users: nextUsers };
+        });
+        setEditingConcessionUser(null);
+        setRevision(v => v + 1);
+      }
+    } catch (err) {
+      setConcessionError(err.message || 'Error al guardar la nueva fecha de concesión.');
+    } finally {
+      setConcessionBusy(false);
+    }
+  };
+
+  // Actualizar el cronómetro local cada 10 segundos para mantener el conteo en tiempo real
   useEffect(() => {
-    if (demo) { setSnapshot({ users: [], sources: {}, loading: false, error: '', updatedAt: null }); return; }
+    const timer = setInterval(() => setNow(Date.now()), 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (demo) {
+      // Demo mock con datos de ejemplo para oficios
+      const sampleTime = Date.now() + 8 * 3600 * 1000;
+      const demoUsers = [
+        {
+          username: 'bryan.castillo',
+          fullName: 'Bryan Eduardo Castillo de Santia',
+          department: 'Urgencias',
+          position: 'Médico Residente',
+          description: 'Oficio',
+          dateOfEffective: sampleTime + 1200000,
+          registeredAt: Date.now() - 3 * 86400000,
+          status: 'online',
+          accessRoleProfile: '__SSID-Ehecatl',
+          devices: [{ deviceMac: '0E1D6C3CF78A', deviceName: 'bryan.castillo', status: 'online', cotejo: 'encontrado' }]
+        },
+        {
+          username: 'josue.cruz',
+          fullName: 'Josue de Jesus Cruz Cervantes',
+          department: 'Medicina Interna',
+          position: 'Interno',
+          description: 'Oficio',
+          dateOfEffective: sampleTime + 900000,
+          registeredAt: Date.now() - 5 * 86400000,
+          status: 'online',
+          accessRoleProfile: '__SSID-Ehecatl',
+          devices: [{ deviceMac: 'FCD202641F4F', deviceName: 'josue.cruz', status: 'online', cotejo: 'encontrado' }]
+        },
+        {
+          username: 'jose.torres',
+          fullName: 'Jose Luis Torres Preciado',
+          department: 'Cirugía',
+          position: 'Residente',
+          description: 'Oficio',
+          dateOfEffective: sampleTime + 600000,
+          registeredAt: Date.now() - 7 * 86400000,
+          status: 'online',
+          accessRoleProfile: '__SSID-Ehecatl',
+          devices: [{ deviceMac: 'EA0CFCE5F9D9', deviceName: 'jose.torres', status: 'online', cotejo: 'encontrado' }]
+        }
+      ];
+      setSnapshot({ users: demoUsers, sources: {}, loading: false, error: '', updatedAt: new Date().toISOString() });
+      return;
+    }
     const controller = new AbortController(); let alive = true;
     setSnapshot(old => ({ ...old, loading: true, error: '' }));
     request('/api/altas/omnivista', { signal: controller.signal }).then(result => {
@@ -198,13 +324,52 @@ export function Requests({ demo }) {
       if (alive) {
         const users = Array.isArray(data.users) ? data.users : [];
         setSnapshot({ users, sources: data.sources || {}, loading: false, error: '', updatedAt: new Date().toISOString() });
-        // Si el detalle de una cuenta estaba abierto mientras se actualizaba,
-        // reemplazar la referencia evita mostrar la lista anterior de dispositivos.
         setSelectedUser(current => current ? users.find(user => user.username === current.username) || null : null);
       }
     }).catch(error => { if (alive) setSnapshot(old => ({ ...old, loading: false, error: error.name === 'AbortError' ? 'Consulta cancelada.' : error.message })); });
     return () => { alive = false; controller.abort(); };
   }, [demo, revision]);
+
+  // Filtrado y cómputo de usuarios cuyo campo 'description' empiece o contenga "Oficio"
+  const oficiosUsers = useMemo(() => {
+    return snapshot.users
+      .filter(user => {
+        const desc = String(user.description || '').trim().toLowerCase();
+        return desc.startsWith('oficio') || desc.includes('oficio');
+      })
+      .map(user => {
+        const effectiveTime = user.dateOfEffective ? Number(user.dateOfEffective) : null;
+        const diffMs = effectiveTime ? effectiveTime - now : null;
+        return {
+          ...user,
+          effectiveTime,
+          diffMs,
+          isExpired: diffMs !== null && diffMs <= 0,
+        };
+      })
+      .sort((a, b) => {
+        // Ordenar primero los que van a expirar más pronto (menor diffMs positivo primero)
+        if (a.diffMs === null && b.diffMs === null) return 0;
+        if (a.diffMs === null) return 1;
+        if (b.diffMs === null) return -1;
+        // Los activos con menor tiempo restante van hasta arriba
+        const aActive = a.diffMs > 0;
+        const bActive = b.diffMs > 0;
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        if (aActive && bActive) return a.diffMs - b.diffMs;
+        // Si ambos ya están vencidos, ordenar por el más recientemente vencido
+        return b.diffMs - a.diffMs;
+      });
+  }, [snapshot.users, now]);
+
+  const activeOficios = oficiosUsers.filter(u => !u.isExpired && u.diffMs !== null);
+  const expiredOficios = oficiosUsers.filter(u => u.isExpired);
+  // Se dan de baja hoy: activos a los que les quedan menos de 24 horas (< 86,400,000 ms)
+  const expiringToday24h = oficiosUsers.filter(u => !u.isExpired && u.diffMs !== null && u.diffMs <= 24 * 3600 * 1000);
+  // Cercanos a dar de baja: activos a los que les quedan 7 días o menos (<= 7 * 86,400,000 ms)
+  const expiringSoon7Days = oficiosUsers.filter(u => !u.isExpired && u.diffMs !== null && u.diffMs <= 7 * 86400 * 1000);
+
   const deviceCount = snapshot.users.reduce((total, user) => total + (Array.isArray(user.devices) ? user.devices.length : 0), 0);
   const accountsWithDevices = useMemo(
     () => snapshot.users.filter(user => Array.isArray(user.devices) && user.devices.length > 0).length,
@@ -212,11 +377,153 @@ export function Requests({ demo }) {
   );
   const accountsCoverage = snapshot.users.length ? Math.round((accountsWithDevices / snapshot.users.length) * 100) : 0;
 
+  // Función para formatear el tiempo restante de concesión
+  const formatCountdown = diffMs => {
+    if (diffMs === null) return 'Sin fecha límite';
+    if (diffMs <= 0) return 'Concesión expirada';
+    const totalSeconds = Math.floor(diffMs / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes} min`;
+  };
+
+  const oficiosColumns = [
+    {
+      key: 'username',
+      label: 'Usuario',
+      render: row => (
+        <div style={{ lineHeight: 1.25 }}>
+          <strong style={{ display: 'block', fontSize: '13px' }}>{row.username}</strong>
+          <small className="text-muted" style={{ fontSize: '11px', display: 'block', maxWidth: '190px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.fullName}>
+            {row.fullName || '—'}
+          </small>
+        </div>
+      )
+    },
+    {
+      key: 'timeRemaining',
+      label: 'Concesión restante',
+      sortable: false,
+      render: row => {
+        if (row.diffMs === null) return <span className="text-muted text-xs">Indefinido</span>;
+        if (row.isExpired) {
+          return (
+            <span className="badge badge-danger" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 7px' }}>
+              <Clock3 size={12} /> Expirado
+            </span>
+          );
+        }
+        const hours = row.diffMs / (3600 * 1000);
+        const tone = hours < 3 ? 'danger' : hours < 12 ? 'warning' : 'info';
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', lineHeight: 1.2 }}>
+            <span className={`badge badge-${tone}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 700, padding: '3px 8px' }}>
+              <Clock size={12} /> {formatCountdown(row.diffMs)}
+            </span>
+            <small style={{ fontSize: '9.5px', color: '#64748b' }}>
+              {new Date(row.effectiveTime).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            </small>
+          </div>
+        );
+      }
+    },
+    {
+      key: 'devices',
+      label: 'Dispositivos',
+      sortable: false,
+      render: row => {
+        const devs = Array.isArray(row.devices) ? row.devices : [];
+        if (!devs.length) return <span className="text-muted text-xs">0 equipos</span>;
+        return (
+          <Button variant="secondary" style={{ padding: '4px 9px', fontSize: '11.5px', minHeight: '30px' }} onClick={() => setSelectedUser(row)}>
+            <Smartphone size={13} /> {devs.length} {devs.length === 1 ? 'eq.' : 'eqs.'} · Ver
+          </Button>
+        );
+      }
+    },
+    {
+      key: 'description',
+      label: 'Motivo',
+      render: row => {
+        const text = String(row.description || 'Oficio').trim();
+        return (
+          <span
+            className="oficio-badge"
+            title={text}
+          >
+            {text.length > 22 ? `${text.slice(0, 20)}…` : text}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'registeredAt',
+      label: 'Fecha de alta',
+      render: row => {
+        const val = row.registeredAt;
+        if (!val) return <span className="text-muted text-xs">—</span>;
+        const d = new Date(Number(val));
+        return (
+          <div style={{ lineHeight: 1.25 }}>
+            <span style={{ fontSize: '11.5px', fontWeight: 600, color: '#334155', display: 'block' }}>
+              {d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+            </span>
+            <small style={{ fontSize: '10px', color: '#64748b' }}>
+              {d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+            </small>
+          </div>
+        );
+      }
+    },
+    {
+      key: 'department',
+      label: 'Área',
+      render: row => (
+        <span style={{ fontSize: '12px', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', whiteSpace: 'nowrap' }} title={row.department}>
+          {row.department || '—'}
+        </span>
+      )
+    },
+    {
+      key: 'status',
+      label: 'Estado',
+      render: row => <Badge status={row.isExpired ? 'offline' : 'online'}>{row.isExpired ? 'Vencida' : 'Activo'}</Badge>
+    },
+    {
+      key: 'actions',
+      label: 'Acciones',
+      sortable: false,
+      render: row => (
+        <Button
+          variant="secondary"
+          style={{ padding: '3px 8px', fontSize: '11px', minHeight: '28px', whiteSpace: 'nowrap' }}
+          onClick={() => openConcessionModal(row)}
+          title="Modificar tiempo de concesión"
+        >
+          <Calendar size={13} /> Modificar
+        </Button>
+      )
+    }
+  ];
+
   const userColumns = [
     { key: 'username', label: 'Cuenta' },
     { key: 'fullName', label: 'Nombre' },
+    {
+      key: 'registeredAt',
+      label: 'Fecha de alta',
+      render: row => row.registeredAt ? (
+        <span style={{ fontSize: '12px' }}>
+          {new Date(Number(row.registeredAt)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+        </span>
+      ) : <span className="text-muted text-xs">—</span>
+    },
     { key: 'department', label: 'Departamento' },
     { key: 'position', label: 'Puesto' },
+    { key: 'description', label: 'Descripción / Motivo' },
     { key: 'accessRoleProfile', label: 'Perfil de acceso' },
     { key: 'status', label: 'Estado', render: row => <Badge status={row.status} /> },
     {
@@ -238,17 +545,17 @@ export function Requests({ demo }) {
       <PageHeading
         eyebrow="Gestión de altas · Consulta"
         title="Gestión de Altas de Red"
-        description="Consulta de cuentas y dispositivos registrados en OmniVista. Esta pantalla no crea, aprueba ni modifica altas."
+        description="Consulta de cuentas, concesiones temporales por oficio y cotejo de terminales en OmniVista con FortiGate."
         updatedAt={snapshot.updatedAt}
       />
 
       <div className="altas-banner-strip">
         <div className="altas-badge-readonly">
           <Info size={14} aria-hidden="true" />
-          <span>Modo solo consulta · OmniVista</span>
+          <span>Cotejo de Cuentas y Concesiones · OmniVista</span>
         </div>
         <p className="altas-readonly-desc">
-          Consulta de cuentas y terminales en OmniVista con cotejo en FortiGate. Las altas y asignaciones se gestionan en las consolas centrales.
+          Supervisión de usuarios temporales por oficio y cómputo de tiempo de concesión restante para baja en red.
         </p>
         {snapshot.updatedAt && (
           <span className="altas-sync-time">
@@ -262,51 +569,221 @@ export function Requests({ demo }) {
 
       <div className="metric-grid">
         <Metric
+          icon={AlertCircle}
+          tone="danger"
+          label="Se dan de baja hoy"
+          value={snapshot.loading ? '—' : number(expiringToday24h.length)}
+          caption={`${number(expiredOficios.length)} concesiones ya vencidas`}
+        />
+        <Metric
+          icon={Clock}
+          tone="warning"
+          label="Cercanos a dar de baja"
+          value={snapshot.loading ? '—' : number(expiringSoon7Days.length)}
+          caption="Vencen en los próximos 7 días"
+        />
+        <Metric
           icon={Users}
-          label="Cuentas cotejadas"
-          value={snapshot.loading ? '—' : number(snapshot.users.length)}
-          caption={snapshot.sources.users?.complete ? 'Total recorrido en OmniVista' : 'Total no confirmado'}
+          label="Total por Oficio"
+          value={snapshot.loading ? '—' : number(oficiosUsers.length)}
+          caption="Cuentas activas con Oficio"
         />
         <Metric
           icon={Monitor}
           tone="success"
           label="Dispositivos asociados"
           value={snapshot.loading ? '—' : number(deviceCount)}
-          caption={snapshot.sources.company_properties?.complete ? `${number(snapshot.sources.company_properties?.unassociated || 0)} sin cuenta coincidente` : 'Cotejo parcial'}
-        />
-        <Metric
-          icon={ShieldCheck}
-          tone="gold"
-          label="Cuentas con equipo"
-          value={snapshot.loading ? '—' : number(accountsWithDevices)}
-          caption={`${accountsCoverage}% con terminal vinculada`}
-        />
-        <Metric
-          icon={Network}
-          tone="info"
-          label="Coincidencias FortiGate"
-          value={snapshot.loading ? '—' : number(snapshot.sources.fortigate?.matches || 0)}
-          caption={snapshot.sources.fortigate?.status === 200 ? 'MAC asociada encontrada en FortiGate' : 'Fuente no disponible'}
+          caption={snapshot.sources.company_properties?.complete ? `${number(snapshot.sources.company_properties?.unassociated || 0)} sin cuenta coincidente` : 'Cotejo con FortiGate'}
         />
       </div>
 
-      <DataTable
-        title="Cuentas de usuarios OmniVista"
-        rows={snapshot.users}
-        columns={userColumns}
-        state={usersState}
-        noun="cuentas"
-        loading={snapshot.loading}
-        error={snapshot.error}
-        onRetry={() => setRevision(value => value + 1)}
-        exportable={!demo}
-        emptyText="OmniVista no devolvió cuentas en esta consulta."
-        toolbar={
-          <SearchField value={usersState.query} onChange={usersState.setQuery} placeholder="Buscar cuenta, nombre o departamento…" />
-        }
-      />
-    <Dialog open={Boolean(selectedUser)} title={`Dispositivos de ${selectedUser?.username || 'la cuenta'}`} onClose={() => setSelectedUser(null)} wide><p className="muted">Cotejo entre Company Property de OmniVista y el inventario observado por FortiGate.</p>{selectedUser?.devices?.length ? <div className="detail-list">{selectedUser.devices.map((device, index) => <article className="panel" key={`${device.deviceMac || device.id || index}`}><div className="flex items-center justify-between gap-3"><strong>{device.deviceName || device.deviceMac || 'Dispositivo sin nombre'}</strong><Badge status={device.forti?.status || device.status} /></div><dl className="detail-grid"><div><dt>MAC</dt><dd>{device.deviceMac || '—'}</dd></div><div><dt>Equipo OmniVista</dt><dd>{device.lastAccessDeviceName || '—'}</dd></div><div><dt>Categoría / familia</dt><dd>{[device.deviceCategory, device.deviceFamily].filter(Boolean).join(' · ') || '—'}</dd></div><div><dt>Sistema operativo</dt><dd>{device.deviceOS || '—'}</dd></div><div><dt>Cotejo</dt><dd>{device.cotejo}</dd></div>{device.forti && <><div><dt>FortiGate · IP</dt><dd>{device.forti.ip || '—'}</dd></div><div><dt>FortiGate · tipo / interfaz</dt><dd>{[device.forti.type, device.forti.interface].filter(Boolean).join(' · ') || '—'}</dd></div><div><dt>FortiGate · última detección</dt><dd>{device.forti.last_seen || '—'}</dd></div></>}</dl></article>)}</div> : <Empty title="Sin dispositivos asociados">OmniVista no tiene terminales asociadas a esta cuenta en la consulta actual.</Empty>}</Dialog>
-      <Note title="Alcance de la consulta">La tabla principal contiene cuentas; los dispositivos aparecen al seleccionar “Ver”. La información FortiGate es una coincidencia por MAC (y no modifica ningún equipo).</Note>
+      {/* Pestañas de Navegación de Altas */}
+      <nav className="inventory-tabs" aria-label="Secciones de altas" style={{ marginTop: '18px' }}>
+        {canViewOficios && <button
+          type="button"
+          className={visibleTab === 'oficios' ? 'active' : ''}
+          aria-selected={visibleTab === 'oficios'}
+          onClick={() => setTab('oficios')}
+        >
+          <Clock size={16} /> Usuarios próximos a dar de baja ({activeOficios.length})
+        </button>}
+        {canViewAll && <button
+          type="button"
+          className={visibleTab === 'all' ? 'active' : ''}
+          aria-selected={visibleTab === 'all'}
+          onClick={() => setTab('all')}
+        >
+          <Users size={16} /> Todas las cuentas ({snapshot.users.length})
+        </button>}
+      </nav>
+
+      {visibleTab === 'oficios' ? (
+        <DataTable
+          title="Usuarios con concesión temporal por Oficio (Próximos a dar de baja)"
+          className="oficios-table"
+          rows={oficiosUsers}
+          columns={oficiosColumns}
+          state={oficiosState}
+          noun="usuarios por oficio"
+          loading={snapshot.loading}
+          error={snapshot.error}
+          onRetry={() => setRevision(value => value + 1)}
+          exportable={!demo}
+          emptyText="No se encontraron cuentas con descripción de Oficio en OmniVista."
+          toolbar={
+            <SearchField value={oficiosState.query} onChange={oficiosState.setQuery} placeholder="Buscar usuario, oficio, nombre o departamento…" />
+          }
+        />
+      ) : (
+        <DataTable
+          title="Todas las cuentas de usuarios OmniVista"
+          rows={snapshot.users}
+          columns={userColumns}
+          state={usersState}
+          noun="cuentas"
+          loading={snapshot.loading}
+          error={snapshot.error}
+          onRetry={() => setRevision(value => value + 1)}
+          exportable={!demo}
+          emptyText="OmniVista no devolvió cuentas en esta consulta."
+          toolbar={
+            <SearchField value={usersState.query} onChange={usersState.setQuery} placeholder="Buscar cuenta, nombre o departamento…" />
+          }
+        />
+      )}
+
+      <Dialog open={Boolean(selectedUser)} title={`Dispositivos de ${selectedUser?.username || 'la cuenta'}`} onClose={() => setSelectedUser(null)} wide>
+        <div style={{ marginBottom: '14px' }}>
+          <p className="muted" style={{ margin: 0 }}>Cotejo entre Company Property de OmniVista y el inventario observado por FortiGate.</p>
+          {selectedUser?.description && (
+            <div style={{ marginTop: '8px', padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}>
+              <strong>Motivo de alta / Oficio:</strong> {selectedUser.description}
+              {selectedUser.dateOfEffective && (
+                <span style={{ display: 'block', marginTop: '3px', color: '#64748b' }}>
+                  Límite de concesión: {new Date(Number(selectedUser.dateOfEffective)).toLocaleString('es-MX')}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        {selectedUser?.devices?.length ? (
+          <div className="detail-list">
+            {selectedUser.devices.map((device, index) => (
+              <article className="panel" key={`${device.deviceMac || device.id || index}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <strong>{device.deviceName || device.deviceMac || 'Dispositivo sin nombre'}</strong>
+                  <Badge status={device.forti?.status || device.status} />
+                </div>
+                <dl className="detail-grid">
+                  <div><dt>MAC</dt><dd className="font-mono">{device.deviceMac || '—'}</dd></div>
+                  <div><dt>Equipo OmniVista</dt><dd>{device.lastAccessDeviceName || '—'}</dd></div>
+                  <div><dt>Categoría / familia</dt><dd>{[device.deviceCategory, device.deviceFamily].filter(Boolean).join(' · ') || '—'}</dd></div>
+                  <div><dt>Sistema operativo</dt><dd>{device.deviceOS || '—'}</dd></div>
+                  <div><dt>Cotejo</dt><dd>{device.cotejo}</dd></div>
+                  {device.forti && <>
+                    <div><dt>FortiGate · IP</dt><dd className="font-mono">{device.forti.ip || '—'}</dd></div>
+                    <div><dt>FortiGate · tipo / interfaz</dt><dd>{[device.forti.type, device.forti.interface].filter(Boolean).join(' · ') || '—'}</dd></div>
+                    <div><dt>FortiGate · última detección</dt><dd>{device.forti.last_seen || '—'}</dd></div>
+                  </>}
+                </dl>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <Empty title="Sin dispositivos asociados">OmniVista no tiene terminales asociadas a esta cuenta en la consulta actual.</Empty>
+        )}
+      </Dialog>
+
+      {/* Modal / Diálogo para modificar tiempo de concesión con calendario */}
+      <Dialog
+        open={Boolean(editingConcessionUser)}
+        title={`Modificar tiempo de concesión · ${editingConcessionUser?.username || ''}`}
+        onClose={() => !concessionBusy && setEditingConcessionUser(null)}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <p className="muted" style={{ margin: 0, fontSize: '13px' }}>
+            Selecciona la nueva fecha y hora límite en la que la cuenta de <strong>{editingConcessionUser?.fullName || editingConcessionUser?.username}</strong> finalizará su concesión y deberá ser dada de baja en la red.
+          </p>
+
+          {editingConcessionUser && (
+            <div style={{ padding: '10px 14px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div><strong>Cuenta:</strong> <span className="font-mono">{editingConcessionUser.username}</span></div>
+              {editingConcessionUser.department && <div><strong>Área:</strong> {editingConcessionUser.department}</div>}
+              {editingConcessionUser.description && <div><strong>Oficio / Motivo:</strong> {editingConcessionUser.description}</div>}
+              <div>
+                <strong>Límite registrado actualmente:</strong>{' '}
+                {editingConcessionUser.dateOfEffective
+                  ? new Date(Number(editingConcessionUser.dateOfEffective)).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
+                  : 'Sin fecha asignada'}
+              </div>
+            </div>
+          )}
+
+          <div className="field">
+            <label htmlFor="concession-date-picker" style={{ fontWeight: 600, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Calendar size={16} /> Fecha de vencimiento (Día)
+            </label>
+            <input
+              id="concession-date-picker"
+              type="date"
+              value={concessionDate}
+              onChange={e => setConcessionDate(e.target.value)}
+              className="form-input"
+              style={{
+                width: '100%',
+                padding: '9px 12px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                fontSize: '14px',
+                marginTop: '6px'
+              }}
+            />
+            <small className="field-help" style={{ color: '#64748b', marginTop: '4px', display: 'block' }}>
+              Selecciona únicamente el día límite para dar de baja al usuario en la red.
+            </small>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+            <span style={{ fontSize: '11.5px', color: '#64748b' }}>Accesos rápidos:</span>
+            {[
+              { label: 'Mañana', days: 1 },
+              { label: '+3 días', days: 3 },
+              { label: '+7 días', days: 7 },
+              { label: '+15 días', days: 15 },
+              { label: '+30 días', days: 30 }
+            ].map(preset => (
+              <button
+                key={preset.label}
+                type="button"
+                className="button button-ghost"
+                style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid #e2e8f0' }}
+                onClick={() => {
+                  const d = new Date(Date.now() + preset.days * 86400 * 1000);
+                  const pad = n => String(n).padStart(2, '0');
+                  setConcessionDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+                }}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
+          {concessionError && (
+            <Notice tone="danger" title="Error al guardar">{concessionError}</Notice>
+          )}
+
+          <div className="dialog-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+            <Button onClick={() => setEditingConcessionUser(null)} disabled={concessionBusy}>
+              Cancelar
+            </Button>
+            <Button variant="primary" busy={concessionBusy} onClick={handleSaveConcession}>
+              Guardar nueva concesión
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Note title="Alcance de la consulta">La pestaña de usuarios próximos a dar de baja filtra automáticamente las cuentas cuya descripción inicia o contiene "Oficio", calculando el tiempo restante de concesión y priorizando a los que están más próximos a vencer.</Note>
     </>
   );
 }
@@ -331,8 +808,12 @@ export function Inventory({ data, demo, navigate, openEditor, errors, loading, r
 }
 export function Addresses({ data, navigate, openEditor, loading, errors, refresh, canWrite, canExport }) {
   const state = useListState('ips');
+  const { canViewSubmodule } = useSession();
+  const canViewList = canViewSubmodule('disponibilidad', 'list');
+  const canViewMatrix = canViewSubmodule('disponibilidad', 'matrix');
   const rows = data.ips.map(r => ({ ...r, id: r.ip }));
   const [view, setView] = useState('matrix');
+  const visibleView = (view === 'matrix' && canViewMatrix) || (view === 'list' && canViewList) ? view : canViewMatrix ? 'matrix' : 'list';
   const columns = [{ key: 'ip', label: 'Dirección IP', render: r => <strong className="ip-address" title={r.ip}>{displayIp(r.ip)}</strong> }, { key: 'vlan', label: 'VLAN / Segmento' }, { key: 'location', label: 'Ubicación' }, { key: 'type', label: 'Tipo de uso' }, { key: 'status', label: 'Estado', render: r => <Badge status={r.status} /> }, { key: 'hostname', label: 'Equipo asignado' }, { key: 'actions', label: 'Acciones', sortable: false, render: r => <Button disabled={!canWrite} onClick={() => openEditor('ip', r)}>{r.status === 'available' ? 'Asignar' : 'Administrar'}</Button> }];
   const filtered = selectRows(rows, state.query, state.filters, state.sort, state.asc);
   const segmentRows = state.filters.vlan ? rows.filter(row => row.vlan === state.filters.vlan) : rows;
@@ -344,8 +825,8 @@ export function Addresses({ data, navigate, openEditor, loading, errors, refresh
     <section className="ip-kpi-grid" aria-label="Resumen de direcciones IP">{[
       ['all', 'Total direcciones', counts.all, 'Todos los segmentos'], ['available', 'Libres disponibles', counts.available, 'Listas para asignación'], ['occupied', 'IPs ocupadas', counts.occupied, 'Asignadas en producción'], ['reserved', 'Reservadas / gateways', counts.reserved, 'Gateways y VIPs de enlace'],
     ].map(([status, label, value, caption]) => <button key={status} type="button" className={`ip-kpi ip-kpi-${status} ${(!state.filters.status && status === 'all') || state.filters.status === status ? 'is-active' : ''}`} onClick={() => chooseStatus(status)}><span>{label}</span><strong>{number(value)}</strong><i style={{ width: `${counts.all ? Math.round(value / counts.all * 100) : 0}%` }} /><small>{caption}</small></button>)}</section>
-    <div className="toolbar ip-toolbar"><Select label="VLAN / Segmento" value={state.filters.vlan || ''} onChange={e => state.setFilter('vlan', e.target.value)}><option value="">Todos los segmentos</option>{options(rows.map(r => r.vlan))}</Select><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar IP, host, MAC o ubicación…" /><div className="ip-status-filters" aria-label="Filtrar por estado">{[['all', 'Todas'], ['available', 'Libres'], ['occupied', 'Ocupadas'], ['reserved', 'Reservadas']].map(([status, label]) => <button type="button" key={status} aria-pressed={(!state.filters.status && status === 'all') || state.filters.status === status} onClick={() => chooseStatus(status)}>{label} <b>{number(counts[status])}</b></button>)}</div><div className="ip-view-toggle" aria-label="Vista de direcciones"><button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}>☷ Lista</button><button type="button" aria-pressed={view === 'matrix'} onClick={() => setView('matrix')}>▦ Matriz</button></div></div>
-    {view === 'matrix' ? <section className="ip-matrix" aria-label="Matriz de direcciones IP">{loading ? <div className="loading-state">Cargando direcciones IP…</div> : errors.ips ? <Notice title="No se pudieron cargar las direcciones" tone="warning" action={<Button onClick={refresh}>Reintentar</Button>}>{errors.ips}</Notice> : Object.entries(filteredBySegment).map(([segment, ips]) => <section key={segment} className="ip-segment"><div><h2>{segment}</h2><span>{ips.length} IPs</span></div><article>{ips.map(ip => <button key={ip.ip} type="button" className={`ip-cell ip-cell-${ip.status}`} onClick={() => openEditor('ip', ip)} title={`${ip.ip} · ${labelForStatus(ip.status)}${ip.hostname ? ` · ${ip.hostname}` : ''}`}><strong>{displayIp(ip.ip)}</strong><small><i />{labelForStatus(ip.status)}</small></button>)}</article></section>)}{!loading && !errors.ips && !filtered.length && <Empty title="Sin direcciones coincidentes">Modifica los filtros o busca otra dirección.</Empty>}</section> : <DataTable title="Direcciones IP" rows={rows} columns={columns} state={state} noun="direcciones" loading={loading} error={errors.ips} onRetry={refresh} />}
+    <div className="toolbar ip-toolbar"><Select label="VLAN / Segmento" value={state.filters.vlan || ''} onChange={e => state.setFilter('vlan', e.target.value)}><option value="">Todos los segmentos</option>{options(rows.map(r => r.vlan))}</Select><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar IP, host, MAC o ubicación…" /><div className="ip-status-filters" aria-label="Filtrar por estado">{[['all', 'Todas'], ['available', 'Libres'], ['occupied', 'Ocupadas'], ['reserved', 'Reservadas']].map(([status, label]) => <button type="button" key={status} aria-pressed={(!state.filters.status && status === 'all') || state.filters.status === status} onClick={() => chooseStatus(status)}>{label} <b>{number(counts[status])}</b></button>)}</div><div className="ip-view-toggle" aria-label="Vista de direcciones">{canViewList && <button type="button" aria-pressed={visibleView === 'list'} onClick={() => setView('list')}>☷ Lista</button>}{canViewMatrix && <button type="button" aria-pressed={visibleView === 'matrix'} onClick={() => setView('matrix')}>▦ Matriz</button>}</div></div>
+    {visibleView === 'matrix' ? <section className="ip-matrix" aria-label="Matriz de direcciones IP">{loading ? <div className="loading-state">Cargando direcciones IP…</div> : errors.ips ? <Notice title="No se pudieron cargar las direcciones" tone="warning" action={<Button onClick={refresh}>Reintentar</Button>}>{errors.ips}</Notice> : Object.entries(filteredBySegment).map(([segment, ips]) => <section key={segment} className="ip-segment"><div><h2>{segment}</h2><span>{ips.length} IPs</span></div><article>{ips.map(ip => <button key={ip.ip} type="button" className={`ip-cell ip-cell-${ip.status}`} onClick={() => openEditor('ip', ip)} title={`${ip.ip} · ${labelForStatus(ip.status)}${ip.hostname ? ` · ${ip.hostname}` : ''}`}><strong>{displayIp(ip.ip)}</strong><small><i />{labelForStatus(ip.status)}</small></button>)}</article></section>)}{!loading && !errors.ips && !filtered.length && <Empty title="Sin direcciones coincidentes">Modifica los filtros o busca otra dirección.</Empty>}</section> : <DataTable title="Direcciones IP" rows={rows} columns={columns} state={state} noun="direcciones" loading={loading} error={errors.ips} onRetry={refresh} />}
     <Note>Las asignaciones modifican el inventario local. No cambian reservas DHCP ni aplican configuraciones al firewall.</Note></>;
 }
 export function CopyButton({ text, title = 'Copiar', className = '' }) {
@@ -1182,7 +1663,149 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
   </section>;
 }
 
-export function SupportDashboard({ data, navigate, openEditor, loading, errors, refresh }) {
+export function SupportMovements({ demo }) {
+  const [rows, setRows] = useState([]);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const reload = () => {
+    if (demo) return;
+    request('/api/support/movements').then(result => { setRows(result.movements || []); setError(''); })
+      .catch(problem => setError(problem.message || 'No se pudo cargar la bitácora.'));
+  };
+  useEffect(() => { reload(); }, [demo]);
+  const visible = rows.filter(row => !query || normalizeText(`${row.element} ${row.identifier} ${row.actor_name || ''} ${row.actor} ${row.idf_name} ${row.notes}`).includes(normalizeText(query)));
+  return <section className="support-log-view">
+    <PageHeading eyebrow="Movimientos" title="Bitácora de soporte" description="Retiros de tóner y otros elementos provenientes del IDF 3" />
+    <div className="support-log-origin" role="note">
+      <span className="support-log-origin-icon"><Building2 size={28} aria-hidden="true" /></span>
+      <div><strong>Todo el inventario de Soporte sale del IDF 3</strong><p>Los artículos, retiros y movimientos de esta área deben registrarse desde el IDF 3.</p></div>
+    </div>
+    <div className="support-log-toolbar"><label>Buscar<input value={query} onChange={event => setQuery(event.target.value)} placeholder="Elemento, identificación, responsable o nota…" /></label>
+      <Button icon={RefreshCw} onClick={reload}>Actualizar</Button>
+    </div>
+    {error && <Notice tone="danger">{error}</Notice>}
+    <div className="support-log-table-wrap">
+      <table className="support-log-table desktop-only-table">
+        <thead>
+          <tr>
+            <th>IDF / Folio</th>
+            <th>Elemento e identificación</th>
+            <th>Responsable y fecha</th>
+            <th>Foto</th>
+            <th>Observaciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map(row => <tr key={row.id}>
+            <td><strong>{row.idf_name}</strong><small>{row.id.slice(0, 8).toUpperCase()}</small></td>
+            <td><strong>{row.element}</strong>{row.quantity != null && <small>Retirado: {row.quantity} {row.unit || ''}</small>}<small>{row.identifier}</small></td>
+            <td><strong>{row.actor_name || row.actor}</strong><small>{dateTime(row.date)} · Cuenta: {row.actor}</small></td>
+            <td>{row.evidence ? <a className="support-evidence-link" href={`/api/support/movements/evidence/${encodeURIComponent(row.evidence)}?view=1`} target="_blank" rel="noopener noreferrer"><Camera size={16} /> Ver foto</a> : '—'}</td>
+            <td>{row.notes || '—'}</td>
+          </tr>)}
+          {!visible.length && <tr><td colSpan={5} className="support-log-empty">{rows.length ? 'No hay movimientos con esos filtros.' : 'Aún no hay retiros registrados.'}</td></tr>}
+        </tbody>
+      </table>
+
+      {/* Vista adaptativa en tarjetas para pantallas móviles */}
+      <div className="support-log-mobile-list" aria-label="Lista de movimientos para pantallas pequeñas">
+        {visible.map(row => (
+          <article key={row.id} className="support-log-mobile-card">
+            <div className="support-log-mobile-card-header">
+              <div>
+                <strong>{row.idf_name}</strong>
+                <span className="support-log-folio-badge">{row.id.slice(0, 8).toUpperCase()}</span>
+              </div>
+              {row.evidence && (
+                <a className="support-evidence-link" href={`/api/support/movements/evidence/${encodeURIComponent(row.evidence)}?view=1`} target="_blank" rel="noopener noreferrer">
+                  <Camera size={15} /> Foto
+                </a>
+              )}
+            </div>
+            <div className="support-log-mobile-card-body">
+              <div className="support-log-mobile-item">
+                <span className="support-log-mobile-label">Elemento</span>
+                <strong>{row.element}</strong>
+                {row.quantity != null && <small>Retirado: {row.quantity} {row.unit || ''}</small>}
+                {row.identifier && <small>{row.identifier}</small>}
+              </div>
+              <div className="support-log-mobile-item">
+                <span className="support-log-mobile-label">Responsable y Fecha</span>
+                <span>{row.actor_name || row.actor}</span>
+                <small>{dateTime(row.date)}</small>
+              </div>
+              {row.notes && (
+                <div className="support-log-mobile-notes">
+                  <span className="support-log-mobile-label">Observaciones</span>
+                  <p>{row.notes}</p>
+                </div>
+              )}
+            </div>
+          </article>
+        ))}
+        {!visible.length && (
+          <div className="support-log-empty-mobile">
+            {rows.length ? 'No hay movimientos con esos filtros.' : 'Aún no hay retiros registrados.'}
+          </div>
+        )}
+      </div>
+    </div>
+  </section>;
+}
+
+export function SupportInventory({ canEdit = false }) {
+  const [items, setItems] = useState([]);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [editing, setEditing] = useState(null);
+  const [draftQuantity, setDraftQuantity] = useState('');
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    let active = true;
+    request('/api/support/inventory').then(result => {
+      if (active) { setItems(result.items || []); setError(''); }
+    }).catch(problem => { if (active) setError(problem.message || 'No se pudo cargar el inventario.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+  const saveQuantity = async event => {
+    event.preventDefault();
+    const quantity = Number(draftQuantity);
+    if (!Number.isSafeInteger(quantity) || quantity < 0 || !reason.trim()) { setError('Indica una cantidad válida y el motivo de la corrección.'); return; }
+    setSaving(true); setError('');
+    try {
+      const result = await request('/api/support/inventory/quantity', { body: { item_id: editing.id, quantity, version: editing.version, reason: reason.trim() } });
+      setItems(current => current.map(item => item.id === editing.id ? result.item : item));
+      setEditing(null); setReason('');
+    } catch (problem) { setError(problem.message || 'No se pudo modificar la cantidad.'); }
+    finally { setSaving(false); }
+  };
+  const visible = items.filter(item => !query || normalizeText(`${item.description} ${item.unit} ${item.status} ${item.notes}`).includes(normalizeText(query)));
+  return <section className="support-inventory-view">
+    <PageHeading eyebrow="IDF 3" title="Inventario soporte IDF 3" description="Inventario inicial del área de soporte" />
+    {error && <Notice tone="danger">{error}</Notice>}
+    {loading ? <p>Cargando inventario…</p> : <>
+      <div className="support-inventory-summary"><span className="support-inventory-summary-icon"><Package size={30} aria-hidden="true" /></span><div><strong><b>{items.length}</b> artículos inventariados</strong><span>Inventario del IDF 3 · Fuente: {items[0]?.source_file || 'Inventario IDF 3'} · 05/10/2026</span></div></div>
+      <div className="support-log-toolbar support-inventory-search"><label>Buscar artículo<input value={query} onChange={event => setQuery(event.target.value)} placeholder="Busca por descripción, unidad, estado u observaciones…" /></label></div>
+      <div className="support-log-table-wrap"><table className="support-log-table support-inventory-table"><thead><tr><th>N.º</th><th>Artículo</th><th>Cantidad</th><th>Unidad</th><th>Estado</th><th>Observaciones</th>{canEdit && <th>Acciones</th>}</tr></thead><tbody>
+        {visible.map(item => <tr key={item.id}><td><span className="support-inventory-number">{item.source_number}</span></td><td><strong className="support-inventory-name">{item.description}</strong><small>{item.location}</small></td><td><strong className="support-inventory-quantity">{item.quantity}</strong></td><td><span className="support-inventory-unit">{item.unit}</span></td><td><span className="support-inventory-status">{item.status}</span></td><td>{item.notes || '—'}</td>{canEdit && <td><Button variant="secondary" onClick={() => { setEditing(item); setDraftQuantity(String(item.quantity)); setReason(''); setError(''); }}>Modificar cantidad</Button></td>}</tr>)}
+        {!visible.length && <tr><td colSpan={canEdit ? 7 : 6} className="support-log-empty">{items.length ? 'No hay artículos que coincidan con la búsqueda.' : 'No hay artículos cargados.'}</td></tr>}
+      </tbody></table></div>
+      <p className="support-inventory-footnote">Las cantidades conservan sus unidades originales: piezas, cajas, kits, pares, paquetes o bolsas. Ningún estado se ha verificado físicamente.</p>
+    </>}
+    {editing && <div className="support-inventory-edit-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !saving) setEditing(null); }}><form className="support-inventory-edit panel" onSubmit={saveQuantity} aria-label={`Modificar cantidad de ${editing.description}`}>
+      <h2>Modificar cantidad</h2><p><strong>{editing.description}</strong><br />Existencia actual: {editing.quantity} {editing.unit}</p>
+      {error && <Notice tone="danger">{error}</Notice>}
+      <label>Nueva cantidad<input type="number" min="0" step="1" required value={draftQuantity} onChange={event => setDraftQuantity(event.target.value)} /></label>
+      <label>Motivo de la corrección<textarea required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} placeholder="Explica por qué se modifica la existencia" /></label>
+      <div className="support-inventory-edit-actions"><Button type="button" variant="secondary" onClick={() => setEditing(null)} disabled={saving}>Cancelar</Button><Button type="submit" variant="primary" busy={saving}>Guardar cantidad</Button></div>
+    </form></div>}
+  </section>;
+}
+
+export function SupportDashboard({ data, navigate, openEditor, loading, errors, refresh, demo }) {
   const [networkQuery, setNetworkQuery] = useState('');
   const [computerQuery, setComputerQuery] = useState('');
   const [printerQuery, setPrinterQuery] = useState('');
@@ -1361,7 +1984,6 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
           >
             Exportar listado Excel
           </Button>
-          <Button icon={RefreshCw} busy={loading} onClick={refresh}>Actualizar</Button>
         </div>
       </div>
 

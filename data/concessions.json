@@ -1,0 +1,22 @@
+{
+  "fatima.ramirez": {
+    "dateOfEffective": 1793426399999,
+    "updatedAt": 1791591313256,
+    "reason": "Modificación de tiempo de concesión por administrador"
+  },
+  "alan.tovar": {
+    "dateOfEffective": 1793426399999,
+    "updatedAt": 1791591334572,
+    "reason": "Modificación de tiempo de concesión por administrador"
+  },
+  "juliana.urbina": {
+    "dateOfEffective": 1793426399999,
+    "updatedAt": 1791591866134,
+    "reason": "Modificación de tiempo de concesión por administrador"
+  },
+  "jose.alvarez": {
+    "dateOfEffective": 1793512799999,
+    "updatedAt": 1791591956579,
+    "reason": "Modificación de tiempo de concesión por administrador"
+  }
+}

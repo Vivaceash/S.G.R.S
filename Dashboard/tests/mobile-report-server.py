@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix='sgrs-mobile-lan-') as directory:
         print((result.stdout + result.stderr).replace(token, '<REDACTED>'))
         if result.returncode:
             raise SystemExit(result.returncode)
-        stored = json.loads(Path(server.REPORTS_FILE).read_text())['idf-6']['incidents']
+        stored = json.loads(Path(server.REPORTS_FILE).read_text(encoding='utf-8'))['idf-6']['incidents']
         assert len(stored) == 1
         assert stored[0]['temp'] == 23.5
         assert stored[0]['description'] == 'Prueba aislada de reporte móvil'

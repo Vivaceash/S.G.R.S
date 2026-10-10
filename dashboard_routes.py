@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 """Same-origin HTTP boundary for the local dashboard (used by server.Handler)."""
 import hmac
@@ -20,7 +20,7 @@ from dashboard_device_history import get_longest_connected_devices
 from dashboard_access import (AccessError, SESSION_SECONDS, database, session, login,
                               list_users, project_hidden_actors, save_user, connection, connection_values,
                               save_connection, audit, dashboard_preferences, save_dashboard_preferences,
-                              identity_pages)
+                              identity_pages, identity_submodules)
 
 
 # Explicit read surface: adding an upstream route never grants access implicitly.
@@ -256,6 +256,11 @@ class AccessRoutes:
         if capability not in self.identity["capabilities"] or not set(pages).intersection(identity_pages(self.identity)):
             raise AccessError(403, "No tienes permiso para consultar o modificar este recurso.")
 
+    def _require_submodule(self, page, tab, capability):
+        self._require_pages((page,), capability)
+        if f'{page}:{tab}' not in identity_submodules(self.identity):
+            raise AccessError(403, 'No tienes permiso para acceder a esta pestaña.')
+
     def _require_idf_read(self, path):
         views = parse_qs(urlsplit(self.path).query, keep_blank_values=True).get("view", ["individual"])
         if len(views) != 1 or views[0] not in ("general", "individual"):
@@ -263,6 +268,8 @@ class AccessRoutes:
         view = views[0]
         self._require_pages(("bitacora-idf" if view == "general" else "idf",),
                             "activity.read" if path == "/api/reports" or view == "general" else "idf.read")
+        if path == '/api/reports' and view == 'individual':
+            self._require_submodule('idf', 'activity', 'activity.read')
         return view
 
     def access_get(self):
@@ -281,6 +288,27 @@ class AccessRoutes:
                 self.mobile_report_context(self.path)
                 return True
             self._authorize()
+            if path.startswith('/api/support/movements/evidence/'):
+                self._require_submodule('soporte', 'log', 'activity.read')
+                self.send_evidence(path.rsplit('/', 1)[-1], inline=urlsplit(self.path).query == 'view=1', kind='support')
+                return True
+            if path == '/api/support/idfs':
+                self._require_pages(('soporte',), 'idf.read')
+                self._send_json({'idfs': self.support_idfs()})
+                return True
+            if path == '/api/support/movements':
+                self._require_submodule('soporte', 'log', 'activity.read')
+                self._send_json({'movements': self.support_movements()})
+                return True
+            if path == '/api/support/inventory':
+                self._require_pages(('soporte',), 'inventory.read')
+                if not {'soporte:inventory', 'soporte:log'}.intersection(identity_submodules(self.identity)):
+                    raise AccessError(403, 'No tienes permiso para consultar el inventario de soporte.')
+                with database() as db:
+                    items = [dict(row) for row in db.execute(
+                        'SELECT * FROM support_inventory WHERE idf_id=? ORDER BY source_number', ('idf-3',))]
+                self._send_json({'idf_id': 'idf-3', 'items': items})
+                return True
             if path in ("/api/idfs", "/api/reports"):
                 self.idf_read_view = self._require_idf_read(path)
                 return False
@@ -301,7 +329,12 @@ class AccessRoutes:
                     raise AccessError(404, 'Ruta de inventarios no disponible.')
                 return True
             if path == '/api/inventory/catalog':
+                permitted = set(identity_submodules(self.identity))
+                if not permitted.intersection({'idf:inventory', 'aps:documentary', 'aps:map', 'cctv:updated', 'cctv:original'}):
+                    raise AccessError(403, 'No tienes permiso para consultar el catálogo documental.')
                 result = inventory.catalog()
+                datasets = {'idf': 'idf:inventory', 'ap': 'aps:documentary', 'cctv': 'cctv:updated', 'cctv_original': 'cctv:original'}
+                result['assets'] = [asset for asset in result.get('assets', []) if datasets.get(asset.get('dataset')) in permitted or (asset.get('dataset') == 'ap' and 'aps:map' in permitted)]
                 if self.identity['user']['role'] == 'viewer':
                     result['observations'] = []
                     result['structure'] = {}
@@ -315,6 +348,7 @@ class AccessRoutes:
                     self._send_json(inventory.live_reconciliation(self.inventory_fetch))
                 return True
             if path == '/api/aps/map':
+                self._require_submodule('aps', 'map', 'inventory.read')
                 self._send_json(inventory.ap_map_positions())
                 return True
             if path.startswith('/api/inventory/documents/'):
@@ -408,6 +442,7 @@ class AccessRoutes:
                 self._send_json({"events": events[:400]})
                 return True
             if path == "/api/support/longest-connected":
+                self._require_submodule('soporte', 'live', 'dashboard.read')
                 if self.identity["user"]["role"] not in ("soporte", "admin", "super-admin"):
                     raise AccessError(403, "No tienes permiso para acceder a esta sección.")
                 query_params = parse_qs(urlsplit(self.path).query)
@@ -424,6 +459,8 @@ class AccessRoutes:
                 return True
             normal = {"/api/idfs", "/api/reports", "/api/ips", "/api/devices", "/api/devices/summary", "/api/devices/export", "/api/health", "/api/ip", "/api/forti/network/dhcp-pools", "/api/forti/network/dhcp-leases", "/api/altas/omnivista", "/api/aps/omnivista"}
             if path in normal:
+                if path == '/api/aps/omnivista':
+                    self._require_submodule('aps', 'live', 'inventory.read')
                 return False
             if path.startswith("/api/reports/evidence/"):
                 self._require_pages(("idf", "bitacora-idf"), "activity.read")
@@ -467,6 +504,34 @@ class AccessRoutes:
                 self.save_mobile_report(self._body(), self.client_address[0])
                 return True
             self._authorize(mutation=True)
+            if path == '/api/support/inventory/quantity':
+                self._require_submodule('soporte', 'inventory', 'inventory.write')
+                body = self._body()
+                item_id, quantity, version = body.get('item_id'), body.get('quantity'), body.get('version')
+                reason = str(body.get('reason') or '').strip()
+                if not isinstance(item_id, str) or not isinstance(quantity, int) or isinstance(quantity, bool) or not 0 <= quantity <= 1000000 or not isinstance(version, int) or not reason or len(reason) > 500:
+                    raise AccessError(422, 'Indica la cantidad, versión y motivo de la corrección.')
+                with database(write=True) as db:
+                    item = db.execute('SELECT * FROM support_inventory WHERE id=? AND idf_id=?', (item_id, 'idf-3')).fetchone()
+                    if not item:
+                        raise AccessError(404, 'El artículo no existe en el inventario IDF 3.')
+                    if item['version'] != version:
+                        raise AccessError(409, 'La cantidad cambió. Actualiza el inventario antes de modificarla.')
+                    db.execute('UPDATE support_inventory SET quantity=?, version=version+1 WHERE id=?', (quantity, item_id))
+                    db.execute('''INSERT INTO support_inventory_adjustments
+                        (inventory_id,before_quantity,after_quantity,delta,reason,actor_id,actor_name,created_at)
+                        VALUES (?,?,?,?,?,?,?,?)''', (item_id, item['quantity'], quantity, quantity-item['quantity'],
+                        reason, self.identity['user']['id'], self.identity['user']['name'], datetime.now(timezone.utc).isoformat()))
+                    audit(db, self.identity['user']['id'], 'support.inventory.corrected', item_id)
+                    updated = dict(db.execute('SELECT * FROM support_inventory WHERE id=?', (item_id,)).fetchone())
+                self._send_json({'status': 'success', 'item': updated})
+                return True
+            if path == '/api/support/movements':
+                self._require_submodule('soporte', 'log', 'activity.read')
+                if self.identity['user']['role'] != 'soporte':
+                    raise AccessError(403, 'Solo una cuenta de soporte puede registrar retiros.')
+                self.save_support_movement(self._body())
+                return True
             actor = self.identity["user"]["id"]
             if path.startswith(("/api/inventory/", "/api/inventarios/")):
                 self._require_pages(("idf", "aps", "cctv"), "inventory.read")
@@ -495,11 +560,13 @@ class AccessRoutes:
                 self._send_json(inventory.save_asset(self._body(), actor))
                 return True
             if path == '/api/aps/map/save':
+                self._require_submodule('aps', 'map', 'inventory.write')
                 if 'inventory.write' not in self.identity['capabilities']:
                     raise AccessError(403, 'No tienes permiso para ubicar puntos de acceso en el plano.')
                 self._send_json(inventory.save_ap_map_position(self._body(), actor))
                 return True
             if path == '/api/aps/map/remove':
+                self._require_submodule('aps', 'map', 'inventory.write')
                 if 'inventory.write' not in self.identity['capabilities']:
                     raise AccessError(403, 'No tienes permiso para retirar puntos de acceso del plano.')
                 self._send_json(inventory.remove_ap_map_position(self._body(), actor))
@@ -549,6 +616,9 @@ class AccessRoutes:
             if path in ("/api/ips/update", "/api/idfs/device") and "inventory.write" in self.identity["capabilities"]:
                 if path == "/api/idfs/device":
                     self._require_pages(("idf",), "inventory.write")
+                return False
+            if path == "/api/altas/concession":
+                self._require_pages(("altas",), "inventory.read")
                 return False
             raise AccessError(403, "No tienes permiso para realizar esta operación.")
         except AccessError as exc:

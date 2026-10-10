@@ -3,7 +3,7 @@ import { Users, UserPlus, ShieldCheck, Eye, Settings2, PlugZap, Save, RefreshCw,
 import { Badge, Button, DataTable, Dialog, Field, Loading, Notice, SearchField, SecretInput, Select, useListState } from './components.jsx';
 import { PageHeading } from './pages.jsx';
 import { useForm } from './forms.jsx';
-import { roleLabel, request, dateTime, AVAILABLE_PAGES, ROLE_PAGE_DEFAULTS, BASE_ROLE_CATALOG, getEffectiveRoles, usersForDemo, projectUsersForActor, countUsersForRoleCard, getCardRoles, getUserFilterRoles } from './domain.mjs';
+import { roleLabel, request, dateTime, AVAILABLE_PAGES, SUBMODULES, defaultSubmodules, ROLE_PAGE_DEFAULTS, BASE_ROLE_CATALOG, getEffectiveRoles, usersForDemo, projectUsersForActor, countUsersForRoleCard, getCardRoles, getUserFilterRoles } from './domain.mjs';
 import { useSession } from './session.jsx';
 
 export const BASE_ROLES = BASE_ROLE_CATALOG;
@@ -53,20 +53,33 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
     if (Array.isArray(row?.allowed_pages)) return row.allowed_pages;
     return ROLE_PAGE_DEFAULTS[initialRole] || [];
   });
+  const [allowedSubmodules, setAllowedSubmodules] = useState(() => Array.isArray(row?.allowed_submodules)
+    ? row.allowed_submodules : defaultSubmodules(row?.allowed_pages || ROLE_PAGE_DEFAULTS[initialRole] || []));
 
   const togglePage = pageId => {
     if (!isSuperAdmin) return;
-    setAllowedPages(prev => {
-      const next = prev.includes(pageId) ? prev.filter(p => p !== pageId) : [...prev, pageId];
-      f.change('confirmed', false);
-      onDirty?.(true);
-      return next;
-    });
+    const selected = allowedPages.includes(pageId);
+    setAllowedPages(prev => selected ? prev.filter(p => p !== pageId) : [...prev, pageId]);
+    setAllowedSubmodules(current => selected
+      ? current.filter(item => !item.startsWith(`${pageId}:`))
+      : [...new Set([...current, ...(SUBMODULES[pageId] || []).map(tab => `${pageId}:${tab.id}`)])]);
+    f.change('confirmed', false);
+    onDirty?.(true);
+  };
+  const toggleSubmodule = (pageId, tabId) => {
+    if (!isSuperAdmin) return;
+    const key = `${pageId}:${tabId}`;
+    const next = allowedSubmodules.includes(key) ? allowedSubmodules.filter(item => item !== key) : [...allowedSubmodules, key];
+    if (!next.some(item => item.startsWith(`${pageId}:`))) return;
+    setAllowedSubmodules(next);
+    f.change('confirmed', false);
+    onDirty?.(true);
   };
 
   const selectAllPages = () => {
     if (!isSuperAdmin) return;
     setAllowedPages(AVAILABLE_PAGES.map(p => p.id));
+    setAllowedSubmodules(defaultSubmodules(AVAILABLE_PAGES.map(p => p.id)));
     f.change('confirmed', false);
     onDirty?.(true);
   };
@@ -74,6 +87,7 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
   const deselectAllPages = () => {
     if (!isSuperAdmin) return;
     setAllowedPages([]);
+    setAllowedSubmodules([]);
     f.change('confirmed', false);
     onDirty?.(true);
   };
@@ -81,6 +95,7 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
   const loadRoleDefaults = () => {
     if (!isSuperAdmin) return;
     setAllowedPages(ROLE_PAGE_DEFAULTS[f.values.role] || []);
+    setAllowedSubmodules(defaultSubmodules(ROLE_PAGE_DEFAULTS[f.values.role] || []));
     f.change('confirmed', false);
     onDirty?.(true);
   };
@@ -89,8 +104,10 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
     const payload = { ...values };
     if (isSuperAdmin) {
       payload.allowed_pages = allowedPages;
+      payload.allowed_submodules = allowedSubmodules;
     } else {
       delete payload.allowed_pages;
+      delete payload.allowed_submodules;
       delete payload.is_hidden;
     }
     return save(payload);
@@ -125,6 +142,7 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
     f.change('confirmed', false);
     if (key === 'role' && !row) {
       setAllowedPages(ROLE_PAGE_DEFAULTS[value] || []);
+      setAllowedSubmodules(defaultSubmodules(ROLE_PAGE_DEFAULTS[value] || []));
     }
   };
 
@@ -158,20 +176,18 @@ function UserForm({ row, save, cancel, onDirty, currentId }) {
         <div className="modular-pages-grid">
           {AVAILABLE_PAGES.map(page => {
             const checked = allowedPages.includes(page.id);
-            return (
-              <label
-                key={page.id}
-                className={`modular-page-item ${checked ? 'is-selected' : ''} ${!isSuperAdmin ? 'is-disabled' : ''}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={!isSuperAdmin}
-                  onChange={() => togglePage(page.id)}
-                />
+            return <div key={page.id} className={`modular-page-group ${checked ? 'is-selected' : ''}`}>
+              <label className={`modular-page-item ${checked ? 'is-selected' : ''}`}>
+                <input type="checkbox" checked={checked} onChange={() => togglePage(page.id)} />
                 <span>{page.label}</span>
               </label>
-            );
+              {checked && SUBMODULES[page.id] && <div className="modular-submodule-list" aria-label={`Pestañas de ${page.label}`}>
+                {SUBMODULES[page.id].map(tab => <label key={tab.id} className="modular-submodule-item">
+                  <input type="checkbox" checked={allowedSubmodules.includes(`${page.id}:${tab.id}`)} onChange={() => toggleSubmodule(page.id, tab.id)} />
+                  <span>{tab.label}</span>
+                </label>)}
+              </div>}
+            </div>;
           })}
         </div>
       </div>}

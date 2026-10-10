@@ -10,6 +10,9 @@ test('isLocalOrPrivateHost reconoce localhost, red privada y nombres locales', (
   assert.equal(isLocalOrPrivateHost('192.168.38.250'), true);
   assert.equal(isLocalOrPrivateHost('192.168.1.100'), true);
   assert.equal(isLocalOrPrivateHost('10.0.1.5'), true);
+  assert.equal(isLocalOrPrivateHost('15.40.0.1'), true);
+  assert.equal(isLocalOrPrivateHost('15.40.1.10'), true);
+  assert.equal(isLocalOrPrivateHost('15.40.255.254'), true);
   assert.equal(isLocalOrPrivateHost('172.16.0.1'), true);
   assert.equal(isLocalOrPrivateHost('172.31.255.254'), true);
   assert.equal(isLocalOrPrivateHost('169.254.1.1'), true);
@@ -21,6 +24,8 @@ test('isLocalOrPrivateHost reconoce localhost, red privada y nombres locales', (
   assert.equal(isLocalOrPrivateHost('172.15.0.1'), false);
   assert.equal(isLocalOrPrivateHost('172.32.0.1'), false);
   assert.equal(isLocalOrPrivateHost('8.8.8.8'), false);
+  assert.equal(isLocalOrPrivateHost('15.39.255.254'), false);
+  assert.equal(isLocalOrPrivateHost('15.41.0.1'), false);
   assert.equal(isLocalOrPrivateHost('dashboard.example.com'), false);
   assert.equal(isLocalOrPrivateHost(''), false);
   assert.equal(isLocalOrPrivateHost(null), false);

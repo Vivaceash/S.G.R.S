@@ -25,6 +25,16 @@ export const AVAILABLE_PAGES = [
   { id: 'usuarios', label: 'Usuarios y privilegios' },
   { id: 'conexiones', label: 'Conexiones API' },
 ];
+export const SUBMODULES = {
+  soporte: [{ id: 'live', label: 'En vivo' }, { id: 'log', label: 'Bitácora de soporte' }, { id: 'inventory', label: 'Inventario soporte IDF 3' }],
+  aps: [{ id: 'live', label: 'En vivo (OmniVista)' }, { id: 'documentary', label: 'Catálogo documental' }, { id: 'map', label: 'Mapa físico' }],
+  cctv: [{ id: 'updated', label: 'Actualizadas' }, { id: 'original', label: 'Originales' }],
+  idf: [{ id: 'activity', label: 'Bitácora' }, { id: 'inventory', label: 'Inventario' }, { id: 'qr', label: 'Código QR' }],
+  altas: [{ id: 'oficios', label: 'Próximos a dar de baja' }, { id: 'all', label: 'Todas las cuentas' }],
+  disponibilidad: [{ id: 'list', label: 'Lista de direcciones' }, { id: 'matrix', label: 'Matriz de direcciones' }],
+};
+export const defaultSubmodules = pages => Object.entries(SUBMODULES).flatMap(([page, tabs]) => pages.includes(page) ? tabs.map(tab => `${page}:${tab.id}`) : []);
+export const canViewSubmoduleId = (page, tab, pages, submodules) => Array.isArray(pages) && pages.includes(page) && (!Array.isArray(submodules) || submodules.includes(`${page}:${tab}`));
 
 export const BASE_ROLE_CATALOG = [
   { id: 'soporte', title: 'Soporte', description: 'Atención y diagnóstico técnico: consulta de dispositivos, fichas técnicas y DHCP.' },
@@ -549,6 +559,8 @@ export function isLocalOrPrivateHost(hostname) {
     const [a, b] = parts.map(Number);
     if (a === 127) return true;
     if (a === 10) return true;
+    // Red institucional autorizada por el gateway mediante SGRS_LAN_CLIENT_CIDRS.
+    if (a === 15 && b === 40) return true;
     if (a === 172 && b >= 16 && b <= 31) return true;
     if (a === 192 && b === 168) return true;
     if (a === 169 && b === 254) return true;
@@ -569,7 +581,7 @@ export async function request(path, { signal, body } = {}) {
   });
   if (!response.ok) {
     if (response.status === 401 && !path.startsWith('/api/auth/')) window.dispatchEvent(new Event('sgrs-session-expired'));
-    const local = path.startsWith('/api/admin/') || path.startsWith('/api/auth/') || path.startsWith('/api/dashboard/') || path.startsWith('/api/inventory/') || path.startsWith('/api/reports');
+    const local = path.startsWith('/api/admin/') || path.startsWith('/api/auth/') || path.startsWith('/api/dashboard/') || path.startsWith('/api/inventory/') || path.startsWith('/api/support/') || path.startsWith('/api/reports') || path.startsWith('/api/altas/');
     const payload = await response.json().catch(() => ({}));
     throw new ApiError(response.status, local && response.status < 500 && typeof payload.error === 'string' ? payload.error : undefined);
   }

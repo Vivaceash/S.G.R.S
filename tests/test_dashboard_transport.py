@@ -88,6 +88,25 @@ def test_configured_institutional_cidr_can_use_lan_http(monkeypatch):
     route._boundary(mutation=False)
 
 
+@pytest.mark.parametrize('peer', ['15.40.0.1', '15.40.1.57', '15.40.255.254'])
+def test_any_15_40_client_can_open_current_qr_host(monkeypatch, peer):
+    monkeypatch.setenv('SGRS_LAN_ORIGIN', 'http://15.40.1.10:3000')
+    monkeypatch.setenv('SGRS_LAN_CLIENT_CIDRS', '15.40.0.0/16')
+    route = handler(monkeypatch, peer=peer, host='15.40.1.10:3000',
+                    origin='http://15.40.1.10:3000', path='/api/auth/login')
+    route._boundary(mutation=True)
+
+
+@pytest.mark.parametrize('peer', ['15.39.255.254', '15.41.0.1'])
+def test_adjacent_networks_are_not_covered_by_15_40_rule(monkeypatch, peer):
+    monkeypatch.setenv('SGRS_LAN_ORIGIN', 'http://15.40.1.10:3000')
+    monkeypatch.setenv('SGRS_LAN_CLIENT_CIDRS', '15.40.0.0/16')
+    route = handler(monkeypatch, peer=peer, host='15.40.1.10:3000',
+                    origin='http://15.40.1.10:3000', path='/api/auth/login')
+    with pytest.raises(AccessError, match='HTTPS'):
+        route._boundary(mutation=True)
+
+
 def test_unconfigured_public_client_remains_rejected(monkeypatch):
     monkeypatch.setenv("SGRS_LAN_ORIGIN", "http://192.168.38.250:3000")
     monkeypatch.setenv("SGRS_LAN_CLIENT_CIDRS", "15.40.0.0/16")

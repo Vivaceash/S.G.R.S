@@ -4,6 +4,7 @@ import { Badge, Button, DataTable, Dialog, Field, Loading, Metric, Notice, Searc
 import { PageHeading } from './pages.jsx';
 import { useForm } from './forms.jsx';
 import { dateTime, number, request, selectRows } from './domain.mjs';
+import { useSession } from './session.jsx';
 import plantaBaja from './assets/visuals/PLANTA_BAJA_FINAL.png';
 import piso1 from './assets/visuals/PISO1_FINAL.png';
 import piso2 from './assets/visuals/PISO2_FINAL.png';
@@ -110,22 +111,100 @@ function AssetForm({ asset, cabinets, onSave, onDirty, onBusy, onCancel }) {
     return errors;
   }, onSave, onDirty);
   useEffect(() => { onBusy(form.busy); return () => onBusy(false); }, [form.busy, onBusy]);
-  const field = (key, label) => <Field key={key} label={label} error={form.errors[key]} required={key === 'name'}><input value={form.values[key]} maxLength={240} onChange={e => form.change(key, e.target.value)} /></Field>;
-  return <form noValidate ref={form.form} onSubmit={form.submit} aria-busy={form.busy}>
-    <Notice title="Corrección del inventario físico">La fuente original se conserva. Las direcciones IP y el estado actual provienen del cotejo con las APIs.</Notice>
+  const field = (key, label, className = '') => <div className={className}><Field key={key} label={label} error={form.errors[key]} required={key === 'name'}><input value={form.values[key]} maxLength={240} onChange={e => form.change(key, e.target.value)} /></Field></div>;
+  return <form noValidate ref={form.form} onSubmit={form.submit} aria-busy={form.busy} className="asset-form-container">
+    <div className="asset-form-hero">
+      <div>
+        <span className="asset-form-hero-badge">{camera ? 'CCTV · Cámara' : 'Dispositivo de Red'}</span>
+        <div className="asset-form-hero-title">Ajuste de Atributos Físicos y Ubicación</div>
+        <p className="asset-form-hero-desc">La fuente documental original se preserva como respaldo histórico. Los cambios actualizan el registro activo en catálogo.</p>
+      </div>
+    </div>
     {form.error && <Notice title={form.uncertain ? 'Guardado sin confirmar' : 'No se pudo guardar'} tone="danger">{form.error}</Notice>}
-    <fieldset disabled={form.busy || form.uncertain}><div className="form-grid">
-      {field('name', 'Descripción')}
-      <Field label="Gabinete" error={form.errors.idf_id}><select value={form.values.idf_id} onChange={e => form.change('idf_id', e.target.value)}><option value="">Sin asignar</option>{cabinets.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
-      {field('location', 'Ubicación física')}{field('rack', 'Rack')}{field('ports', 'Puertos / Capacidad')}
-      {camera && <><Field label="Estado de la cámara"><select value={String(form.values.decommissioned)} onChange={e => form.change('decommissioned', e.target.value === 'true')}><option value="false">Activa en inventario</option><option value="true">Retirada / desactivada</option></select></Field><Field label="Reubicación"><select value={String(form.values.relocated)} onChange={e => form.change('relocated', e.target.value === 'true')}><option value="false">Sin reubicación confirmada</option><option value="true">Reubicada</option></select></Field>{field('destination', 'Destino de reubicación')}</>}
-      <div className="col-span-full"><Field label="Notas de la corrección"><textarea className="resize-none" rows={3} maxLength={1000} value={form.values.notes} onChange={e => form.change('notes', e.target.value)} /></Field></div>
-    </div></fieldset>
-    <div className="form-actions"><Button onClick={onCancel} disabled={form.busy}>Cancelar</Button><Button type="submit" variant="primary" icon={Save} busy={form.busy} disabled={form.uncertain}>Guardar corrección</Button></div>
+    <fieldset disabled={form.busy || form.uncertain} style={{ border: 0, padding: 0, margin: 0 }}>
+      <div style={{ display: 'grid', gap: '16px' }}>
+        <div className="asset-form-card">
+          <div className="asset-form-card-header">
+            <Server size={17} strokeWidth={2} />
+            <h3>Identificación y Ubicación</h3>
+          </div>
+          <div className="asset-form-grid">
+            {field('name', 'Descripción / Nombre', 'col-span-full')}
+            <Field label="Gabinete / IDF" error={form.errors.idf_id}>
+              <select value={form.values.idf_id} onChange={e => form.change('idf_id', e.target.value)}>
+                <option value="">Sin asignar</option>
+                {cabinets.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+            {field('location', 'Ubicación física')}
+            {!camera && <>
+              {field('rack', 'Rack')}
+              {field('ports', 'Puertos / Capacidad')}
+            </>}
+          </div>
+        </div>
+
+        {camera && (
+          <div className="asset-form-card">
+            <div className="asset-form-card-header">
+              <Camera size={17} strokeWidth={2} />
+              <h3>Estado Operativo y Reubicación</h3>
+            </div>
+            <div className="asset-form-grid">
+              <Field label="Estado en inventario">
+                <select value={String(form.values.decommissioned)} onChange={e => form.change('decommissioned', e.target.value === 'true')}>
+                  <option value="false">Activa en inventario</option>
+                  <option value="true">Retirada / Desactivada</option>
+                </select>
+              </Field>
+              <Field label="Condición de reubicación">
+                <select value={String(form.values.relocated)} onChange={e => {
+                  const isRelocated = e.target.value === 'true';
+                  form.change('relocated', isRelocated);
+                  if (!isRelocated) form.change('destination', '');
+                }}>
+                  <option value="false">En ubicación asignada</option>
+                  <option value="true">Reubicada físicamente</option>
+                </select>
+              </Field>
+              {form.values.relocated && (
+                <div className="col-span-full">
+                  {field('destination', 'Destino o nueva ubicación física')}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="asset-form-card">
+          <div className="asset-form-card-header">
+            <MapPin size={17} strokeWidth={2} />
+            <h3>Observaciones Técnicas y Bitácora</h3>
+          </div>
+          <div className="asset-form-grid">
+            <div className="col-span-full">
+              <Field label="Notas de la corrección">
+                <textarea className="resize-none" rows={3} maxLength={1000} placeholder="Detalles de la verificación física o motivo de la actualización..." value={form.values.notes} onChange={e => form.change('notes', e.target.value)} />
+              </Field>
+            </div>
+          </div>
+        </div>
+      </div>
+    </fieldset>
+    <div className="form-actions" style={{ marginTop: '4px' }}>
+      <Button onClick={onCancel} disabled={form.busy}>Cancelar</Button>
+      <Button type="submit" variant="primary" icon={Save} busy={form.busy} disabled={form.uncertain}>Guardar corrección</Button>
+    </div>
   </form>;
 }
 
 export function DocumentaryInventory({ route, demo, navigate, canWrite, canExport, canViewActivity, mutate, notify, onDirty, openEditor, data }) {
+  const { canViewSubmodule } = useSession();
+  const apLive = canViewSubmodule('aps', 'live');
+  const apDocumentary = canViewSubmodule('aps', 'documentary');
+  const apMap = canViewSubmodule('aps', 'map');
+  const cctvUpdated = canViewSubmodule('cctv', 'updated');
+  const cctvOriginal = canViewSubmodule('cctv', 'original');
   const [catalog, setCatalog] = useState(emptyCatalog);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -141,10 +220,12 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   const generation = useRef(0);
   const state = useListState(`documentos-${route}`);
   const defaultDataset = route === 'cctv' ? 'cctv' : route === 'aps' ? 'ap' : 'idf';
-  const dataset = route === 'cctv' && state.filters.dataset === 'cctv_original' ? 'cctv_original' : defaultDataset;
+  const dataset = route === 'cctv' && ((state.filters.dataset === 'cctv_original' && cctvOriginal) || !cctvUpdated) ? 'cctv_original' : defaultDataset;
 
   // Estado y telemetría en vivo para Access Points vía OmniVista
   const [activeTab, setActiveTab] = useState('omnivista');
+  const visibleActiveTab = (activeTab === 'omnivista' && apLive) || (activeTab === 'documentary' && apDocumentary) || (activeTab === 'map' && apMap)
+    ? activeTab : apLive ? 'omnivista' : apDocumentary ? 'documentary' : 'map';
   const [omniAps, setOmniAps] = useState([]);
   const [omniSummary, setOmniSummary] = useState({ total: 0, online: 0, offline: 0, clients: 0 });
   const [omniLoading, setOmniLoading] = useState(false);
@@ -167,7 +248,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   }, [route, omniState.filters.status]);
 
   useEffect(() => {
-    if (route !== 'aps') return;
+    if (route !== 'aps' || !apLive) return;
     if (demo) {
       const demoList = data?.aps || [];
       setOmniAps(demoList);
@@ -229,9 +310,9 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
       window.clearInterval(timer);
       window.removeEventListener('visibilitychange', onVisible);
     };
-  }, [route, demo, data, omniRevision]);
+  }, [route, demo, data, omniRevision, apLive]);
   useEffect(() => {
-    if (route !== 'aps' || activeTab !== 'map') return;
+    if (route !== 'aps' || visibleActiveTab !== 'map') return;
     if (demo) { setMapLoading(false); setMapError(''); return; }
     let active = true;
     setMapLoading(true); setMapError('');
@@ -240,10 +321,11 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
     }).catch(err => { if (active) setMapError(err.message || 'No se pudieron cargar las ubicaciones del mapa.'); })
       .finally(() => { if (active) setMapLoading(false); });
     return () => { active = false; };
-  }, [route, activeTab, demo]);
+  }, [route, visibleActiveTab, demo]);
   useEffect(() => {
     setNetwork(null); setNetworkError('');
     if (demo) { setCatalog(demoCatalog()); setError(''); setLoading(false); return; }
+    if (route === 'aps' && !apDocumentary && !apMap) { setLoading(false); return; }
     const controller = new AbortController(); let active = true;
     setLoading(true); setError('');
     const timer = setTimeout(() => controller.abort(), 12000);
@@ -251,7 +333,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
       if (active && !controller.signal.aborted) setCatalog(result);
     }).catch(e => { if (active) setError(e.name === 'AbortError' ? 'La consulta tardó demasiado. Vuelve a intentar.' : e.message); }).finally(() => { clearTimeout(timer); if (active) setLoading(false); });
     return () => { active = false; controller.abort(); clearTimeout(timer); };
-  }, [demo, revision]);
+  }, [demo, revision, route, apDocumentary, apMap]);
   useEffect(() => () => { generation.current++; requestRef.current?.abort(); }, []);
   const markDirty = value => { setDirty(value); onDirty(value); };
   const close = () => { if (busy) return; if (dirty) setDiscard(true); else setModal(null); };
@@ -299,7 +381,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
     ...(route === 'cctv' ? [{ key: 'lifecycle', label: 'Inventario', render: a => <span className={a.decommissioned ? 'camera-state is-decommissioned' : 'camera-state'}><i />{a.lifecycle}</span> }] : []),
     { key: 'actions', label: 'Acciones', sortable: false, render: a => <div className="camera-actions"><Button onClick={() => setModal({ type: 'detail', asset: a })}>Ver ficha</Button>{route === 'cctv' && canWrite && a.dataset !== 'cctv_original' && <button type="button" className={`camera-power ${a.decommissioned ? 'is-on' : ''}`} onClick={() => toggleCamera(a)} aria-label={a.decommissioned ? `Activar ${a.name}` : `Marcar ${a.name} como retirada`} title={a.decommissioned ? 'Reactivar en inventario' : 'Marcar como retirada / desactivada'}><Power size={15} /></button>}</div> }];
   const columns = route === 'cctv'
-    ? allColumns.filter(column => ['name', 'idf', 'location', 'model', 'documented_ip', 'current_ip', 'vlan_id', 'status', 'lifecycle', 'actions'].includes(column.key))
+    ? allColumns.filter(column => ['name', 'idf', 'location', 'model', 'documented_ip', 'lifecycle', 'actions'].includes(column.key))
     : allColumns;
   const tableFilters = { ...state.filters, ...(dataset === 'cctv_original' ? { relocation: '', decommissioned: '' } : {}) };
   const exportRows = selectRows(rows, state.query, tableFilters, state.sort, state.asc);
@@ -330,50 +412,50 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   return <>
     {route === 'aps' && (
       <nav className="inventory-tabs" role="tablist" aria-label="Modo de consulta de Access Points">
-        <button
+        {apLive && <button
           type="button"
           role="tab"
-          aria-selected={activeTab === 'omnivista'}
-          className={activeTab === 'omnivista' ? 'active' : ''}
+          aria-selected={visibleActiveTab === 'omnivista'}
+          className={visibleActiveTab === 'omnivista' ? 'active' : ''}
           onClick={() => setActiveTab('omnivista')}
         >
           <Wifi size={15} aria-hidden="true" />
           En vivo (OmniVista) · {omniLoading && !omniAps.length ? '…' : number(omniSummary.total || omniAps.length)}
-        </button>
-        <button
+        </button>}
+        {apDocumentary && <button
           type="button"
           role="tab"
-          aria-selected={activeTab === 'documentary'}
-          className={activeTab === 'documentary' ? 'active' : ''}
+          aria-selected={visibleActiveTab === 'documentary'}
+          className={visibleActiveTab === 'documentary' ? 'active' : ''}
           onClick={() => setActiveTab('documentary')}
         >
           <Server size={15} aria-hidden="true" />
           Catálogo documental · {number(rows.length)}
-        </button>
-        <button
+        </button>}
+        {apMap && <button
           type="button"
           role="tab"
-          aria-selected={activeTab === 'map'}
-          className={activeTab === 'map' ? 'active' : ''}
+          aria-selected={visibleActiveTab === 'map'}
+          className={visibleActiveTab === 'map' ? 'active' : ''}
           onClick={() => setActiveTab('map')}
         >
           <MapPin size={15} aria-hidden="true" />
           Mapa físico · {number(mapPositions.length)}
-        </button>
+        </button>}
       </nav>
     )}
     {route === 'cctv' && (
       <nav className="inventory-tabs" role="tablist" aria-label="Fuente del inventario CCTV">
-        <button type="button" role="tab" aria-selected={dataset === 'cctv'} className={dataset === 'cctv' ? 'active' : ''} onClick={() => state.setFilter('dataset', 'cctv')}>
+        {cctvUpdated && <button type="button" role="tab" aria-selected={dataset === 'cctv'} className={dataset === 'cctv' ? 'active' : ''} onClick={() => state.setFilter('dataset', 'cctv')}>
           <Camera size={15} aria-hidden="true" /> Actualizadas · {number(catalog.assets.filter(asset => asset.dataset === 'cctv').length)}
-        </button>
-        <button type="button" role="tab" aria-selected={dataset === 'cctv_original'} className={dataset === 'cctv_original' ? 'active' : ''} onClick={() => state.setFilter('dataset', 'cctv_original')}>
+        </button>}
+        {cctvOriginal && <button type="button" role="tab" aria-selected={dataset === 'cctv_original'} className={dataset === 'cctv_original' ? 'active' : ''} onClick={() => state.setFilter('dataset', 'cctv_original')}>
           <Server size={15} aria-hidden="true" /> Originales · {number(catalog.assets.filter(asset => asset.dataset === 'cctv_original').length)}
-        </button>
+        </button>}
       </nav>
     )}
 
-    {route === 'aps' && activeTab === 'omnivista' ? (
+    {route === 'aps' && visibleActiveTab === 'omnivista' ? (
       <>
         <PageHeading
           eyebrow="Red inalámbrica institucional · Monitoreo"
@@ -465,19 +547,19 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
           </Dialog>
         )}
       </>
-    ) : route === 'aps' && activeTab === 'map' ? (
+    ) : route === 'aps' && visibleActiveTab === 'map' ? (
       mapLoading ? <Loading /> : <><PhysicalApMap aps={omniAps} positions={mapPositions} setPositions={setMapPositions} canWrite={canWrite} demo={demo} notify={notify} />{mapError && <Notice title="No se pudieron cargar las ubicaciones" tone="danger" action={<Button onClick={() => setActiveTab('omnivista')}>Volver a la consulta en vivo</Button>}>{mapError}</Notice>}</>
     ) : (
       <>
-        <PageHeading eyebrow="Inventario físico y cotejo de red" title={title} description="Datos documentados, correcciones físicas y observaciones actuales de las APIs" updatedAt={catalog.imported_at} />
-        <Notice title="La documentación no acredita el estado actual">La IP y el estado observados se muestran solo cuando existe una coincidencia de identidad con las APIs. Un equipo sin coincidencia no se considera dado de baja.</Notice>
+        <PageHeading eyebrow={route === 'cctv' ? 'Inventario físico y cámaras' : 'Inventario físico y cotejo de red'} title={title} description={route === 'cctv' ? 'Datos documentados, estado operativo y correcciones físicas del sistema de videovigilancia' : 'Datos documentados, correcciones físicas y observaciones actuales de las APIs'} updatedAt={catalog.imported_at} />
+        {route !== 'cctv' && <Notice title="La documentación no acredita el estado actual">La IP y el estado observados se muestran solo cuando existe una coincidencia de identidad con las APIs. Un equipo sin coincidencia no se considera dado de baja.</Notice>}
         {route === 'cctv' ? <section className="metric-grid"><Metric icon={Camera} label="Cámaras documentadas" value={number(rows.length)} caption={dataset === 'cctv_original' ? 'catálogo histórico' : 'catálogo seleccionado'} /><Metric icon={Camera} tone="success" label="Cámaras activas" value={number(rows.filter(row => !row.decommissioned).length)} caption="disponibles en inventario" /><Metric icon={Power} tone={rows.some(row => row.decommissioned) ? 'danger' : 'neutral'} label="Retiradas / desactivadas" value={number(rows.filter(row => row.decommissioned).length)} caption="fuera de operación" /><Metric icon={MapPin} tone="info" label="Cámaras reubicadas" value={number(rows.filter(row => row.relocated).length)} caption="con destino documentado" /></section> : <section className="metric-grid"><Metric icon={route === 'aps' ? Wifi : Server} label="Registros documentados" value={number(rows.length)} caption="catálogo seleccionado" /><Metric icon={Server} label="Racks / Contenedores" value={number(rows.filter(r => r.kind === 'rack').length)} caption="separados de los equipos" /><Metric icon={TriangleAlert} label="Con observaciones de datos" value={number(rows.filter(r => r.issues?.length).length)} caption="revisar en la ficha" /><Metric icon={RefreshCw} label="Identidades cotejadas" value={number(rows.filter(r => ['matched', 'changed'].includes(network?.assets[r.id]?.comparison)).length)} caption="en la consulta de APIs" /></section>}
         <div className="toolbar">
           <Select label="Gabinete documental" value={state.filters.idf_id || ''} onChange={e => state.setFilter('idf_id', e.target.value)}><option value="">Todos los gabinetes</option>{catalog.cabinets.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select>
           {route === 'cctv' && dataset === 'cctv' && <Select label="Reubicación" value={state.filters.relocation || ''} onChange={e => state.setFilter('relocation', e.target.value)}><option value="">Todas</option><option>Reubicada</option><option>Por confirmar</option><option>Sin reubicación</option></Select>}
           {route === 'cctv' && dataset === 'cctv' && <button type="button" className={`camera-retired-filter ${state.filters.decommissioned === 'true' ? 'is-active' : ''}`} aria-pressed={state.filters.decommissioned === 'true'} onClick={() => state.setFilter('decommissioned', state.filters.decommissioned === 'true' ? '' : 'true')}><Power size={15} />Retiradas <b>{rows.filter(row => row.decommissioned).length}</b></button>}
           <SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar descripción, serie, MAC o ubicación…" />
-          {route === 'cctv' ? <Button icon={Download} disabled={!canExport || loading || Boolean(error) || !exportRows.length} onClick={() => downloadCsv(title, columns.filter(column => column.key !== 'actions'), exportRows)}>Exportar consulta</Button> : <><Button icon={RefreshCw} busy={loading} disabled={busy || checking} onClick={reload}>Actualizar catálogo</Button><Button variant="primary" busy={checking} disabled={demo || loading || Boolean(error) || !catalog.assets.length} onClick={check}>Cotejar APIs</Button></>}
+          {route === 'cctv' ? <Button icon={Download} disabled={!canExport || loading || Boolean(error) || !exportRows.length} onClick={() => downloadCsv(title, columns.filter(column => column.key !== 'actions'), exportRows)}>Exportar consulta</Button> : <Button variant="primary" busy={checking} disabled={demo || loading || Boolean(error) || !catalog.assets.length} onClick={check}>Cotejar APIs</Button>}
         </div>
         {networkError && <Notice title="No se pudo completar el cotejo" tone="warning">{networkError}</Notice>}
         {network && <Notice title={network.sources.every(s => s.available) ? 'Cotejo realizado' : 'Cotejo parcial · Fuentes no disponibles'} tone={network.sources.every(s => s.available) ? 'info' : 'warning'}>{network.sources.map(s => `${s.provider === 'forti' ? 'FortiGate' : 'OmniVista'}: ${s.available ? `${s.count} registros consultados` : 'no disponible'} · ${dateTime(s.observed_at)}`).join(' / ')}. {network.scope} {network.only_api.length} registros de API sin vínculo confirmado con el catálogo.</Notice>}
@@ -487,18 +569,43 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
         <Dialog open={Boolean(modal)} onClose={close} title={modal?.type === 'edit' ? 'Corregir datos físicos' : modal?.type === 'unlinked' ? 'API sin vínculo confirmado' : modal?.type === 'sources' ? 'Fuentes documentales' : 'Ficha del recurso'} wide busy={busy}>
           {discard && <Notice title="¿Descartar los cambios sin guardar?" tone="warning" action={<><Button autoFocus onClick={() => setDiscard(false)}>Seguir editando</Button><Button variant="danger" onClick={() => { markDirty(false); setDiscard(false); setModal(null); }}>Descartar</Button></>}>La fuente original y las correcciones guardadas se conservan.</Notice>}
           {modal?.type === 'edit' && <AssetForm key={selected.id} asset={selected} cabinets={catalog.cabinets} onSave={save} onDirty={markDirty} onBusy={setBusy} onCancel={close} />}
-          {modal?.type === 'detail' && <>
-            <dl className="detail-grid">{Object.entries({ Descripción: selected.name, Gabinete: selected.idf, Tipo: selected.kindLabel, Rack: selected.rack, Ubicación: selected.location, Modelo: selected.model, Serie: selected.serial, MAC: selected.mac, Puertos: selected.ports, 'IP documentada': selected.documented_ip, 'IP observada en API': selected.current_ip, Cotejo: selected.comparison, 'Última corrección': selected.corrected_at ? dateTime(selected.corrected_at) : 'Sin correcciones', Estado: selected.dataset === 'cctv' ? selected.lifecycle : 'No aplica', Reubicación: selected.dataset === 'cctv' ? selected.relocation : 'No aplica', Destino: selected.destination, Fuente: selected.sourceText }).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value || 'No informado'}</dd></div>)}</dl>
+          {modal?.type === 'detail' && <div className="detail-view-container">
+            <div className="detail-view-header">
+              <div className="detail-view-header-title">
+                <strong>{selected.name || 'Recurso sin descripción'}</strong>
+                <small>{selected.dataset === 'cctv' ? 'CCTV · Cámara de videovigilancia' : selected.kindLabel || 'Dispositivo de red'} · {selected.idf || 'Gabinete no asignado'}</small>
+              </div>
+              <Badge status={selected.dataset === 'cctv' ? (selected.decommissioned ? 'offline' : 'online') : (selected.comparison === 'matched' ? 'online' : 'unknown')}>
+                {selected.dataset === 'cctv' ? (selected.decommissioned ? 'Retirada' : 'Activa') : selected.comparison}
+              </Badge>
+            </div>
+            <dl className="detail-grid">{Object.entries({
+              Gabinete: selected.idf,
+              Tipo: selected.kindLabel,
+              ...(selected.dataset === 'cctv' ? {} : { Rack: selected.rack, Puertos: selected.ports }),
+              Ubicación: selected.location,
+              Modelo: selected.model,
+              Serie: selected.serial,
+              MAC: selected.mac,
+              'IP documentada': selected.documented_ip,
+              'IP observada en API': selected.current_ip,
+              Cotejo: selected.comparison,
+              'Última corrección': selected.corrected_at ? dateTime(selected.corrected_at) : 'Sin correcciones',
+              Estado: selected.dataset === 'cctv' ? selected.lifecycle : 'No aplica',
+              Reubicación: selected.dataset === 'cctv' ? selected.relocation : 'No aplica',
+              Destino: selected.destination,
+              Fuente: selected.sourceText
+            }).map(([key, value]) => <div key={key}><dt>{key}</dt><dd className={['MAC', 'Serie', 'IP documentada', 'IP observada en API'].includes(key) ? 'font-mono' : ''}>{value || 'No informado'}</dd></div>)}</dl>
             {selected.issuesText && <Notice title="Observaciones de la fuente" tone="warning">{selected.issuesText}</Notice>}
             {selected.documented && selected.corrected_at && <Notice title="Valores originales conservados">Ubicación: {selected.documented.location || 'no informada'}. Gabinete: {selected.documented.idf_id || 'sin asignar'}. Destino: {selected.documented.destination || 'no informado'}.</Notice>}
             {(network?.assets[selected.id]?.observations || []).map((o, i) => <Notice key={i} title={`Observación de ${o.provider}`}>IP: {o.ip || 'no informada'} · Estado: {o.status} · Interfaz: {o.interface || 'no informada'} · {dateTime(o.observed_at)}</Notice>)}
-            {catalog.observations.filter(o => o.idf_id === selected.idf_id).length > 0 && <><h3>Observaciones históricas del gabinete</h3><ul>{catalog.observations.filter(o => o.idf_id === selected.idf_id).map((o, i) => <li key={i}>{o.text}</li>)}</ul></>}
-            <div className="form-actions">
+            {catalog.observations.filter(o => o.idf_id === selected.idf_id).length > 0 && <div className="detail-history-box"><h3>Observaciones históricas del gabinete</h3><ul>{catalog.observations.filter(o => o.idf_id === selected.idf_id).map((o, i) => <li key={i}>{o.text}</li>)}</ul></div>}
+            <div className="form-actions" style={{ marginTop: '8px' }}>
               {canViewActivity && data.idfs.some(c => c.id === selected.idf_id) && <Button onClick={() => { setModal(null); openEditor('qr', data.idfs.find(c => c.id === selected.idf_id)); }}>Código QR del gabinete</Button>}
               {canWrite && selected.dataset === 'cctv' && <Button icon={Power} variant={selected.decommissioned ? 'primary' : 'danger'} onClick={() => toggleCamera(selected)}>{selected.decommissioned ? 'Activar en inventario' : 'Marcar como retirada'}</Button>}
               {canWrite && selected.dataset !== 'cctv_original' && <Button variant="primary" onClick={() => setModal({ type: 'edit', asset: selected })}>Corregir datos físicos</Button>}
             </div>
-          </>}
+          </div>}
           {modal?.type === 'unlinked' && <Unlinked rows={network?.only_api || []} canExport={canExport} />}
           {modal?.type === 'sources' && <Sources catalog={catalog} canExport={canExport && !demo} />}
         </Dialog>
