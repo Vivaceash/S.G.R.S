@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { LogIn, ShieldCheck } from 'lucide-react';
 import { Button, Field, Loading, Notice, SecretInput } from './components.jsx';
 import { useForm } from './forms.jsx';
-import { request, setCsrfToken, ROLE_PAGE_DEFAULTS, roleLabel, BASE_ROLE_CATALOG, getEffectiveRoles, canViewPageId, clearIdfViewSession } from './domain.mjs';
+import { request, setCsrfToken, ROLE_PAGE_DEFAULTS, roleLabel, BASE_ROLE_CATALOG, getEffectiveRoles, canViewPageId, canViewSubmoduleId, defaultSubmodules, clearIdfViewSession } from './domain.mjs';
 
 const SessionContext = createContext(null);
 export const useSession = () => useContext(SessionContext);
@@ -135,6 +135,7 @@ export function SessionProvider({ children }) {
     },
     capabilities: demoCapabilities,
     allowed_pages: activeDemoPages,
+    allowed_submodules: defaultSubmodules(activeDemoPages),
   };
 
   const current = demo ? computedDemo : identity;
@@ -145,6 +146,8 @@ export function SessionProvider({ children }) {
     || ROLE_PAGE_DEFAULTS.admin;
 
   const canViewPage = pageId => canViewPageId(pageId, allowedPages);
+  const allowedSubmodules = current?.allowed_submodules || current?.user?.allowed_submodules || defaultSubmodules(allowedPages);
+  const canViewSubmodule = (page, tab) => canViewSubmoduleId(page, tab, allowedPages, allowedSubmodules);
 
   const sessionRoles = getEffectiveRoles(current?.roles);
 
@@ -153,7 +156,10 @@ export function SessionProvider({ children }) {
     user: current?.user,
     allowedPages,
     allowed_pages: allowedPages,
+    allowedSubmodules,
+    allowed_submodules: allowedSubmodules,
     canViewPage,
+    canViewSubmodule,
     roles: sessionRoles,
     demo,
     setDemo,

@@ -304,10 +304,15 @@ def test_support_longest_connected_endpoint_permissions(tmp_path, monkeypatch):
     assert len(payload) == 1
     assert payload[0]["mac"] == "AA:BB:CC:DD:EE:01"
 
-    # 3. Role 'admin' is allowed (200)
+    # 3. An admin needs the Support page and its live tab explicitly assigned.
     h_admin = Boundary()
     h_admin.path = "/api/support/longest-connected"
     h_admin.identity = {"user": {"role": "admin", "id": "a-1"}, "capabilities": access.capabilities("admin")}
+    assert h_admin.access_get() is True
+    code, payload = h_admin.response
+    assert code == 403
+    h_admin.identity["allowed_pages"] = ["soporte"]
+    h_admin.identity["allowed_submodules"] = ["soporte:live"]
     assert h_admin.access_get() is True
     code, payload = h_admin.response
     assert code == 200

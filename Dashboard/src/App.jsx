@@ -29,6 +29,7 @@ import {
   Radio,
   Camera,
   Headset,
+  Package,
 } from "lucide-react";
 import {
   Badge,
@@ -50,6 +51,8 @@ import {
   PageHeading,
   Requests,
   SupportDashboard,
+  SupportInventory,
+  SupportMovements,
 } from "./pages.jsx";
 import { EditForm, EntryForm, ResolveReport } from "./forms.jsx";
 import {
@@ -814,6 +817,8 @@ function IdfHub({
   canWrite,
   canEditInventory,
   canViewActivity,
+  canViewInventory,
+  canViewQrAllowed,
   canViewOverview,
   canOpenIdfs,
   notify,
@@ -828,10 +833,10 @@ function IdfHub({
       const saved = JSON.parse(sessionStorage.getItem(viewStorageKey) || "null");
       return {
         selectedId: typeof saved?.selectedId === "string" ? saved.selectedId : "",
-        tab: typeof saved?.tab === "string" ? saved.tab : canViewActivity ? "activity" : "inventory",
+        tab: typeof saved?.tab === "string" ? saved.tab : canViewActivity ? "activity" : canViewInventory ? "inventory" : "qr",
       };
     } catch {
-      return { selectedId: "", tab: canViewActivity ? "activity" : "inventory" };
+      return { selectedId: "", tab: canViewActivity ? "activity" : canViewInventory ? "inventory" : "qr" };
     }
   });
   const selectedId = canOpenIdfs ? viewState.selectedId : "";
@@ -844,13 +849,10 @@ function IdfHub({
     () => data.idfs.filter((idf) => idf.id !== "idf-13" && idf.name !== "IDF 13"),
     [data.idfs],
   );
-  const canViewQr = canViewActivity && canWrite;
+  const canViewQr = canViewQrAllowed;
+  const firstTab = canViewActivity ? 'activity' : canViewInventory ? 'inventory' : 'qr';
   const selected = idfs.find((idf) => idf.id === selectedId) || null;
-  const availableTab = canViewActivity
-    ? tab === "qr" && !canViewQr
-      ? "activity"
-      : tab
-    : "inventory";
+  const availableTab = (tab === 'activity' && canViewActivity) || (tab === 'inventory' && canViewInventory) || (tab === 'qr' && canViewQr) ? tab : firstTab;
   const unresolved = (idf) =>
     records.filter(
       (record) => record.idfId === idf.id && record.status !== "resolved",
@@ -860,11 +862,11 @@ function IdfHub({
   };
   const choose = (id) => updateWithViewTransition(() => updateViewState({
     selectedId: id,
-    tab: canViewActivity ? "activity" : "inventory",
+    tab: firstTab,
   }));
   const showAll = () => updateWithViewTransition(() => updateViewState({
     selectedId: "",
-    tab: canViewActivity ? "activity" : "inventory",
+    tab: firstTab,
   }));
   useEffect(() => {
     try {
@@ -873,9 +875,9 @@ function IdfHub({
   }, [viewStorageKey, viewState]);
   useEffect(() => {
     if (!canViewOverview && canOpenIdfs && idfs.length && !selectedId) {
-      updateViewState({ selectedId: idfs[0].id, tab: canViewActivity ? "activity" : "inventory" });
+      updateViewState({ selectedId: idfs[0].id, tab: firstTab });
     }
-  }, [canViewOverview, canOpenIdfs, canViewActivity, idfs, selectedId]);
+  }, [canViewOverview, canOpenIdfs, firstTab, idfs, selectedId]);
   useEffect(() => {
     if (selectedId && !selected && !loading && !errors.idfs) updateViewState({ selectedId: "" });
   }, [selectedId, selected, loading, errors.idfs]);
@@ -1006,7 +1008,7 @@ function IdfHub({
         <div className={`idf-cards ${selected ? "is-selected" : "is-overview"}`}>
           {renderIdfCards()}
         </div>
-        {selected && (
+        {canOpenIdfs && (canViewActivity || canViewInventory || canViewQr) && (
           <div className="idf-console-tabs">
           <div
             className="idf-console-tablist"
@@ -1016,36 +1018,39 @@ function IdfHub({
             {canViewActivity && (
               <button
                 role="tab"
-                aria-selected={availableTab === "activity"}
-                onClick={() => updateViewState({ tab: "activity" })}
+                aria-selected={Boolean(selected && availableTab === "activity")}
+                onClick={() => updateWithViewTransition(() => updateViewState({ selectedId: selectedId || idfs[0]?.id || '', tab: "activity" }))}
+                disabled={!idfs.length}
               >
                 Bitácora
               </button>
             )}
-            <button
+            {canViewInventory && <button
               role="tab"
-              aria-selected={availableTab === "inventory"}
-              onClick={() => updateViewState({ tab: "inventory" })}
+              aria-selected={Boolean(selected && availableTab === "inventory")}
+              onClick={() => updateWithViewTransition(() => updateViewState({ selectedId: selectedId || idfs[0]?.id || '', tab: "inventory" }))}
+              disabled={!idfs.length}
             >
               Inventario
-            </button>
+            </button>}
             {canViewQr && (
               <button
                 role="tab"
-                aria-selected={availableTab === "qr"}
-                onClick={() => updateViewState({ tab: "qr" })}
+                aria-selected={Boolean(selected && availableTab === "qr")}
+                onClick={() => updateWithViewTransition(() => updateViewState({ selectedId: selectedId || idfs[0]?.id || '', tab: "qr" }))}
+                disabled={!idfs.length}
               >
                 Código QR
               </button>
             )}
           </div>
           <div className="idf-console-actions">
-            {canViewOverview && (
+            {selected && canViewOverview && (
               <Button variant="secondary" onClick={showAll}>
                 Ver todos los IDF
               </Button>
             )}
-            {canViewActivity && (
+            {selected && canViewActivity && (
               <Button
                 variant="primary"
                 className="idf-report-action"
@@ -1180,14 +1185,12 @@ function IdfHub({
                   <p className="eyebrow">Acceso móvil por código QR</p>
                   <h2>{selected.name || selected.id}</h2>
                   <p className="qr-showcase-subtitle">
-                    Escanea con la cámara de tu celular para abrir directamente
-                    el formulario de bitácora y registro de visitas asignado a
-                    este gabinete.
+                    Escanea directamente con la cámara de tu celular para abrir el formulario de bitácora y registro de visitas asignado a este cuarto de telecomunicaciones.
                   </p>
                 </div>
 
                 <div className="qr-host-bar">
-                  <label htmlFor="qr-host">Dirección del servidor</label>
+                  <label htmlFor="qr-host">Dirección IP del servidor en red institucional</label>
                   <div className="qr-host-controls">
                     <input
                       id="qr-host"
@@ -1203,41 +1206,37 @@ function IdfHub({
                     </Button>
                   </div>
                   <small>
-                    Asegúrate de que el teléfono esté conectado a la misma red
-                    Wi‑Fi institucional.
+                    El celular debe estar conectado a la misma red Wi‑Fi institucional para abrir el formulario.
                   </small>
                 </div>
 
-                <ol
-                  className="qr-steps"
-                  aria-label="Pasos para registrar una visita"
-                >
+                <ol className="qr-steps" aria-label="Pasos para registrar una visita">
                   <li>
                     <b>1</b>
                     <div>
-                      <strong>Configura</strong>
-                      <span>Verifica la IP local de este equipo.</span>
+                      <strong>Conéctate</strong>
+                      <span>A la red Wi‑Fi institucional.</span>
                     </div>
                   </li>
                   <li>
                     <b>2</b>
                     <div>
                       <strong>Escanea</strong>
-                      <span>Usa la cámara del teléfono.</span>
+                      <span>Apunta con la cámara del teléfono.</span>
                     </div>
                   </li>
                   <li>
                     <b>3</b>
                     <div>
-                      <strong>Reporta</strong>
-                      <span>Completa el formulario y adjunta evidencia.</span>
+                      <strong>Registra</strong>
+                      <span>Llena la bitácora o reporta incidencias.</span>
                     </div>
                   </li>
                 </ol>
 
                 <div className="qr-showcase-actions">
-                  <Button icon={Printer} onClick={() => window.print()}>
-                    Imprimir planilla
+                  <Button icon={Printer} variant="primary" onClick={() => window.print()}>
+                    Imprimir cartel carta para el gabinete
                   </Button>
                 </div>
               </div>
@@ -1260,13 +1259,30 @@ function IdfHub({
     </>
   );
 }
+function SupportWorkspace({ data, demo, openEditor, loading, errors, refresh, canEditInventory }) {
+  const { canViewSubmodule } = useSession();
+  const [tab, setTab] = useState('dashboard');
+  const visibleTabs = ['dashboard', 'log', 'inventory'].filter(value => canViewSubmodule('soporte', value === 'dashboard' ? 'live' : value));
+  const activeTab = visibleTabs.includes(tab) ? tab : visibleTabs[0];
+  return <>
+    <nav className="inventory-tabs" role="tablist" aria-label="Vistas de Dashboard de soporte">
+      {canViewSubmodule('soporte', 'live') && <button type="button" role="tab" aria-selected={activeTab === 'dashboard'} onClick={() => setTab('dashboard')}><Monitor size={15} /> En vivo</button>}
+      {canViewSubmodule('soporte', 'log') && <button type="button" role="tab" aria-selected={activeTab === 'log'} onClick={() => setTab('log')}><FileText size={15} /> Bitácora de soporte</button>}
+      {canViewSubmodule('soporte', 'inventory') && <button type="button" role="tab" aria-selected={activeTab === 'inventory'} onClick={() => setTab('inventory')}><Package size={15} /> Inventario soporte IDF 3</button>}
+    </nav>
+    {activeTab === 'dashboard' && <SupportDashboard data={data} demo={demo} openEditor={openEditor} loading={loading} errors={errors} refresh={refresh} />}
+    {activeTab === 'log' && <SupportMovements demo={demo} />}
+    {activeTab === 'inventory' && <SupportInventory canEdit={canEditInventory} />}
+  </>;
+}
+
 export default function App() {
-  const { demo, setDemo, user, can, signOut, allowedPages, canViewPage } =
+  const { demo, setDemo, user, can, signOut, allowedPages, canViewPage, canViewSubmodule } =
     useSession();
   const canOpenIdfs = Boolean(allowedPages?.includes("idf") && can("idf.read"));
   const canViewIdfOverview = Boolean(allowedPages?.includes("bitacora-idf") && can("activity.read"));
   const idfDataView = canOpenIdfs ? "" : canViewIdfOverview ? "?view=general" : null;
-  const canReadIdfReports = Boolean((canOpenIdfs || canViewIdfOverview) && can("activity.read"));
+  const canReadIdfReports = Boolean(((canOpenIdfs && canViewSubmodule('idf', 'activity')) || canViewIdfOverview) && can("activity.read"));
   const reportsPath = canReadIdfReports ? `/api/reports${idfDataView}` : null;
   const canReadAudit = Boolean(canViewPage("bitacora") && can("activity.read"));
   const catalog = useTelemetryCatalog(!demo && can("traffic.read"));
@@ -1942,7 +1958,7 @@ export default function App() {
       />
     );
   } else if (route.path === "soporte") {
-    page = <SupportDashboard {...shared} openEditor={openEditor} />;
+    page = <SupportWorkspace {...shared} openEditor={openEditor} canEditInventory={can('inventory.write')} />;
   } else if (route.path === "resumen") {
     page = (
       <Overview {...shared} userId={user.id} errors={Object.values(errors)} />
@@ -1960,7 +1976,9 @@ export default function App() {
         openEditor={openEditor}
         canWrite={canOpenIdfs && can("idf.visits.write")}
         canEditInventory={canOpenIdfs && can("inventory.write")}
-        canViewActivity={canOpenIdfs && can("activity.read")}
+        canViewActivity={canOpenIdfs && can("activity.read") && canViewSubmodule('idf', 'activity')}
+        canViewInventory={canOpenIdfs && canViewSubmodule('idf', 'inventory')}
+        canViewQrAllowed={canOpenIdfs && canViewSubmodule('idf', 'qr')}
         canViewOverview={canViewIdfOverview}
         canOpenIdfs={canOpenIdfs}
         notify={notify}
@@ -1999,7 +2017,9 @@ export default function App() {
         openEditor={openEditor}
         canWrite={canOpenIdfs && can("idf.visits.write")}
         canEditInventory={canOpenIdfs && can("inventory.write")}
-        canViewActivity={canOpenIdfs && can("activity.read")}
+        canViewActivity={canOpenIdfs && can("activity.read") && canViewSubmodule('idf', 'activity')}
+        canViewInventory={canOpenIdfs && canViewSubmodule('idf', 'inventory')}
+        canViewQrAllowed={canOpenIdfs && canViewSubmodule('idf', 'qr')}
         canViewOverview={canViewIdfOverview}
         canOpenIdfs={canOpenIdfs}
         notify={notify}

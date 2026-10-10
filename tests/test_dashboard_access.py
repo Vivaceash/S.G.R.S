@@ -512,6 +512,43 @@ def test_login_and_session_return_allowed_pages(local_store):
     assert sess["allowed_pages"] == identity["allowed_pages"]
 
 
+def test_submodule_permissions_survive_login_and_revoke_existing_session(local_store):
+    user = access.save_user({"username": "tabs.local", "name": "Tabs", "role": "soporte",
+        "password": "Ejemplo-local-2026", "allowed_pages": ["soporte"],
+        "allowed_submodules": ["soporte:live", "soporte:log"]}, local_store["id"])
+    token, identity = access.login({"username": "tabs.local", "password": "Ejemplo-local-2026"}, "127.0.0.1")
+    assert identity["allowed_submodules"] == ["soporte:live", "soporte:log"]
+    assert "soporte:inventory" not in access.identity_submodules(identity)
+    updated = access.save_user({**user, "allowed_submodules": ["soporte:inventory"]}, local_store["id"])
+    assert updated["allowed_submodules"] == ["soporte:inventory"]
+    assert access.session(f"sgrs_session={token}") is None
+    with pytest.raises(access.AccessError) as error:
+        access.save_user({**updated, "allowed_submodules": []}, local_store["id"])
+    assert error.value.status == 422
+
+
+def test_explicit_empty_superadmin_pages_do_not_restore_all_pages(local_store):
+    user = access.save_user({"username": "blank.root", "name": "Sin vistas", "role": "super-admin",
+        "password": "Ejemplo-local-2026", "allowed_pages": [], "allowed_submodules": []}, local_store["id"])
+    assert user["allowed_pages"] == []
+    _, identity = access.login({"username": "blank.root", "password": "Ejemplo-local-2026"}, "127.0.0.1")
+    assert access.identity_pages(identity) == []
+
+
+def test_route_checks_submodule_before_returning_data(local_store):
+    from dashboard_routes import AccessRoutes
+    user = access.save_user({"username": "route.tabs", "name": "Ruta Tabs", "role": "soporte",
+        "password": "Ejemplo-local-2026", "allowed_pages": ["soporte"],
+        "allowed_submodules": ["soporte:log"]}, local_store["id"])
+    _, identity = access.login({"username": "route.tabs", "password": "Ejemplo-local-2026"}, "127.0.0.1")
+    route = AccessRoutes()
+    route.identity = identity
+    route._require_submodule('soporte', 'log', 'activity.read')
+    with pytest.raises(access.AccessError) as error:
+        route._require_submodule('soporte', 'inventory', 'inventory.read')
+    assert error.value.status == 403
+
+
 def test_dashboard_principal_segments_persist_for_user_across_logins(local_store):
     selected = ['[10,"Meztli"]', '[30,"Tláloc"]']
     assert access.dashboard_preferences(local_store["id"]) == {"principal_segments": None}

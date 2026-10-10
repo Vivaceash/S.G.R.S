@@ -49,6 +49,7 @@ REPORTS_FILE = os.path.join(DATA_DIR, "reports.json")
 IDFS_FILE = os.path.join(DATA_DIR, "idfs.json")
 IPS_FILE = os.path.join(DATA_DIR, "ips.json")
 DEVICES_FILE = os.path.join(DATA_DIR, "devices.json")
+CONCESSIONS_FILE = os.path.join(DATA_DIR, "concessions.json")
 
 # Asegurar que el directorio de datos y archivos base existan
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -56,7 +57,8 @@ for fpath, default_val in [
     (REPORTS_FILE, {}),
     (IDFS_FILE, []),
     (IPS_FILE, []),
-    (DEVICES_FILE, [])
+    (DEVICES_FILE, []),
+    (CONCESSIONS_FILE, {})
 ]:
     if not os.path.exists(fpath):
         with open(fpath, 'w', encoding='utf-8') as f:
@@ -236,6 +238,12 @@ def ensure_omni_cache_warm(max_wait=1.5):
 
 
 class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
+    def guess_type(self, path):
+        content_type = super().guess_type(path)
+        if content_type in ('text/html', 'text/css', 'text/javascript', 'application/javascript'):
+            return f'{content_type}; charset=utf-8'
+        return content_type
+
     def send_head(self):
         # GET and HEAD share this boundary; never follow symlinks outside the build.
         candidate = Path(self.translate_path(self.path))
@@ -384,8 +392,8 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                         complete = True
                         break
                 return list(rows_by_id.values()), status_code, complete
-            users, users_status, users_complete = omni_collection('employees', ('username', 'fullName', 'department', 'position', 'accessRoleProfile', 'status', 'email'), ('username', 'id'))
-            devices, devices_status, devices_complete = omni_collection('company-properties', ('deviceMac', 'deviceName', 'account', 'employeeAccount', 'accessRoleProfile', 'deviceCategory', 'deviceFamily', 'deviceOS', 'status', 'lastAccessDeviceName', 'lastAccessLocation'), ('deviceMac', 'id'))
+            users, users_status, users_complete = omni_collection('employees', ('username', 'fullName', 'department', 'position', 'accessRoleProfile', 'status', 'email', 'description', 'dateOfEffective'), ('username', 'id'))
+            devices, devices_status, devices_complete = omni_collection('company-properties', ('deviceMac', 'deviceName', 'account', 'employeeAccount', 'accessRoleProfile', 'deviceCategory', 'deviceFamily', 'deviceOS', 'status', 'lastAccessDeviceName', 'lastAccessLocation', 'lastAuthenticationTime'), ('deviceMac', 'id'))
             # Cotejo de Company Property contra el inventario observado por FortiGate.
             forti_by_mac, forti_by_ip = {}, {}
             forti_status = 502
@@ -466,9 +474,33 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 if account:
                     associated_devices += 1
                     grouped.setdefault(account.casefold(), []).append(item)
+            concessions = {}
+            try:
+                with _file_lock:
+                    if os.path.exists(CONCESSIONS_FILE):
+                        with open(CONCESSIONS_FILE, 'r', encoding='utf-8') as cf:
+                            concessions = json.load(cf)
+            except Exception:
+                concessions = {}
+
             for user in users:
                 account = str(user.get("username") or '').strip().lower()
-                user["devices"] = grouped.get(account, [])
+                user_devices = grouped.get(account, [])
+                user["devices"] = user_devices
+                if account in concessions and concessions[account].get("dateOfEffective"):
+                    user["dateOfEffective"] = concessions[account]["dateOfEffective"]
+                    user["customConcession"] = True
+
+                # Determinar fecha en que fue dado de alta
+                reg_date = None
+                if account in concessions and concessions[account].get("registeredAt"):
+                    reg_date = concessions[account]["registeredAt"]
+                else:
+                    # Si tiene dispositivos asociados en Company Property, obtener la fecha de autenticación/registro más antigua
+                    dev_times = [d.get("lastAuthenticationTime") for d in user_devices if d.get("lastAuthenticationTime")]
+                    if dev_times:
+                        reg_date = min(dev_times)
+                user["registeredAt"] = reg_date
             self._send_json({"success": users_status == 200, "data": {"users": users, "sources": {"users": {"status": users_status, "complete": users_complete, "count": len(users)}, "company_properties": {"status": devices_status, "complete": devices_complete, "count": len(devices), "associated": associated_devices, "unassociated": max(0, len(devices) - associated_devices)}, "fortigate": {"status": forti_status, "count": len(forti_by_mac), "matches": forti_matches} }}, "message": "Cotejo completo de cuentas, dispositivos y FortiGate en modo lectura."})
 
         # 3c. Consulta de Access Points en tiempo real desde OmniVista
@@ -989,6 +1021,48 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 self._send_json({"status": "success", "idf_id": idf_id})
             except Exception as e:
                 self._send_json({"error": "No se pudo completar la operación."}, 500)
+
+        # 4. Modificar o extender tiempo de concesión de usuario
+        elif path == '/api/altas/concession':
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length)
+                payload = json.loads(post_data.decode('utf-8'))
+
+                username = str(payload.get("username") or '').strip().lower()
+                date_of_effective = payload.get("dateOfEffective")
+
+                if not username or date_of_effective is None:
+                    self._send_json({"error": "Faltan parámetros 'username' y 'dateOfEffective'"}, 400)
+                    return
+
+                try:
+                    ts_val = int(date_of_effective)
+                except (ValueError, TypeError):
+                    self._send_json({"error": "dateOfEffective debe ser un timestamp numérico válido en milisegundos"}, 400)
+                    return
+
+                with _file_lock:
+                    concessions = {}
+                    if os.path.exists(CONCESSIONS_FILE):
+                        with open(CONCESSIONS_FILE, 'r', encoding='utf-8') as cf:
+                            try:
+                                concessions = json.load(cf)
+                            except Exception:
+                                concessions = {}
+
+                    concessions[username] = {
+                        "dateOfEffective": ts_val,
+                        "updatedAt": int(time.time() * 1000),
+                        "reason": payload.get("reason", "Ajuste manual de concesión")
+                    }
+
+                    with open(CONCESSIONS_FILE, 'w', encoding='utf-8') as cf:
+                        json.dump(concessions, cf, indent=2, ensure_ascii=False)
+
+                self._send_json({"success": True, "username": username, "dateOfEffective": ts_val, "message": "Tiempo de concesión actualizado correctamente."})
+            except Exception as e:
+                self._send_json({"error": "No se pudo actualizar el tiempo de concesión."}, 500)
 
         else:
             self.send_response(404)

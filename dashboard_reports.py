@@ -59,6 +59,104 @@ def mobile_token(idf_id):
 
 
 class ReportRoutes:
+    def support_idfs(self):
+        _, idfs_file, lock = self.report_context()
+        with lock:
+            idfs = json.loads(Path(idfs_file).read_text(encoding='utf-8'))
+        return [{'id': row['id'], 'name': row.get('name') or row['id']}
+                for row in cabinets_with_documentary(idfs)]
+
+    def support_movements(self):
+        path = PRIVATE / 'support-movements.json'
+        with self.report_context()[2]:
+            return json.loads(path.read_text(encoding='utf-8')) if path.exists() else []
+
+    def save_support_movement(self, body):
+        idf_id, token = body.get('idf_id'), body.get('token')
+        row = self._mobile_idf(idf_id, token)
+        actor_name = body.get('actor_name', '')
+        if not isinstance(actor_name, str) or not 2 <= len(actor_name.strip()) <= 120:
+            raise AccessError(422, 'Indica el nombre de la persona que realiza el registro.')
+        inventory_item_id = body.get('inventory_item_id')
+        quantity = body.get('quantity')
+        identifier = str(body.get('identifier', '')).strip()
+        notes = str(body.get('notes', '')).strip()
+        if not isinstance(inventory_item_id, str) or not isinstance(quantity, int) or isinstance(quantity, bool) or not 1 <= quantity <= 1000000:
+            raise AccessError(422, 'Selecciona un artículo del inventario e indica cuántas unidades se retiraron.')
+        if not 1 <= len(identifier) <= 120 or len(notes) > 1000:
+            raise AccessError(422, 'Indica el número de identificación y revisa las observaciones.')
+        identifier_id = str(body.get('id', ''))
+        if not re.fullmatch(r'[a-f0-9-]{36}', identifier_id):
+            raise AccessError(422, 'El identificador del movimiento no es válido.')
+        evidence = body.get('evidence')
+        image = None
+        extension = None
+        if evidence:
+            if not isinstance(evidence, dict) or evidence.get('type') not in ('image/png', 'image/jpeg'):
+                raise AccessError(422, 'Selecciona una imagen PNG o JPG.')
+            try:
+                image = base64.b64decode(evidence.get('data', ''), validate=True)
+            except (ValueError, TypeError, binascii.Error):
+                raise AccessError(422, 'La imagen no es válida.') from None
+            signature = b'\x89PNG\r\n\x1a\n' if evidence['type'] == 'image/png' else b'\xff\xd8\xff'
+            if not image.startswith(signature) or not 0 < len(image) <= 10 * 1024 * 1024:
+                raise AccessError(422, 'La imagen debe ser PNG/JPG y no superar 10 MB.')
+            extension = 'png' if evidence['type'] == 'image/png' else 'jpg'
+        path = PRIVATE / 'support-movements.json'
+        lock = self.report_context()[2]
+        with lock:
+            rows = json.loads(path.read_text(encoding='utf-8')) if path.exists() else []
+            existing = next((entry for entry in rows if entry['id'] == identifier_id), None)
+            if existing:
+                if existing['actor_id'] != self.identity['user']['id']:
+                    raise AccessError(409, 'Ese movimiento ya existe.')
+                self._send_json({'status': 'success', 'movement': existing, 'duplicate': True})
+                return
+            with database(write=True) as db:
+                item = db.execute('SELECT * FROM support_inventory WHERE id=? AND idf_id=?', (inventory_item_id, 'idf-3')).fetchone()
+                if not item:
+                    raise AccessError(404, 'El artículo no existe en el inventario de soporte IDF 3.')
+                if item['quantity'] < quantity:
+                    raise AccessError(409, f"Solo hay {item['quantity']} {item['unit']} disponibles de este artículo.")
+                saved = {'id': identifier_id, 'date': datetime.now(timezone.utc).isoformat(),
+                         'idf_id': idf_id, 'idf_name': row.get('name') or idf_id,
+                         'source_idf_id': 'idf-3', 'inventory_item_id': inventory_item_id,
+                         'element': item['description'], 'quantity': quantity, 'unit': item['unit'],
+                         'identifier': identifier, 'notes': notes,
+                         'actor_name': actor_name.strip(),
+                         'actor_id': self.identity['user']['id'], 'actor': self.identity['user']['name']}
+                if image:
+                    saved['evidence'] = f'SUP-{identifier_id}.{extension}'
+                PRIVATE.mkdir(mode=0o700, parents=True, exist_ok=True)
+                temp_path = None
+                try:
+                    if image:
+                        evidence_dir = PRIVATE / 'support-evidence'
+                        evidence_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+                        fd = os.open(evidence_dir / saved['evidence'], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                        with os.fdopen(fd, 'wb') as stream:
+                            stream.write(image)
+                    with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=PRIVATE, delete=False) as stream:
+                        temp_path = stream.name
+                        json.dump([saved, *rows], stream, ensure_ascii=False, indent=2)
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                    db.execute('UPDATE support_inventory SET quantity=quantity-?, version=version+1 WHERE id=?', (quantity, inventory_item_id))
+                    db.execute('''INSERT INTO support_inventory_adjustments
+                        (inventory_id,before_quantity,after_quantity,delta,reason,actor_id,actor_name,created_at,movement_id)
+                        VALUES (?,?,?,?,?,?,?,?,?)''', (inventory_item_id, item['quantity'], item['quantity']-quantity,
+                        -quantity, 'Retiro con QR', self.identity['user']['id'], self.identity['user']['name'], saved['date'], identifier_id))
+                    audit(db, self.identity['user']['id'], 'support.element.removed', f'{idf_id}:{identifier_id}')
+                    os.replace(temp_path, path)
+                except Exception:
+                    if image:
+                        (PRIVATE / 'support-evidence' / saved['evidence']).unlink(missing_ok=True)
+                    raise
+                finally:
+                    if temp_path and os.path.exists(temp_path):
+                        os.unlink(temp_path)
+        self._send_json({'status': 'success', 'movement': saved})
+
     def mobile_token(self, idf_id):
         return mobile_token(idf_id) if isinstance(idf_id, str) else ''
 
@@ -212,10 +310,11 @@ class ReportRoutes:
             pass
         self._send_json({"status": "success", "incident": {**saved, 'record_key': report_key(saved)}, "telemetry": telemetry})
 
-    def send_evidence(self, identifier, inline=False):
-        if not re.fullmatch(r"IDF-[a-fA-F0-9-]{36}\.(png|jpg)", identifier):
+    def send_evidence(self, identifier, inline=False, kind='idf'):
+        prefix, folder = ('SUP', 'support-evidence') if kind == 'support' else ('IDF', 'evidence')
+        if not re.fullmatch(rf"{prefix}-[a-fA-F0-9-]{{36}}\.(png|jpg)", identifier):
             raise AccessError(404, "Evidencia no encontrada.")
-        path = PRIVATE / "evidence" / identifier
+        path = PRIVATE / folder / identifier
         if not path.is_file():
             raise AccessError(404, "Evidencia no encontrada.")
         # Uploads have already passed strict PNG/JPEG signature and size validation.

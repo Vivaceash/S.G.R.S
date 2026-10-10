@@ -97,13 +97,114 @@ export function EditForm({ kind, row, data, save, cancel, onDirty }) {
     if (isStock && (!Number.isInteger(Number(values.available)) || Number(values.available) < 0 || Number(values.available) > Number(values.quantity))) errors.available = 'Las unidades disponibles deben estar entre cero y la existencia total.';
     return errors;
   }, save, onDirty);
-  const field = (key, label, required = false, type = 'text') => <Field key={key} label={label} required={required} error={f.errors[key]}><input type={type} maxLength={type === 'text' ? 160 : undefined} value={f.values[key]} onChange={e => f.change(key, e.target.value)} /></Field>;
-  return <form noValidate ref={f.form} onSubmit={f.submit} aria-busy={f.busy}>
+  const field = (key, label, required = false, type = 'text', className = '') => <div className={className}><Field key={key} label={label} required={required} error={f.errors[key]}><input type={type} maxLength={type === 'text' ? 160 : undefined} value={f.values[key]} onChange={e => f.change(key, e.target.value)} /></Field></div>;
+  return <form noValidate ref={f.form} onSubmit={f.submit} aria-busy={f.busy} className="asset-form-container">
+    {isIp && (
+      <div className="ip-banner">
+        <div style={{ flex: 1 }}>
+          <strong>Asignación y Estado de IP: {row.ip}</strong>
+          <p>Este cambio actualiza la bitácora y catálogo local de direcciones sin alterar las políticas de filtrado del firewall.</p>
+        </div>
+      </div>
+    )}
     {f.error && <Notice title="Guardado sin completar" tone="danger">{f.error}</Notice>}
-    <fieldset disabled={f.busy || f.uncertain}><div className="form-grid">
-      {isIp ? <><div className="col-span-full"><Notice title={`Asignación de ${row.ip}`}>Este cambio actualiza el inventario local de direcciones. No modifica la configuración del firewall.</Notice></div>{field('hostname', 'Equipo / Hostname', true)}{field('vlan', 'Segmento')}<Field label="Estado"><select value={f.values.status} onChange={e => f.change('status', e.target.value)}><option value="occupied">Asignada</option><option value="reserved">Reservada</option></select></Field><div className="col-span-full"><Field label="Notas"><textarea className="resize-none" rows={3} value={f.values.notes} onChange={e => f.change('notes', e.target.value)} maxLength={1000} /></Field></div></>
-        : isRequest ? <>{field('name', 'Nombre completo', true)}{field('username', 'Usuario', true)}{field('position', 'Puesto')}{field('area', 'Área', true)}{field('device', 'Dispositivo')}{field('brand', 'Marca')}<Field label="Red solicitada" required error={f.errors.network}><select value={f.values.network} onChange={e => f.change('network', e.target.value)}>{data.segments.map(s => <option key={s.id}>{s.name}</option>)}</select></Field>{field('actor', 'Responsable', true)}</>
-          : <><Field label="IDF asignado" required error={f.errors.idfId}><select value={f.values.idfId} disabled={Boolean(row)} onChange={e => f.change('idfId', e.target.value)}><option value="">Selecciona un IDF…</option>{data.idfs.map(idf => <option key={idf.id} value={idf.id}>{idf.name}</option>)}</select></Field>{field('name', 'Recurso / Descripción', true)}{field('category', 'Categoría', true)}{isStock ? <>{field('quantity', 'Existencia total', true, 'number')}{field('available', 'Unidades disponibles', true, 'number')}</> : <>{field('ru', 'Nivel en rack (RU)', true)}{field('brand', 'Marca y modelo', true)}{field('serial', 'Número de serie')}{field('mac', 'Dirección MAC')}<Field label="Estado"><select value={f.values.status} onChange={e => f.change('status', e.target.value)}><option value="online">En servicio</option><option value="offline">Fuera de línea</option></select></Field></>}</>}
-    </div></fieldset><div className="form-actions"><Button onClick={cancel} disabled={f.busy}>Cancelar</Button><Button type="submit" variant="primary" icon={Save} busy={f.busy} disabled={f.uncertain}>{row ? 'Guardar cambios' : isRequest ? 'Registrar solicitud de ejemplo' : 'Agregar recurso'}</Button></div>
+    <fieldset disabled={f.busy || f.uncertain} style={{ border: 0, padding: 0, margin: 0 }}>
+      {isIp ? (
+        <div style={{ display: 'grid', gap: '16px' }}>
+          <div className="asset-form-card">
+            <div className="asset-form-card-header">
+              <FileText size={17} strokeWidth={2} />
+              <h3>Asignación de Equipo y Segmento</h3>
+            </div>
+            <div className="asset-form-grid">
+              {field('hostname', 'Equipo / Hostname', true, 'text', 'col-span-full')}
+              {field('vlan', 'Segmento o VLAN')}
+              <Field label="Estado de Asignación">
+                <select value={f.values.status} onChange={e => f.change('status', e.target.value)}>
+                  <option value="occupied">Asignada / En Uso</option>
+                  <option value="reserved">Reservada</option>
+                </select>
+              </Field>
+            </div>
+          </div>
+          <div className="asset-form-card">
+            <div className="asset-form-card-header">
+              <MapPin size={17} strokeWidth={2} />
+              <h3>Observaciones y Justificación</h3>
+            </div>
+            <div className="asset-form-grid">
+              <div className="col-span-full">
+                <Field label="Notas operativas">
+                  <textarea className="resize-none" rows={3} placeholder="Motivo de la asignación, usuario responsable o área..." value={f.values.notes} onChange={e => f.change('notes', e.target.value)} maxLength={1000} />
+                </Field>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : isRequest ? (
+        <div className="asset-form-card">
+          <div className="asset-form-card-header">
+            <FileText size={17} strokeWidth={2} />
+            <h3>Datos del Solicitante y Dispositivo</h3>
+          </div>
+          <div className="asset-form-grid">
+            {field('name', 'Nombre completo', true)}
+            {field('username', 'Usuario / Matrícula', true)}
+            {field('position', 'Puesto')}
+            {field('area', 'Área de Adscripción', true)}
+            {field('device', 'Dispositivo')}
+            {field('brand', 'Marca')}
+            <Field label="Red solicitada" required error={f.errors.network}>
+              <select value={f.values.network} onChange={e => f.change('network', e.target.value)}>
+                {data.segments.map(s => <option key={s.id}>{s.name}</option>)}
+              </select>
+            </Field>
+            {field('actor', 'Responsable de Registro', true)}
+          </div>
+        </div>
+      ) : (
+        <div className="asset-form-card">
+          <div className="asset-form-card-header">
+            <FileText size={17} strokeWidth={2} />
+            <h3>Detalles del Recurso</h3>
+          </div>
+          <div className="asset-form-grid">
+            <Field label="IDF asignado" required error={f.errors.idfId}>
+              <select value={f.values.idfId} disabled={Boolean(row)} onChange={e => f.change('idfId', e.target.value)}>
+                <option value="">Selecciona un IDF…</option>
+                {data.idfs.map(idf => <option key={idf.id} value={idf.id}>{idf.name}</option>)}
+              </select>
+            </Field>
+            {field('name', 'Recurso / Descripción', true)}
+            {field('category', 'Categoría', true)}
+            {isStock ? (
+              <>
+                {field('quantity', 'Existencia total', true, 'number')}
+                {field('available', 'Unidades disponibles', true, 'number')}
+              </>
+            ) : (
+              <>
+                {field('ru', 'Nivel en rack (RU)', true)}
+                {field('brand', 'Marca y modelo', true)}
+                {field('serial', 'Número de serie')}
+                {field('mac', 'Dirección MAC')}
+                <Field label="Estado">
+                  <select value={f.values.status} onChange={e => f.change('status', e.target.value)}>
+                    <option value="online">En servicio</option>
+                    <option value="offline">Fuera de línea</option>
+                  </select>
+                </Field>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </fieldset>
+    <div className="form-actions" style={{ marginTop: '6px' }}>
+      <Button onClick={cancel} disabled={f.busy}>Cancelar</Button>
+      <Button type="submit" variant="primary" icon={Save} busy={f.busy} disabled={f.uncertain}>
+        {row ? 'Guardar cambios' : isRequest ? 'Registrar solicitud de ejemplo' : 'Agregar recurso'}
+      </Button>
+    </div>
   </form>;
 }

@@ -1,0 +1,682 @@
+{
+  "source": "Inventario_IDF_3.xlsx",
+  "source_date": "2026-10-05",
+  "idf_id": "idf-3",
+  "items": [
+    {
+      "source_number": 1,
+      "description": "Alcatel-Lucent 8135S",
+      "quantity": 3,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 2,
+      "description": "AP 1321",
+      "quantity": 3,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 3,
+      "description": "Alcatel-Lucent OS 6860N-P24Z",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 4,
+      "description": "Planet Power Gigabit Ethernet Extender",
+      "quantity": 2,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 5,
+      "description": "Kit de antena de red inalámbrica Dell",
+      "quantity": 2,
+      "unit": "kits",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 6,
+      "description": "Tarjeta de red",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 7,
+      "description": "Mini GBI",
+      "quantity": 2,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 8,
+      "description": "Cable DAC de 100G Amphenol",
+      "quantity": 9,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 9,
+      "description": "Memoria RAM DDR4 2666 MHz",
+      "quantity": 3,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 10,
+      "description": "Memoria RAM 8 GB SODIMM",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 11,
+      "description": "Tarjeta RTX A400",
+      "quantity": 2,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 12,
+      "description": "Kit de teclado y USB alámbrico Perfect Choice",
+      "quantity": 20,
+      "unit": "kits",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 13,
+      "description": "Ratón Verbatim",
+      "quantity": 19,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 14,
+      "description": "Mouse Dell",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 15,
+      "description": "Mouse suelto",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 16,
+      "description": "Teclado con una tecla faltante",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 17,
+      "description": "Baterías para UPS",
+      "quantity": 30,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 18,
+      "description": "Multicontacto",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 19,
+      "description": "Caja de PW7000 Power Supply Ship Kit",
+      "quantity": 1,
+      "unit": "caja",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 20,
+      "description": "Adaptador de corriente AC a DC",
+      "quantity": 2,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 21,
+      "description": "Cargador Huntkey",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 22,
+      "description": "Cable de alimentación",
+      "quantity": 26,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 23,
+      "description": "Video Wall Controller Hikvision",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 24,
+      "description": "Microconvertidor HDMI a SDI",
+      "quantity": 2,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 25,
+      "description": "Divisor con amplificador RF",
+      "quantity": 2,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 26,
+      "description": "Caja con soportes de TV y documentos",
+      "quantity": 1,
+      "unit": "caja",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 27,
+      "description": "Cable HDMI 2.0 de 3 metros",
+      "quantity": 10,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 28,
+      "description": "Cable HDMI 2.1 de 3 metros",
+      "quantity": 4,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 29,
+      "description": "Cable 8K de 5 metros gris",
+      "quantity": 16,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 30,
+      "description": "HDMI 8K BUIG 92344",
+      "quantity": 4,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 31,
+      "description": "HDMI Vention",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 32,
+      "description": "HDMI negro Manhattan",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 33,
+      "description": "Cable HDMI negro Ethernet AWM Style 20276",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 34,
+      "description": "HDMI negro v1.4 de 1.8 m",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 35,
+      "description": "Cable HDMI negro dentro de bolsa",
+      "quantity": 5,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 36,
+      "description": "Cable DisplayPort",
+      "quantity": 11,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 37,
+      "description": "Cable DisplayPort (segundo registro)",
+      "quantity": 3,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 38,
+      "description": "DisplayPort suelto negro",
+      "quantity": 3,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 39,
+      "description": "Cable DVI",
+      "quantity": 5,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 40,
+      "description": "Adaptador Ethernet USB",
+      "quantity": 20,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 41,
+      "description": "Adaptador USB a Ethernet Manhattan",
+      "quantity": 9,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 42,
+      "description": "Adaptador Dell Pro Voyage 4 en 1 USB-C",
+      "quantity": 13,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 43,
+      "description": "Adaptador Mini DisplayPort a DisplayPort",
+      "quantity": 12,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 44,
+      "description": "Adaptador DisplayPort a VGA",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 45,
+      "description": "Caja de cables",
+      "quantity": 1,
+      "unit": "caja",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 46,
+      "description": "Cable Ethernet",
+      "quantity": 13,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 47,
+      "description": "Cable Ethernet roto",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 48,
+      "description": "Caja con 28 Modular Patch Cord",
+      "quantity": 1,
+      "unit": "caja",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 49,
+      "description": "Cable USB de impresora",
+      "quantity": 32,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 50,
+      "description": "Cable de teléfono",
+      "quantity": 10,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 51,
+      "description": "Cable de puerto serie",
+      "quantity": 4,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 52,
+      "description": "Adaptador de puerto serie",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 53,
+      "description": "Cable de fibra óptica",
+      "quantity": 6,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 54,
+      "description": "Puente de fibra óptica",
+      "quantity": 2,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 55,
+      "description": "Paquete de conectores XLR",
+      "quantity": 4,
+      "unit": "paquetes",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 56,
+      "description": "Tóner TK-3432",
+      "quantity": 73,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 57,
+      "description": "Tóner TK-3182",
+      "quantity": 50,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 58,
+      "description": "Tóner TK-6347",
+      "quantity": 9,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 59,
+      "description": "Caja de papel multiusos tamaño carta",
+      "quantity": 11,
+      "unit": "cajas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 60,
+      "description": "Caja de hojas tamaño oficio",
+      "quantity": 2,
+      "unit": "cajas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 61,
+      "description": "Paquete de hojas tamaño oficio",
+      "quantity": 10,
+      "unit": "paquetes",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 62,
+      "description": "Caja con tarjetas de acceso",
+      "quantity": 7,
+      "unit": "cajas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 63,
+      "description": "Caja vacía FaceStation 2",
+      "quantity": 1,
+      "unit": "caja",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 64,
+      "description": "Caja de Wave to Open Sensor",
+      "quantity": 1,
+      "unit": "caja",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 65,
+      "description": "Caja de 900PTNNEK00000",
+      "quantity": 2,
+      "unit": "cajas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 66,
+      "description": "Candado",
+      "quantity": 9,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 67,
+      "description": "Cable siamés para cámaras de seguridad",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 68,
+      "description": "Probador de cables de red",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 69,
+      "description": "Soplador de 500 W",
+      "quantity": 2,
+      "unit": "pzas",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 70,
+      "description": "Bolsa con tornillos y taquetes",
+      "quantity": 1,
+      "unit": "bolsa",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 71,
+      "description": "Par de guantes amarillos",
+      "quantity": 1,
+      "unit": "par",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 72,
+      "description": "Par de guantes negros",
+      "quantity": 1,
+      "unit": "par",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 73,
+      "description": "Casco",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 74,
+      "description": "Par de tacones",
+      "quantity": 1,
+      "unit": "par",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    },
+    {
+      "source_number": 75,
+      "description": "Venda elástica Protec",
+      "quantity": 1,
+      "unit": "pza",
+      "location": "IDF 3 – Piso 2",
+      "status": "Sin verificar",
+      "notes": ""
+    }
+  ]
+}

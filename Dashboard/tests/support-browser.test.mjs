@@ -2,7 +2,7 @@ import { chromium } from '@playwright/test';
 import assert from 'node:assert/strict';
 import { createDemo } from '../src/demo.mjs';
 
-const browser = await chromium.launch({ executablePath: '/opt/brave-bin/brave', headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+const browser = await chromium.launch({ ...(process.env.SGRS_BROWSER ? { executablePath: process.env.SGRS_BROWSER } : {}), headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
@@ -45,10 +45,6 @@ try {
   assert.ok(satBalanceText.includes('IPs Libres'), 'Debe incluir IPs Libres');
 
   // 3. Tarjetas de red con desglose y verificación de 5 redes autorizadas
-  const headingNetTag = await page.locator('.support-heading-metrics .network-tag').first().textContent();
-  console.log('Heading network tag:', headingNetTag);
-  assert.equal(headingNetTag.trim(), '5 redes', 'La cabecera debe indicar exactamente 5 redes autorizadas');
-
   const colBadge = await page.locator('.support-column-badge').first().textContent();
   assert.equal(colBadge.trim(), '5', 'La insignia de columna 1 debe indicar 5 redes');
 

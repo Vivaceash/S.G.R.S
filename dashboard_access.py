@@ -31,6 +31,15 @@ AVAILABLE_PAGES = (
     "resumen", "dispositivos", "disponibilidad", "gestion-meztli", "bitacora", "idf", "bitacora-idf",
     "aps", "cctv", "altas", "soporte", "usuarios", "conexiones"
 )
+SUBMODULES = {
+    'soporte': ('live', 'log', 'inventory'),
+    'aps': ('live', 'documentary', 'map'),
+    'cctv': ('updated', 'original'),
+    'idf': ('activity', 'inventory', 'qr'),
+    'altas': ('oficios', 'all'),
+    'disponibilidad': ('list', 'matrix'),
+}
+AVAILABLE_SUBMODULES = frozenset(f'{page}:{tab}' for page, tabs in SUBMODULES.items() for tab in tabs)
 
 ROLE_PAGE_DEFAULTS = {
     "soporte": ["soporte"],
@@ -106,6 +115,34 @@ def parse_allowed_pages(raw_pages, role):
     return valid if isinstance(pages, list) else list(ROLE_PAGE_DEFAULTS.get(role, []))
 
 
+def default_submodules(pages):
+    return [f'{page}:{tab}' for page, tabs in SUBMODULES.items() if page in pages for tab in tabs]
+
+
+def parse_allowed_submodules(raw_submodules, pages):
+    if raw_submodules is None:
+        return default_submodules(pages)
+    if isinstance(raw_submodules, str):
+        try:
+            raw_submodules = json.loads(raw_submodules)
+        except (TypeError, ValueError):
+            return default_submodules(pages)
+    if not isinstance(raw_submodules, list):
+        return default_submodules(pages)
+    return list(dict.fromkeys(item for item in raw_submodules
+                              if isinstance(item, str) and item in AVAILABLE_SUBMODULES
+                              and item.split(':', 1)[0] in pages))
+
+
+def validate_submodules(raw_submodules, pages):
+    if not isinstance(raw_submodules, list) or not all(isinstance(item, str) and item in AVAILABLE_SUBMODULES and item.split(':', 1)[0] in pages for item in raw_submodules):
+        raise AccessError(422, 'Lista de submódulos permitidos no válida.')
+    selected = list(dict.fromkeys(raw_submodules))
+    if any(page in pages and not any(item.startswith(page + ':') for item in selected) for page in SUBMODULES):
+        raise AccessError(422, 'Selecciona al menos una pestaña por cada módulo habilitado.')
+    return selected
+
+
 def session_identity(row, csrf):
     user = public_user(row)
     return {
@@ -114,12 +151,20 @@ def session_identity(row, csrf):
         "capabilities": capabilities(row["role"]),
         "roles": visible_roles(row["role"]),
         "allowed_pages": user["allowed_pages"],
+        "allowed_submodules": user["allowed_submodules"],
     }
 
 
 def identity_pages(identity):
     raw = identity.get("allowed_pages", identity.get("user", {}).get("allowed_pages"))
+    if isinstance(raw, list):
+        return [page for page in raw if page in AVAILABLE_PAGES]
     return parse_allowed_pages(raw, identity["user"]["role"])
+
+
+def identity_submodules(identity):
+    raw = identity.get('allowed_submodules', identity.get('user', {}).get('allowed_submodules'))
+    return parse_allowed_submodules(raw, identity_pages(identity))
 
 
 def migrate_idf_overview_pages(db):
@@ -136,6 +181,23 @@ def migrate_idf_overview_pages(db):
         if "idf" in pages and "bitacora" in pages and "bitacora-idf" not in pages:
             db.execute("UPDATE users SET allowed_pages=?, version=version+1 WHERE id=?",
                        (json.dumps([*pages, "bitacora-idf"]), row["id"]))
+
+
+def seed_support_inventory(db):
+    migration = 'support-idf3-inventory-v1'
+    if db.execute('SELECT 1 FROM dashboard_migrations WHERE id=?', (migration,)).fetchone():
+        return
+    source = Path(__file__).resolve().parent / 'data' / 'support_idf3_initial.json'
+    if source.exists() and not db.execute('SELECT 1 FROM support_inventory LIMIT 1').fetchone():
+        snapshot = json.loads(source.read_text(encoding='utf-8'))
+        db.executemany('''INSERT INTO support_inventory
+            (id, idf_id, source_number, description, quantity, unit, location, status, notes, source_file, source_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', [
+            (f"idf3-{item['source_number']:03d}", snapshot['idf_id'], item['source_number'],
+             item['description'], item['quantity'], item['unit'], item['location'], item['status'],
+             item['notes'], snapshot['source'], snapshot['source_date']) for item in snapshot['items']
+        ])
+    db.execute('INSERT INTO dashboard_migrations(id, applied_at) VALUES (?, ?)', (migration, int(time.time())))
 
 
 @contextmanager
@@ -155,7 +217,7 @@ def database(write=False):
             role TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1,
             password_hash TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,
             created_at INTEGER NOT NULL,
-            allowed_pages TEXT NOT NULL DEFAULT '[]');
+            allowed_pages TEXT NOT NULL DEFAULT '[]', allowed_submodules TEXT);
           CREATE TABLE IF NOT EXISTS sessions (
             token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, csrf TEXT NOT NULL,
             expires INTEGER NOT NULL, touched INTEGER NOT NULL);
@@ -178,6 +240,19 @@ def database(write=False):
           CREATE TABLE IF NOT EXISTS inventory_edits (
             asset_id TEXT PRIMARY KEY, version INTEGER NOT NULL,
             fields TEXT NOT NULL, updated_at TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS support_inventory (
+            id TEXT PRIMARY KEY, idf_id TEXT NOT NULL, source_number INTEGER NOT NULL,
+            description TEXT NOT NULL, quantity INTEGER NOT NULL CHECK(quantity >= 0),
+            unit TEXT NOT NULL, location TEXT NOT NULL, status TEXT NOT NULL,
+            notes TEXT NOT NULL DEFAULT '', source_file TEXT NOT NULL, source_date TEXT NOT NULL,
+            UNIQUE(idf_id, source_number));
+          CREATE INDEX IF NOT EXISTS idx_support_inventory_idf ON support_inventory(idf_id, source_number);
+          CREATE TABLE IF NOT EXISTS support_inventory_adjustments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, inventory_id TEXT NOT NULL,
+            before_quantity INTEGER NOT NULL, after_quantity INTEGER NOT NULL,
+            delta INTEGER NOT NULL, reason TEXT NOT NULL, actor_id TEXT NOT NULL,
+            actor_name TEXT NOT NULL, created_at TEXT NOT NULL,
+            movement_id TEXT UNIQUE);
           CREATE TABLE IF NOT EXISTS ap_map_positions (
             ap_id TEXT PRIMARY KEY, ap_mac TEXT NOT NULL DEFAULT '', ap_serial TEXT NOT NULL DEFAULT '',
             floor_id TEXT NOT NULL, x REAL NOT NULL, y REAL NOT NULL, label TEXT NOT NULL DEFAULT '',
@@ -202,13 +277,19 @@ def database(write=False):
         cols = [r[1] for r in db.execute("PRAGMA table_info(users)").fetchall()]
         if "allowed_pages" not in cols:
             db.execute("ALTER TABLE users ADD COLUMN allowed_pages TEXT NOT NULL DEFAULT '[]'")
+        if "allowed_submodules" not in cols:
+            db.execute("ALTER TABLE users ADD COLUMN allowed_submodules TEXT")
         if "is_hidden" not in cols:
             db.execute("ALTER TABLE users ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0 CHECK(is_hidden IN (0,1))")
+        support_cols = [r[1] for r in db.execute("PRAGMA table_info(support_inventory)").fetchall()]
+        if "version" not in support_cols:
+            db.execute("ALTER TABLE support_inventory ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
         dh_cols = [r[1] for r in db.execute("PRAGMA table_info(device_connection_history)").fetchall()]
         if "serial" not in dh_cols and dh_cols:
             db.execute("ALTER TABLE device_connection_history ADD COLUMN serial TEXT")
         if write:
             db.execute("BEGIN IMMEDIATE")
+        seed_support_inventory(db)
         migrate_idf_overview_pages(db)
         yield db
         db.commit()
@@ -224,6 +305,8 @@ def public_user(row):
     user["active"] = bool(row["active"])
     raw_pages = row.get("allowed_pages") if hasattr(row, "get") else (row["allowed_pages"] if "allowed_pages" in row.keys() else None)
     user["allowed_pages"] = parse_allowed_pages(raw_pages, row["role"])
+    raw_submodules = row['allowed_submodules'] if 'allowed_submodules' in row.keys() else None
+    user['allowed_submodules'] = parse_allowed_submodules(raw_submodules, user['allowed_pages'])
     return user
 
 
@@ -236,6 +319,7 @@ def user_for_actor(row, actor_role):
         if user["role"] == "super-admin":
             user["role"] = "admin"
         user.pop("allowed_pages", None)
+        user.pop("allowed_submodules", None)
         user.pop("is_hidden", None)
     return user
 
@@ -332,6 +416,7 @@ def save_user(body, actor=None, bootstrap=False):
             role = "super-admin"
             actor_role = "super-admin"
             allowed_pages = list(ROLE_PAGE_DEFAULTS["super-admin"])
+            allowed_submodules = default_submodules(allowed_pages)
         else:
             actor_row = db.execute("SELECT * FROM users WHERE id=? AND active=1", (actor,)).fetchone()
             if not actor_row or actor_row["role"] not in ("admin", "super-admin"):
@@ -363,6 +448,7 @@ def save_user(body, actor=None, bootstrap=False):
                     if actor_role == "admin":
                         old_raw = old.get("allowed_pages") if hasattr(old, "get") else (old["allowed_pages"] if "allowed_pages" in old.keys() else None)
                         allowed_pages = parse_allowed_pages(old_raw, old["role"])
+                        allowed_submodules = parse_allowed_submodules(old['allowed_submodules'], allowed_pages)
                     elif actor_role == "super-admin":
                         if "allowed_pages" in body:
                             raw_pages = body["allowed_pages"]
@@ -372,6 +458,12 @@ def save_user(body, actor=None, bootstrap=False):
                         else:
                             old_raw = old.get("allowed_pages") if hasattr(old, "get") else (old["allowed_pages"] if "allowed_pages" in old.keys() else None)
                             allowed_pages = parse_allowed_pages(old_raw, role)
+                        if 'allowed_submodules' in body:
+                            allowed_submodules = validate_submodules(body['allowed_submodules'], allowed_pages)
+                        else:
+                            allowed_submodules = parse_allowed_submodules(old['allowed_submodules'], allowed_pages)
+                            allowed_submodules += [item for item in default_submodules(allowed_pages)
+                                                   if item.split(':', 1)[0] not in parse_allowed_pages(old['allowed_pages'], old['role'])]
                 if user_id == actor and not active:
                     raise AccessError(409, "No puedes suspender tu propia cuenta.")
                 if user_id == actor and role != old["role"] and body.get("confirmed") is not True:
@@ -380,12 +472,13 @@ def save_user(body, actor=None, bootstrap=False):
                     count = db.execute("SELECT COUNT(*) FROM users WHERE role='super-admin' AND active=1").fetchone()[0]
                     if count <= 1:
                         raise AccessError(409, "Debe existir al menos un super-admin activo.")
-                db.execute("UPDATE users SET username=?,name=?,role=?,active=?,password_hash=?,version=version+1,allowed_pages=?,is_hidden=? WHERE id=?",
-                           (username, name, role, int(active), encoded or old["password_hash"], json.dumps(allowed_pages), int(hidden), user_id))
+                stored_pages = allowed_pages or (['__none__'] if role == 'super-admin' else [])
+                db.execute("UPDATE users SET username=?,name=?,role=?,active=?,password_hash=?,version=version+1,allowed_pages=?,allowed_submodules=?,is_hidden=? WHERE id=?",
+                           (username, name, role, int(active), encoded or old["password_hash"], json.dumps(stored_pages), json.dumps(allowed_submodules), int(hidden), user_id))
                 if hidden != bool(old["is_hidden"]):
                     audit(db, actor, "user.hidden" if hidden else "user.unhidden", user_id)
                 old_pages_raw = old.get("allowed_pages") if hasattr(old, "get") else (old["allowed_pages"] if "allowed_pages" in old.keys() else None)
-                if role != old["role"] or not active or encoded or username != old["username"] or json.dumps(allowed_pages) != str(old_pages_raw):
+                if role != old["role"] or not active or encoded or username != old["username"] or json.dumps(allowed_pages) != str(old_pages_raw) or allowed_submodules != parse_allowed_submodules(old['allowed_submodules'], parse_allowed_pages(old_pages_raw, old['role'])):
                     db.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
             else:
                 if not encoded:
@@ -395,6 +488,7 @@ def save_user(body, actor=None, bootstrap=False):
                 if not bootstrap:
                     if actor_role == "admin":
                         allowed_pages = list(ROLE_PAGE_DEFAULTS.get(role, []))
+                        allowed_submodules = default_submodules(allowed_pages)
                     elif actor_role == "super-admin":
                         if "allowed_pages" in body:
                             raw_pages = body["allowed_pages"]
@@ -403,9 +497,11 @@ def save_user(body, actor=None, bootstrap=False):
                             allowed_pages = list(dict.fromkeys(raw_pages))
                         else:
                             allowed_pages = list(ROLE_PAGE_DEFAULTS.get(role, []))
+                        allowed_submodules = validate_submodules(body['allowed_submodules'], allowed_pages) if 'allowed_submodules' in body else default_submodules(allowed_pages)
                 user_id = secrets.token_hex(16)
-                db.execute("INSERT INTO users(id,username,name,role,active,password_hash,created_at,allowed_pages,is_hidden) VALUES(?,?,?,?,?,?,?,?,?)",
-                           (user_id, username, name, role, int(active), encoded, int(time.time()), json.dumps(allowed_pages), int(hidden)))
+                stored_pages = allowed_pages or (['__none__'] if role == 'super-admin' else [])
+                db.execute("INSERT INTO users(id,username,name,role,active,password_hash,created_at,allowed_pages,allowed_submodules,is_hidden) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                           (user_id, username, name, role, int(active), encoded, int(time.time()), json.dumps(stored_pages), json.dumps(allowed_submodules), int(hidden)))
         except sqlite3.IntegrityError:
             raise AccessError(409, "No se pudo guardar la cuenta. Revisa los datos o elige otro usuario.") from None
         audit(db, actor or "bootstrap-local", "user.updated" if body.get("id") else "user.created", user_id)
