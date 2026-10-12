@@ -20,6 +20,8 @@ Entra a `http://192.168.38.250:8002/scalar` para explorar los contratos desde la
 
 El dashboard administra la credencial de su conexión Inventarios en **Conexiones API**. La API obtiene las credenciales guardadas de Forti/Omni durante el aprovisionamiento y las usa únicamente en el backend. Si cambian, vuelve a ejecutar `python "API Inventarios/scripts/configure_local.py"` después de actualizar Conexiones API y reinicia el servicio.
 
+Las claves de lectura, escritura, exportación y dashboard no tienen longitud mínima. En producción debe existir al menos una clave, `DEBUG` debe estar desactivado y los hosts/orígenes deben ser explícitos. `.private/.env` tiene prioridad sobre el `.env` de esta carpeta; las variables del sistema tienen prioridad sobre ambos archivos. El aprovisionamiento conserva las claves y la configuración existentes al actualizar los proveedores.
+
 ## Carga del catálogo y corte compatible
 
 La API no reemplaza la base activa al arrancar. Primero revisa el catálogo importado actual y la copia de cambios pendientes:

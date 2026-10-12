@@ -8,7 +8,10 @@ PRIVATE_ENV = BASE / '.private/.env'
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=(PRIVATE_ENV, BASE / '.env'), env_prefix='INVENTARIOS_', extra='ignore')
+    model_config = SettingsConfigDict(
+        env_file=(BASE / '.env', PRIVATE_ENV), env_prefix='INVENTARIOS_',
+        extra='ignore', hide_input_in_errors=True,
+    )
     APP_NAME: str = 'SGRS - API Inventarios'
     APP_VERSION: str = '1.0.0'
     HOST: str = '127.0.0.1'
@@ -63,8 +66,14 @@ class Settings(BaseSettings):
         # API_KEYS and EXPORT_KEYS may share a temporary operator key; key_principal
         # unions read/export only. WRITE_KEYS and the dashboard identity stay separate.
         if self.ENVIRONMENT not in ('development', 'test'):
-            if not keys or any(len(key) < 32 for key in keys) or self.DEBUG or '*' in self.ALLOWED_HOSTS or '*' in self.CORS_ORIGINS:
-                raise ValueError('Producción requiere claves robustas, hosts/orígenes explícitos y DEBUG desactivado.')
+            if not keys:
+                raise ValueError('Producción requiere al menos una clave de autenticación de Inventarios.')
+            if self.DEBUG:
+                raise ValueError('Producción requiere INVENTARIOS_DEBUG=false.')
+            if '*' in self.ALLOWED_HOSTS:
+                raise ValueError('INVENTARIOS_ALLOWED_HOSTS requiere hosts explícitos en producción.')
+            if '*' in self.CORS_ORIGINS:
+                raise ValueError('INVENTARIOS_CORS_ORIGINS requiere orígenes explícitos en producción.')
             if self.ALLOW_2FA_ENROLLMENT:
                 raise ValueError('Cierra el enrolamiento 2FA en producción.')
         for name in ('FORTI', 'OMNI'):

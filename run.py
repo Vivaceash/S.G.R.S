@@ -703,11 +703,11 @@ def status_services():
     print("=" * 72 + "\n")
 
 
-def _signal_process(pid, sig):
+def _signal_process(pid, *, force=False):
     """Envía una señal al grupo creado por SGRS y evita afectar al grupo del runner."""
     if sys.platform == "win32":
         command = ["taskkill"]
-        if sig == signal.SIGKILL:
+        if force:
             command.append("/F")
         command.extend(["/T", "/PID", str(pid)])
         subprocess.run(
@@ -717,6 +717,7 @@ def _signal_process(pid, sig):
             stderr=subprocess.DEVNULL,
         )
         return
+    sig = signal.SIGKILL if force else signal.SIGTERM
     try:
         group = os.getpgid(pid)
         if group == pid and group != os.getpgrp():
@@ -769,12 +770,12 @@ def stop_services():
             stopping[key] = pid
 
     for pid in stopping.values():
-        _signal_process(pid, signal.SIGTERM)
+        _signal_process(pid)
 
     if not _wait_for_processes_to_exit(stopping.values(), 10):
         alive = [pid for pid in stopping.values() if is_pid_alive(pid)]
         for pid in alive:
-            _signal_process(pid, signal.SIGKILL)
+            _signal_process(pid, force=True)
         if not _wait_for_processes_to_exit(alive, 5):
             remaining = {key: pid for key, pid in stopping.items() if is_pid_alive(pid)}
             save_pids({**remaining, "dashboard_port": pids.get("dashboard_port")} if remaining else {})

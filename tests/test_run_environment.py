@@ -409,6 +409,28 @@ def test_unknown_command_cannot_start_platform(monkeypatch):
     start.assert_not_called()
 
 
+def test_windows_stop_escalates_without_sigkill(tmp_path, monkeypatch):
+    registry = tmp_path / "pids.json"
+    registry.write_text('{"api_inventarios": 123}')
+    monkeypatch.setattr(run_module, "PID_FILE", registry)
+    monkeypatch.setattr(run_module, "load_pids", lambda: {"api_inventarios": 123})
+    monkeypatch.setattr(run_module.sys, "platform", "win32")
+    monkeypatch.delattr(run_module.signal, "SIGKILL", raising=False)
+    monkeypatch.setattr(run_module, "is_pid_alive", lambda pid: True)
+    monkeypatch.setattr(run_module, "process_matches_service", lambda service, pid: True)
+    monkeypatch.setattr(run_module, "_wait_for_processes_to_exit", Mock(side_effect=[False, True]))
+    taskkill = Mock()
+    monkeypatch.setattr(run_module.subprocess, "run", taskkill)
+
+    run_module.stop_services()
+
+    assert [call.args[0] for call in taskkill.call_args_list] == [
+        ["taskkill", "/T", "/PID", "123"],
+        ["taskkill", "/F", "/T", "/PID", "123"],
+    ]
+    assert not registry.exists()
+
+
 def test_open_uses_dashboard_registered_port(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["run.py", "open"])
     monkeypatch.setattr(run_module, "load_pids", lambda: {"dashboard_port": 3002})

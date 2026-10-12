@@ -16,8 +16,8 @@ def atomic_private(path, content):
     os.chmod(path.parent, 0o700)
     fd, name = tempfile.mkstemp(dir=path.parent, prefix='.inventory-')
     try:
-        os.fchmod(fd, 0o600)
         with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            os.chmod(name, 0o600)
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
@@ -50,8 +50,11 @@ def main():
         forti_url, forti_key, forti_mode = provider(forti)
         omni_url, omni_key, omni_mode = provider(omni)
         values = {
-            'INVENTARIOS_HOST': '127.0.0.1', 'INVENTARIOS_PORT': '8002',
-            'INVENTARIOS_ENVIRONMENT': 'development', 'INVENTARIOS_ENABLE_DOCS': 'true',
+            **old_env,
+            'INVENTARIOS_HOST': old_env.get('INVENTARIOS_HOST', '127.0.0.1'),
+            'INVENTARIOS_PORT': old_env.get('INVENTARIOS_PORT', '8002'),
+            'INVENTARIOS_ENVIRONMENT': old_env.get('INVENTARIOS_ENVIRONMENT', 'development'),
+            'INVENTARIOS_ENABLE_DOCS': old_env.get('INVENTARIOS_ENABLE_DOCS', 'true'),
             'INVENTARIOS_API_KEYS': read_key, 'INVENTARIOS_WRITE_KEYS': write_key,
             'INVENTARIOS_EXPORT_KEYS': export_key, 'INVENTARIOS_DASHBOARD_KEY': dashboard_key,
             'INVENTARIOS_FORTI_URL': forti_url, 'INVENTARIOS_FORTI_KEY': forti_key,

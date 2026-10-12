@@ -23,6 +23,14 @@ def test_no_credentials_never_opens_access(client, monkeypatch):
     assert client.get('/api/v1/cctv/cameras').status_code == 401
 
 
+def test_short_read_key_authenticates_without_granting_write_permission(client, monkeypatch):
+    monkeypatch.setattr(settings, 'API_KEYS', 'a')
+    headers = {'X-API-Key': 'a'}
+    assert client.get('/api/v1/cctv/cameras', headers=headers).status_code == 200
+    assert client.get('/api/v1/cctv/cameras', headers={'X-API-Key': 'b'}).status_code == 401
+    assert client.patch('/api/v1/cctv/cameras/cam-1', headers=headers, json={}).status_code == 403
+
+
 def test_body_limit_and_validation_do_not_echo_secrets(client):
     result = client.patch('/api/v1/cctv/cameras/cam-1', headers={'X-API-Key': 'write-test'}, json={'secret': 'NEVER'})
     assert result.status_code == 422 and 'NEVER' not in result.text
