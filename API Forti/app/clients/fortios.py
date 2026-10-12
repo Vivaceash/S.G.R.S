@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import ssl
 from typing import Any, Dict, List, Optional, Union
 import httpx
 
@@ -15,6 +16,16 @@ from app.core.errors import (
 )
 
 logger = logging.getLogger("fortinet_api.client")
+
+
+def _is_certificate_failure(error: Optional[BaseException]) -> bool:
+    seen = set()
+    while error is not None and id(error) not in seen:
+        if isinstance(error, ssl.SSLCertVerificationError):
+            return True
+        seen.add(id(error))
+        error = error.__cause__ or error.__context__
+    return False
 
 
 class FortiOSClient:
@@ -139,6 +150,12 @@ class FortiOSClient:
             return data
 
         except httpx.ConnectError as exc:
+            if _is_certificate_failure(exc):
+                logger.error("No se pudo validar el certificado TLS de FortiGate.")
+                raise FortiOSConnectionError(
+                    message="No se pudo validar el certificado TLS de FortiGate. Configure FORTIOS_CA_BUNDLE con la CA del servidor.",
+                    details=None,
+                ) from exc
             logger.error("Error de conexión con FortiGate (%s)", type(exc).__name__)
             raise FortiOSConnectionError(
                 message="No se pudo conectar con el FortiGate. Verifica el estado de la integración.",

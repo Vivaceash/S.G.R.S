@@ -40,11 +40,11 @@ Usa un proxy TLS en el mismo equipo que Python. [deploy/Caddyfile.example](../de
 
 En el `.env` raíz configura `DASHBOARD_HOST=127.0.0.1`, `DASHBOARD_PORT=3000` y `SGRS_PUBLIC_ORIGIN=https://tu-dominio-real`. El puerto de destino en Caddy debe coincidir con el puerto efectivo de Python. Reinicia el gateway y ejecuta Caddy con el archivo adaptado (`caddy run --config deploy/Caddyfile.example --adapter caddyfile`). Accede únicamente al dominio HTTPS. Configurar el origen por sí solo no instala un certificado ni cifra HTTP.
 
-El gateway acepta autenticación y datos de sesión mediante el proxy local que indica `X-Forwarded-Proto: https` y conserva el Host del dominio configurado. No confía en `Origin` como prueba de TLS. Con origen público configurado, tampoco acepta autenticación HTTP en localhost. Sin origen público, HTTP se admite exclusivamente para desarrollo desde loopback. El frontend rechaza solicitudes de cuenta, administración y sesión sobre HTTP remoto antes de enviar el cuerpo. Los tokens de sesión usan cookies `HttpOnly`, `SameSite=Strict` y `Secure` en HTTPS.
+El gateway acepta autenticación y datos de sesión mediante el proxy local que indica `X-Forwarded-Proto: https` y conserva el Host del dominio configurado. No confía en `Origin` como prueba de TLS. Con origen público configurado, tampoco acepta autenticación HTTP en localhost. Para producción dentro de una LAN, deja `SGRS_PUBLIC_ORIGIN` vacío, configura `SGRS_LAN_ORIGIN` y limita `SGRS_LAN_CLIENT_CIDRS`; esos clientes pueden acceder al dashboard por HTTP directo. El frontend rechaza solicitudes de cuenta, administración y sesión sobre HTTP fuera de localhost o de la LAN declarada. Los tokens de sesión usan cookies `HttpOnly`, `SameSite=Strict` y `Secure` en HTTPS.
 
 Comprueba en el navegador que el certificado sea válido y que la URL de `/api/auth/login` comience con `https://`; la respuesta no debe incluir contraseña ni hash y la cookie debe tener `Secure`. F12 seguirá mostrando el cuerpo que el propio navegador prepara. [TLS protege el tráfico en la red](https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Security_Cheat_Sheet.html), no lo oculta a quien controla el navegador.
 
-El reporte móvil `/api/mobile-report` conserva la excepción HTTP para los QR existentes; no admite credenciales de cuenta. Sus datos y tokens QR no quedan cifrados si se usa HTTP: publica también sus enlaces mediante HTTPS antes de considerarlos privados.
+El reporte móvil `/api/mobile-report` conserva la excepción HTTP para los QR permanentes; no admite credenciales de cuenta. Cada IDF tiene un token distinto derivado de su identificador estable, sin vencimiento ni rotación. Los QR siempre usan `http://192.168.38.250:3000`, aunque se abra el dashboard desde otro host o navegador; el runner reserva ese puerto para que las etiquetas impresas sigan funcionando. Sus datos y tokens QR no quedan cifrados si se usa HTTP: publica también sus enlaces mediante HTTPS antes de considerarlos privados.
 
 | Pantalla | Estado |
 | --- | --- |
@@ -57,12 +57,12 @@ El reporte móvil `/api/mobile-report` conserva la excepción HTTP para los QR e
 | Altas WiFi | Diseño y creación de ejemplos en demo; pendiente de API de solicitudes |
 | Stock por unidades | Diseño/edición en demo; pendiente de modelo y API de existencias |
 | Fotografías | Una imagen PNG/JPG de hasta 10 MB por reporte, descarga autenticada |
-| Usuarios | Cuentas locales, altas por rol autorizado, suspensión reversible y cuentas ocultas administradas por super-admin |
+| Usuarios | Capacidades separadas para consultar/crear/editar/eliminar, herencia por jerarquía, contraseña inicial con cambio obligatorio, eliminación auditada y cuenta `super.admin` oculta |
 | Conexiones API | URL, credencial, método de autenticación, guardado y prueba explícita desde el servidor |
 
-Las credenciales no se persisten en el navegador. El gateway valida sesión y rol; Usuarios está disponible para admin y super-admin; Conexiones API requiere super-admin. La etapa local no equivale a un despliegue seguro de producción: faltan MFA/SSO del dashboard, ámbitos y cifrado de secretos en reposo. Consultar los límites en la guía de usuarios.
+Las credenciales no se persisten en el navegador. El gateway valida sesión, capacidades y jerarquía; Usuarios se muestra solo con `users.read` y cada acción requiere su capacidad separada. Conexiones API requiere super-admin. La etapa local no equivale a un despliegue seguro de producción: faltan MFA/SSO del dashboard, ámbitos y cifrado de secretos en reposo. Consultar los límites en la guía de usuarios.
 
-Superusuario es interno: viewer/admin solo reciben sus dos roles operativos desde el servidor. El perfil y los mensajes públicos no muestran un nivel adicional, y la demo opera como admin sin acceso a Usuarios/Conexiones ni tráfico reservado. Reiniciar el gateway y recargar el build para aplicar el contrato `roles` de sesión; no se migran cuentas. El detalle de cobertura de APIs y las páginas futuras están en [el informe técnico](../ANALISIS_APIS_Y_EVOLUCION_DASHBOARD.md).
+Superusuario es interno: la jerarquía se conserva en el servidor y cada cuenta recibe solo los roles que puede asignar. La demo opera como super-admin de ejemplo sin crear cuentas reales. Al iniciar Python se migra el directorio local, se asegura `super.admin` oculto y se aplican las capacidades separadas; recarga el build para aplicar los cambios de interfaz. El detalle de cobertura de APIs y las páginas futuras están en [el informe técnico](../ANALISIS_APIS_Y_EVOLUCION_DASHBOARD.md).
 
 ## Verificación
 

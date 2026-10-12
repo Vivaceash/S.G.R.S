@@ -25,6 +25,58 @@ def test_production_rejects_development_admin_key():
         )
 
 
+def _production_settings(**overrides):
+    from app.config import Settings
+
+    values = {
+        "_env_file": None,
+        "ENVIRONMENT": "production",
+        "DEBUG": False,
+        "APP_API_KEY": "api-key-for-production-with-strong-entropy",
+        "JWT_SECRET_KEY": "a-production-jwt-secret-with-more-than-32-bytes",
+        "OV_USERNAME": "service-user",
+        "OV_PASSWORD": "service-password-with-adequate-length",
+        "OV_VERIFY_SSL": True,
+        "OV_PROTOCOL": "https",
+        "OV_API_KEY": "",
+        "ALLOWED_HOSTS": ["api.example.test"],
+        "CORS_ORIGINS": ["https://dashboard.example.test"],
+    }
+    values.update(overrides)
+    return Settings(**values)
+
+
+def test_production_rejects_unverified_upstream_tls_without_explicit_override():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="OV_ALLOW_UNVERIFIED_TLS"):
+        _production_settings(OV_VERIFY_SSL=False)
+
+
+def test_production_allows_explicit_unverified_tls_override_only_over_https():
+    from pydantic import ValidationError
+
+    settings = _production_settings(
+        OV_VERIFY_SSL=False,
+        OV_ALLOW_UNVERIFIED_TLS=True,
+    )
+    assert settings.OV_PROTOCOL == "https"
+    assert settings.OV_VERIFY_SSL is False
+
+    with pytest.raises(ValidationError, match="OV_PROTOCOL"):
+        _production_settings(
+            OV_PROTOCOL="http",
+            OV_VERIFY_SSL=False,
+            OV_ALLOW_UNVERIFIED_TLS=True,
+        )
+
+    with pytest.raises(ValidationError, match="OV_ALLOW_UNVERIFIED_TLS"):
+        _production_settings(
+            OV_VERIFY_SSL=True,
+            OV_ALLOW_UNVERIFIED_TLS=True,
+        )
+
+
 # =============================================================================
 # 1. Pruebas de Documentación, Liveness Probe y Especificación OpenAPI
 # =============================================================================
@@ -114,13 +166,14 @@ def test_unauthorized_access_rejected():
     assert res_ver.status_code == 401
 
 
-def test_health_status_endpoints_are_public_but_data_endpoints_are_not():
-    """Los health status son públicos; las consultas de datos mantienen autenticación."""
+def test_only_liveness_is_public_but_deep_health_requires_authentication():
+    """Solo /health es público; los diagnósticos consultan OmniVista y requieren clave."""
+    assert client.get("/health").status_code == 200
     res_h1 = client.get("/api/v1/health")
-    assert res_h1.status_code != 401
+    assert res_h1.status_code == 401
 
     res_h2 = client.get("/api/v1/system/health")
-    assert res_h2.status_code != 401
+    assert res_h2.status_code == 401
     assert client.get("/api/v1/system/version").status_code == 401
 
 

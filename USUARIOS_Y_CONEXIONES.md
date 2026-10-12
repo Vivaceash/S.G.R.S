@@ -10,7 +10,10 @@ Esta etapa añade cuentas locales al gateway del dashboard, sin depender de un p
 | Agregar/actualizar recursos y asignar/liberar IP | No | Sí | Sí |
 | Registrar visita/incidencia y adjuntar evidencia | No | Sí | Sí |
 | Exportación desde la interfaz | No | Sí | Sí |
-| Crear usuarios y administrar cuentas visibles | No | Sí, roles admin/soporte | Sí, todos los roles |
+| Consultar usuarios | Solo si recibe el permiso | Solo si recibe el permiso | Sí |
+| Crear usuarios | Solo si recibe el permiso; roles de su nivel | Sí, heredable y limitado a su nivel | Sí, todos los niveles |
+| Editar usuarios | Solo cuentas de menor jerarquía | Solo cuentas de menor jerarquía | Todas las cuentas excepto la propia |
+| Eliminar usuarios | Solo con permiso separado y menor jerarquía | Solo con permiso separado y menor jerarquía | Permiso incluido; todas excepto la propia |
 | Ocultar o volver visible una cuenta | No | No | Sí |
 | Configurar/probar conexiones y credenciales | No | No | Sí |
 | Consultas sensibles mediante proxy (tráfico, etc.) | No | No | Solo lectura |
@@ -22,9 +25,9 @@ El ámbito actual es esta instancia completa: todavía no se asignan subconjunto
 
 Administrador es el nivel operativo superior visible para ejecutivos. Superusuario es un rol interno permanente de SGRS, sin relación con sudo/Linux. Conserva el identificador `super-admin` en SQLite para no migrar cuentas existentes.
 
-El servidor entrega un catálogo `roles` en login/sesión: viewer y admin reciben únicamente Viewer y Administrador; solo Superusuario recibe el tercer rol. En la lista de Usuarios, las cuentas super-admin visibles se presentan como Administrador, sin mostrar privilegios ni páginas internas. El super-admin puede ocultar una cuenta: deja de aparecer a las cuentas operativas, que tampoco pueden administrarla usando su ID. Ocultarla conserva el inicio de sesión; suspenderla es una acción aparte. El filtro Visibles/Ocultos/Todas solo se ofrece a super-admin.
+El servidor entrega roles asignables según la jerarquía: `super-admin` puede asignar cualquier rol; `admin` puede asignar `admin`, `soporte` o `viewer`; `soporte` y `viewer` son pares y solo pueden crear su mismo nivel cuando reciben el permiso correspondiente. Las cuentas con `users.read` ven todas las cuentas visibles, incluso las de nivel superior. Las acciones de edición y eliminación requieren `users.edit` y una cuenta de jerarquía superior; un super-admin puede administrar cuentas distintas de la propia. El super-admin puede ocultar y restaurar cuentas; las cuentas ocultas solo aparecen para super-admin. Se protege al último super-admin activo y no se permite eliminar la propia cuenta.
 
-Las tarjetas de Usuarios solo muestran los roles operativos; ambos tipos de administrador cuentan como Administrador. Ocultar información visual no convierte el rol en secreto ante acceso al repositorio, servidor o bundle frontend. Este manual y el informe de arquitectura son documentación técnica, no ayuda pública para ejecutivos.
+Las tarjetas de Usuarios solo muestran los roles operativos. Los permisos se presentan con etiquetas funcionales como «Consultar usuarios», «Crear usuarios» y «Editar usuarios»; el formulario preselecciona lo que el creador puede heredar y nunca permite conceder un permiso superior al propio. Este manual y el informe de arquitectura son documentación técnica, no ayuda pública para ejecutivos.
 
 La contraseña de inicio de sesión aparece en la petición que envía el navegador de la propia persona; eso es visible en sus DevTools y no se puede ocultar al cliente. En HTTP podría observarse en el trayecto, por eso el acceso desde otros equipos requiere HTTPS. El servidor no devuelve la contraseña ni su hash, conserva un hash scrypt y emite la sesión en cookie `HttpOnly`.
 
@@ -40,13 +43,13 @@ npm --prefix Dashboard run build
 .venv/bin/python server.py
 ```
 
-El comando solicita usuario, nombre y contraseña (12–128 caracteres, entrada oculta). Crea el primer `super-admin` únicamente si no existe ninguna cuenta; no imprime ni genera contraseñas predeterminadas. No hay un endpoint público de registro ni bootstrap por navegador.
+El comando solicita usuario, nombre y contraseña (12–128 caracteres, entrada oculta) para la cuenta inicial. Al arrancar el servidor se asegura además la cuenta oculta `super.admin`; si no existe, recibe la contraseña configurada en `SGRS_INITIAL_USER_PASSWORD` y debe cambiarla en su primer acceso. Si ya existe, su contraseña se conserva. No hay un endpoint público de registro ni bootstrap por navegador.
 
 Abrir `http://127.0.0.1:3000` e iniciar sesión. En desarrollo, Vite puede seguir sirviendo el frontend en el puerto 5173 y reenviando `/api` a Python. Reinicia únicamente el proceso habitual de Python para cargar el nuevo código; no es necesario iniciar las APIs externas para administrar cuentas.
 
-En **Administración → Usuarios y privilegios**, al pie del sidebar, admin puede crear cuentas de soporte o administrador; super-admin puede asignar todos los roles y configurar páginas. Para cambiar contraseña o estado, abrir Administrar, revisar la consecuencia y confirmar. Super-admin también puede ocultar y restaurar cuentas. No hay eliminación definitiva. La suspensión se revierte seleccionando Activa.
+En **Administración → Usuarios y privilegios**, cada capacidad se habilita por separado. Una cuenta que puede crear usuarios recibe por defecto la contraseña inicial del servidor; la persona debe cambiarla antes de continuar. El creador puede asignar únicamente sus propios permisos y páginas. Para cambiar contraseña o estado, abrir Administrar, revisar la consecuencia y confirmar. Super-admin también puede ocultar y restaurar cuentas. La eliminación es definitiva, revoca sesiones y conserva un evento de auditoría anónimo. La suspensión se revierte seleccionando Activa.
 
-Se permite cambiar el propio rol dentro de la jerarquía autorizada, con confirmación explícita y cierre de sesión inmediato. No se permite suspender la propia cuenta ni degradar/suspender el último super-admin activo, incluso con peticiones concurrentes. Cambiar rol, contraseña o usuario de acceso y suspender una cuenta revoca sus sesiones. La entrega de contraseñas es manual por un canal seguro; invitaciones y cambio obligatorio en primer ingreso quedan para una fase posterior.
+La contraseña inicial y los reinicios hechos por un superior fuerzan el cambio en el siguiente inicio de sesión. No se permite editar o eliminar la propia cuenta ni degradar/suspender/eliminar el último super-admin activo, incluso con peticiones concurrentes. Cambiar rol, contraseña, permisos, usuario de acceso o estado revoca sus sesiones. La contraseña inicial se almacena solo como hash y su valor se configura fuera de la interfaz.
 
 ## Conexiones con las APIs
 
@@ -62,7 +65,7 @@ Las APIs actuales del proyecto esperan `X-API-Key` o Bearer. Basic solo sirve si
 
 La credencial almacenada nunca se devuelve en GET; solo se informa `has_secret`. Un campo vacío conserva la credencial únicamente si URL, autenticación y usuario no cambiaron. Al cambiar el destino se exige introducirla otra vez para evitar reenviar una clave anterior a un servidor diferente. Las versiones impiden sobrescribir cambios de otro administrador.
 
-HTTP se acepta solo para loopback (`localhost`/`127.0.0.1`); para otros destinos se exige HTTPS con certificado válido. No hay interruptor para omitir TLS. No se siguen redirecciones; se valida y fija la dirección DNS de cada solicitud y se bloquean destinos link-local/metadatos, multicast y no especificados. Se permiten direcciones privadas de infraestructura deliberadamente; solo un super-admin debe seleccionar esos destinos.
+Las conexiones de integración usan HTTP solo en loopback y HTTPS con certificado válido para destinos remotos. El dashboard conserva un modo LAN HTTP explícito mediante `DASHBOARD_HOST=0.0.0.0`, `SGRS_LAN_ORIGIN` y `SGRS_LAN_CLIENT_CIDRS`. No se siguen redirecciones; se valida y fija la dirección DNS de cada solicitud y se bloquean destinos link-local/metadatos, multicast y no especificados. Se permiten direcciones privadas de infraestructura deliberadamente; solo un super-admin debe seleccionar esos destinos.
 
 Las configuraciones guardadas prevalecen sobre `FORTI_API_URL`/`OMNI_API_URL`. Antes del primer guardado se usan esas variables y `FORTI_API_KEY`/`OMNI_API_KEY`, con fallback a `APP_API_KEY` si está definida. Ya no se inserta la clave `admin` por defecto desde el gateway.
 
@@ -71,7 +74,7 @@ Las configuraciones guardadas prevalecen sobre `FORTI_API_URL`/`OMNI_API_URL`. A
 La entrada del menú conserva «Registro IDF». En los permisos modulares se asignan por separado «Bitácora IDF general» (`bitacora-idf`) y «Registro IDF» (`idf`). El permiso de «Bitácora» corresponde al historial general de movimientos y no es requisito para consultar la bitácora de un gabinete.
 
 - «Bitácora IDF general» habilita la página sin gabinete seleccionado, con tarjetas IDF arriba, filtros y tabla a 16 px, sin KPI. Permite consultar detalles; no permite abrir inventarios, emitir QR ni resolver incidencias. Con este permiso solamente, las tarjetas IDF son informativas.
-- «Registro IDF» permite seleccionar gabinetes y consultar su bitácora e inventario. El registro de incidencias, su resolución y el QR siguen sujetos a las capacidades del rol. Si no se asigna la vista general, se abre un gabinete y no se ofrece volver a la tabla consolidada.
+- «Registro IDF» permite seleccionar gabinetes y consultar su bitácora e inventario. El registro de incidencias, su resolución y el QR permanente de cada IDF siguen sujetos a las capacidades del rol. Si no se asigna la vista general, se abre un gabinete y no se ofrece volver a la tabla consolidada.
 - La API comprueba permisos y capacidades. `/api/idfs?view=general` entrega nombres, cantidades y entradas de bitácora, sin inventario ni credenciales QR; `/api/reports?view=general` requiere el permiso de vista general. Las consultas sin `view=general` requieren acceso individual. Evidencias, escrituras y rutas de inventario tienen controles adicionales.
 - La migración `idf-overview-page-v1` conserva una sola vez el acceso de cuentas que antes tenían simultáneamente `idf` y `bitacora`. Las revocaciones posteriores del nuevo permiso se respetan. Los valores predeterminados de admin, super-admin y viewer incluyen ambos permisos; soporte conserva sus permisos actuales. El código anterior ignora el permiso adicional y la tabla de migraciones, por lo que volver a la versión anterior no requiere borrar datos.
 - Los enlaces `#reporte?idf=...` y `#entrada?idf=...` conservan el formulario de incidencia y requieren acceso individual. Cambiar el ancho de pantalla no concede permisos. La fecha y la identidad definitivas se asignan en el servidor; en demo puede escribirse el responsable. Los reportes se actualizan mediante consultas periódicas.
@@ -85,8 +88,8 @@ Los reportes nuevos usan identificador de solicitud estable, responsable autenti
 - `dashboard_access.py`: SQLite en `.sgrs-private/dashboard.sqlite3`, directorio `0700` y archivo `0600`, excluido del build público. Actualmente Git incluye la base privada y los `.env`: los permisos locales no protegen las copias del repositorio ni su historial.
 - Contraseñas de usuario: scrypt con sal aleatoria por cuenta (`N=32768`, `r=8`, `p=1`). Nunca se almacenan en texto plano ni se devuelven a la interfaz.
 - Credenciales API: recuperables en SQLite para enviar las consultas. **El archivo tiene permisos restrictivos, pero los secretos no están cifrados en reposo.** Utilizar cifrado de disco y restringir las copias de seguridad en local; migrar a un almacén de secretos antes de producción. No guardar credenciales reales en modo demo.
-- Sesiones: token aleatorio con hash en DB, duración máxima de 8 horas e inactividad máxima de 30 minutos; cookie HttpOnly/SameSite=Strict/Secure mediante el proxy HTTPS local autorizado. CSRF en escrituras y validación de origen/Host; sin CORS comodín. HTTP remoto no permite autenticación ni consultas con sesión.
-- Auditoría local: creación/cambio de cuentas, cambio de conexiones, intento de diagnóstico y acceso satisfactorio. No contiene contraseñas ni tokens. No es un registro inmutable ni una auditoría completa de todas las operaciones.
+- Sesiones: token aleatorio con hash en DB, duración máxima de 8 horas e inactividad máxima de 30 minutos; cookie HttpOnly/SameSite=Strict y `Secure` cuando existe proxy HTTPS, o sin `Secure` en el modo LAN HTTP configurado. CSRF en escrituras y validación de origen/Host; sin CORS comodín. HTTP sin una LAN declarada no permite autenticación ni consultas con sesión.
+- Auditoría local: creación, edición, permisos concedidos/revocados, reinicios de contraseña, ocultamiento, eliminación anónima de cuentas, cambio de conexiones, intento de diagnóstico y acceso satisfactorio. Los cambios de cuenta guardan antes/después sin contraseñas ni tokens. No es un registro inmutable ni una auditoría completa de todas las operaciones.
 - Límites de intentos de acceso por usuario/IP y global; hasta seis diagnósticos por minuto por super-admin. Catálogo local limitado a 1000 cuentas.
 - Ejecutar una sola instancia del gateway: el inventario y los reportes siguen dependiendo de archivos y un lock de proceso. Las cuentas y las conexiones sí usan transacciones SQLite.
 
@@ -94,7 +97,7 @@ No exponer directamente los puertos de Forti/Omni a clientes finales: esos servi
 
 ## Acceso desde un teléfono
 
-`localhost` en el teléfono no es la computadora. El gateway escucha en `127.0.0.1` por defecto. Para uso real desde móvil, publicar mediante un reverse proxy HTTPS de la red autorizada, conservar el Host original y configurar, por ejemplo:
+`localhost` en el teléfono no es la computadora. Para uso LAN, el gateway escucha en `0.0.0.0` con `SGRS_LAN_ORIGIN` y `SGRS_LAN_CLIENT_CIDRS`; el teléfono abre `http://IP_DEL_SERVIDOR:3000`. Un reverse proxy HTTPS es una opción separada.
 
 ```bash
 SGRS_PUBLIC_ORIGIN=https://sgrs.institucion.gob.mx .venv/bin/python server.py

@@ -7,7 +7,8 @@ def test_job_persists_observations_without_contacting_providers(client, monkeypa
     async def collect(self):
         return responses()
     monkeypatch.setattr(Providers, 'collect', collect)
-    headers = {'X-API-Key': 'read-test'}
+    assert client.post('/api/v1/reconciliation/jobs', headers={'X-API-Key': 'read-test'}).status_code == 403
+    headers = {'X-API-Key': 'write-test'}
     result = client.post('/api/v1/reconciliation/jobs', headers=headers)
     assert result.status_code == 202
     identifier = result.json()['data']['id']

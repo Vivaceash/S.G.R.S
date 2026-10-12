@@ -4628,7 +4628,8 @@
     "type": "—",
     "mac": "—",
     "location": "Hospital Central",
-    "notes": "Disponible"
+    "notes": "Dirección liberada disponible en el pool",
+    "device": "—"
   },
   {
     "ip": "192.168.40.249",

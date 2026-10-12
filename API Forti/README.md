@@ -28,8 +28,15 @@ FORTIOS_PORT=443
 FORTIOS_SCHEME=https
 FORTIOS_API_TOKEN=PEGA_AQUI_TU_API_TOKEN_DE_FORTIGATE
 FORTIOS_DEFAULT_VDOM=root
-FORTIOS_VERIFY_SSL=false
+FORTIOS_VERIFY_SSL=true
+FORTIOS_ALLOW_UNVERIFIED_TLS=false
 ```
+
+Si FortiGate usa una CA privada, configura `FORTIOS_CA_BUNDLE` con su archivo PEM.
+La excepción explícita `FORTIOS_VERIFY_SSL=false` junto con
+`FORTIOS_ALLOW_UNVERIFIED_TLS=true` permite consultar sin validar el certificado.
+Mantiene HTTPS y el token de autenticación, pero permite la suplantación del servidor
+en la red. La excepción está desactivada por defecto.
 
 ### 3. Iniciar el Servidor
 ```bash
@@ -114,4 +121,4 @@ TLS sin validar, hosts comodín, secretos JWT débiles y enrolamiento 2FA abiert
 ### 🩺 Salud
 | Método | Endpoint | Descripción |
 |---|---|---|
-| `GET` | `/api/v1/health` | Estado de la API y test de conectividad con FortiGate (no requiere API Key). |
+| `GET` | `/api/v1/health` | Estado de la API y test de conectividad con FortiGate (requiere API Key). |

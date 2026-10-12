@@ -598,9 +598,11 @@ export function Requests({ demo }) {
       </div>
 
       {/* Pestañas de Navegación de Altas */}
-      <nav className="inventory-tabs" aria-label="Secciones de altas" style={{ marginTop: '18px' }}>
+      <nav className="inventory-tabs" role="tablist" aria-label="Secciones de altas" style={{ marginTop: '18px' }}>
         {canViewOficios && <button
           type="button"
+          role="tab"
+          id="altas-tab-oficios"
           className={visibleTab === 'oficios' ? 'active' : ''}
           aria-selected={visibleTab === 'oficios'}
           onClick={() => setTab('oficios')}
@@ -609,6 +611,8 @@ export function Requests({ demo }) {
         </button>}
         {canViewAll && <button
           type="button"
+          role="tab"
+          id="altas-tab-all"
           className={visibleTab === 'all' ? 'active' : ''}
           aria-selected={visibleTab === 'all'}
           onClick={() => setTab('all')}

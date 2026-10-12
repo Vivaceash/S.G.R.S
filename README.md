@@ -11,13 +11,13 @@ npm --prefix Dashboard run build
 
 Para desarrollo: `npm --prefix Dashboard run dev`; abrir `http://127.0.0.1:5173/?demo=1` para explorar sin consultar ni modificar APIs. Sin `?demo=1` se usa el gateway existente del puerto 3000. El servidor estático ahora entrega únicamente `Dashboard/dist`.
 
-Ver [guía del dashboard](Dashboard/README.md), [usuarios y conexiones](USUARIOS_Y_CONEXIONES.md), [contratos de interacción](UX-CONTRACT.md) y [plan general de seguridad](PLAN_USUARIOS_PRIVILEGIOS.md). El gateway incorpora cuentas locales y permisos viewer/admin/super-admin; crear la primera cuenta mediante `.venv/bin/python dashboard_access.py bootstrap`. MFA/SSO, ámbitos y cifrado de secretos en reposo siguen pendientes. El HTML/JS anterior se conserva como referencia, no como entrada de producción.
+Ver [guía del dashboard](Dashboard/README.md), [usuarios y conexiones](USUARIOS_Y_CONEXIONES.md), [contratos de interacción](UX-CONTRACT.md) y [plan general de seguridad](PLAN_USUARIOS_PRIVILEGIOS.md). El gateway incorpora cuentas locales, capacidades separadas y herencia por jerarquía; crear la primera cuenta mediante `.venv/bin/python dashboard_access.py bootstrap` y configurar `SGRS_INITIAL_USER_PASSWORD` para las cuentas nuevas. MFA/SSO, ámbitos y cifrado de secretos en reposo siguen pendientes. El HTML/JS anterior se conserva como referencia, no como entrada de producción.
 
-La nueva [API Inventarios](</home/vivaceash/Projects/SGRS/API Inventarios/README.md>) centraliza CCTV, sus correcciones e historial, y enriquece cámaras con observaciones Forti/Omni y VLAN configurada. Scalar está en `http://192.168.38.250:8002/scalar`; Forti en `:8001/scalar` y Omni en `:8000/scalar`. La plataforma ya carga el proxy del dashboard y el corte CCTV desde Inventarios. Si el puerto 3000 está ocupado, el runner elige 3001. La vuelta al escritor anterior está en la guía de la API.
+La nueva [API Inventarios](</home/vivaceash/Projects/SGRS/API Inventarios/README.md>) centraliza CCTV, sus correcciones e historial, y enriquece cámaras con observaciones Forti/Omni y VLAN configurada. Scalar está en `http://192.168.38.250:8002/scalar`; Forti en `:8001/scalar` y Omni en `:8000/scalar`. La plataforma ya carga el proxy del dashboard y el corte CCTV desde Inventarios. El origen QR usa el puerto fijo 3000; si está ocupado, el runner conserva ese puerto y reporta el conflicto para proteger las etiquetas impresas. La vuelta al escritor anterior está en la guía de la API.
 
 Documentación de dominio: [glosario](GLOSSARY.md), [roadmap y recomendaciones de API](</home/vivaceash/Projects/SGRS/API Inventarios/ROADMAP.md>) y [decisión de fuente operativa](docs/adr/0001-inventarios-fuente-operativa-cctv.md).
 
-El [análisis de APIs y evolución del dashboard](ANALISIS_APIS_Y_EVOLUCION_DASHBOARD.md) documenta las 34 consultas de datos/diagnóstico, sus límites y las páginas propuestas. El rol Superusuario permanece interno; viewer/admin reciben un catálogo operativo de dos roles y la demo no muestra funciones internas. Esta documentación es técnica, no ayuda pública para ejecutivos.
+El [análisis de APIs y evolución del dashboard](ANALISIS_APIS_Y_EVOLUCION_DASHBOARD.md) documenta las 34 consultas de datos/diagnóstico, sus límites y las páginas propuestas. El rol Superusuario conserva su administración interna; la asignación de cuentas se limita por jerarquía y permisos separados. Esta documentación es técnica, no ayuda pública para ejecutivos.
 
 > **Plataforma centralizada de observabilidad, telemetría perimetral, inventario de infraestructura y control de acceso para redes corporativas de misión crítica.**
 
@@ -25,7 +25,7 @@ El [análisis de APIs y evolución del dashboard](ANALISIS_APIS_Y_EVOLUCION_DASH
 
 ## 🏛️ Arquitectura del Sistema
 
-El ecosistema **S.G.R.S.** combina dos APIs FastAPI con un gateway Python y un dashboard React/Tailwind compilado con Vite:
+El ecosistema **S.G.R.S.** combina tres APIs FastAPI con un gateway Python y un dashboard React/Tailwind compilado con Vite:
 
 ```text
                                ┌────────────────────────────────────────┐
@@ -77,13 +77,13 @@ Microservicio asíncrono de alto rendimiento desarrollado con **FastAPI** y clie
 - **Puerto Predeterminado:** `8001`
 - **Documentación Interactiva Scalar:** `http://localhost:8001/scalar` o `/docs`
 - **Liveness Probe Público:** `http://localhost:8001/health`
-- **Diagnóstico Profundo Autenticado:** `http://localhost:8001/api/v1/health`
+- **Diagnóstico Profundo Autenticado:** `http://localhost:8001/api/v1/health` con `X-API-Key`
 
 #### Catálogo de Endpoints de API Forti:
 | Módulo | Método | Endpoint | Descripción |
 | :--- | :---: | :--- | :--- |
 | **Salud** | `GET` | `/health` | Liveness probe público ligero para balanceadores (sin consumo de red). |
-| **Salud** | `GET` | `/api/v1/health` | Diagnóstico autenticado de conectividad con FortiGate, uptime y estado. |
+| **Salud** | `GET` | `/api/v1/health` | Diagnóstico autenticado de conectividad con FortiGate, uptime y estado. Requiere `X-API-Key`. |
 | **Dispositivos** | `GET` | `/api/v1/devices` | Lista completa de dispositivos conectados (MAC, IP, Vendor, OS, hostname). |
 | **Dispositivos** | `GET` | `/api/v1/devices/{mac_address}` | Consulta específica de un dispositivo por su dirección física MAC. |
 | **Dispositivos** | `GET` | `/api/v1/devices/summary` | Conteo consolidado de dispositivos totales, online y offline. |
@@ -112,13 +112,13 @@ Microservicio estructurado con **FastAPI** y **Scalar** en su versión **v2.0**,
 - **Puerto Predeterminado:** `8000`
 - **Documentación Interactiva Scalar:** `http://localhost:8000/scalar` o `/docs`
 - **Liveness Probe Público:** `http://localhost:8000/health`
-- **Diagnóstico Profundo Autenticado:** `http://localhost:8000/api/v1/system/health`
+- **Diagnóstico Profundo Autenticado:** `http://localhost:8000/api/v1/system/health` con `X-API-Key`
 
 #### Catálogo de Endpoints de API Omni:
 | Módulo | Método | Endpoint | Descripción |
 | :--- | :---: | :--- | :--- |
 | **Salud** | `GET` | `/health` | Liveness probe público ligero para orquestadores de contenedores. |
-| **Diagnóstico** | `GET` | `/api/v1/system/health` | Estado de enlace y latencia contra el servidor OmniVista 2500 NMS. |
+| **Diagnóstico** | `GET` | `/api/v1/system/health` | Estado de enlace y latencia contra el servidor OmniVista 2500 NMS. Requiere `X-API-Key`. |
 | **Diagnóstico** | `GET` | `/api/v1/system/version` | Versión y número de compilación del sistema operativo del NMS. |
 | **Monitoreo** | `GET` | `/api/v1/monitoring/infrastructure-stats` | Resumen métrico consolidado: total de APs, Switches, cuentas y MACs. |
 | **Monitoreo** | `GET` | `/api/v1/monitoring/devices` | Inventario de conmutadores (OmniSwitch) y APs (Stellar) con IP y modelo. |
@@ -247,6 +247,7 @@ Cada microservicio se configura mediante variables de entorno validadas con **Py
 | `FORTIOS_DEFAULT_VDOM` | `str` | `root` | VDOM principal de consulta en FortiGate. |
 | `FORTIOS_VERIFY_SSL` | `bool` | `true` | Valida certificados TLS de FortiGate. |
 | `FORTIOS_CA_BUNDLE` | `str` | `""` | Ruta a certificado CA corporativo si aplica. |
+| `REQUIRE_PROVIDER_ON_STARTUP` | `bool` | `false` | Si es `true`, aborta el proceso cuando FortiGate no autentica al arrancar. |
 | `FORTIOS_TIMEOUT` | `float` | `15.0` | Tiempo de espera en segundos para respuestas de FortiOS. |
 
 ### Variables para API OmniVista (`API Omni/.env`)
@@ -272,6 +273,7 @@ Cada microservicio se configura mediante variables de entorno validadas con **Py
 | `OV_API_KEY` | `str` | `""` | Obsoleta; no se usa. En producción su presencia invalida la configuración. |
 | `OV_VERIFY_SSL` | `bool` | `true` | Validación estricta de certificados TLS. |
 | `OV_CA_BUNDLE` | `str` | `""` | Ruta hacia el certificado CA corporativo. |
+| `REQUIRE_PROVIDER_ON_STARTUP` | `bool` | `false` | Si es `true`, aborta el proceso cuando OmniVista no autentica al arrancar. |
 
 ---
 
@@ -283,9 +285,10 @@ Cada microservicio se configura mediante variables de entorno validadas con **Py
 - Git instalado.
 
 ### 1. Inicio Rápido Unificado (Recomendado)
-En este equipo, desde cualquier directorio de la terminal:
+En Linux, desde cualquier directorio de la terminal:
 
 ```bash
+SGRS install
 SGRS
 SGRS status
 SGRS restart
@@ -294,25 +297,42 @@ SGRS stop
 SGRS open
 ```
 
-`SGRS` y `sgrs` apuntan a `sgrs.sh`, que delega en `run.py` usando el entorno virtual.
+En Windows, desde la raíz del repositorio, ejecuta una sola vez:
+
+```bat
+install.cmd
+```
+
+También puedes ejecutar `py -3 run.py install`. En Windows, `install` prepara el entorno, instala los comandos globales del usuario e inicia los cuatro servicios en segundo plano en esa misma operación. Después cierra y vuelve a abrir la aplicación de terminal para cargar el `PATH` actualizado; desde ahí podrás ejecutar `SGRS`, `sgrs`, `SGRS status`, `SGRS stop` y los demás comandos desde cualquier directorio.
+
+En Linux, `SGRS install` prepara el entorno virtual, dependencias, credenciales locales de Inventarios y los comandos globales; después se inicia con `SGRS`. También puede ejecutarse `./install.sh`.
+En Linux, `SGRS` y `sgrs` apuntan a `sgrs.sh`, que delega en `run.py` usando el entorno virtual.
+En Windows el instalador genera `SGRS.cmd` y `sgrs.cmd` bajo `%USERPROFILE%\bin` y añade esa carpeta al `PATH` del usuario. El runner usa `CREATE_NO_WINDOW`, por lo que las cuatro APIs y el Dashboard no abren una terminal propia.
 Desde la raíz del repositorio también se puede ejecutar `python run.py` con los mismos comandos.
 El inicio predeterminado ejecuta los cuatro servicios en segundo plano:
 
 - **API Alcatel OmniVista 2500**: puerto `8000`.
 - **API Fortinet FortiGate**: puerto `8001`.
 - **API Inventarios**: puerto `8002`, configurable con `INVENTARIOS_PORT`.
-- **Dashboard React/Tailwind compilado**: puerto `3000` o alternativo `3001`/`3002` si está ocupado.
+- **Dashboard React/Tailwind compilado**: origen permanente `http://192.168.38.250:3000`.
 
-El runner anuncia éxito únicamente después de que los cuatro servicios respondan por HTTP.
+El runner anuncia éxito únicamente después de que los cuatro procesos respondan por HTTP.
+Si un upstream no responde, su API local permanece viva en estado degradado y reintenta las consultas; la autenticación, el acceso LAN y la validación TLS siguen activos.
+Para exigir fail-fast del proveedor durante el arranque define `REQUIRE_PROVIDER_ON_STARTUP=true` en el `.env` de la API correspondiente.
 Si un arranque queda incompleto, `SGRS` conserva los componentes registrados activos
 y vuelve a iniciar los que terminaron; no confunde Inventarios activo con un puerto ajeno.
-OmniVista autentica con `OV_USERNAME`/`OV_PASSWORD` al arrancar y Forti valida su `FORTIOS_API_TOKEN`.
-Si Omni falla, el error indica el estado HTTP o la causa de conexión sin exponer credenciales.
+OmniVista intenta autenticar con `OV_USERNAME`/`OV_PASSWORD` al arrancar y Forti valida su `FORTIOS_API_TOKEN`.
+Si un proveedor falla, el error indica el estado HTTP o la causa de conexión sin exponer credenciales y la API local conserva su liveness.
 Después de cambiar un `.env`, ejecutar `SGRS restart` para cargar la configuración nueva.
 `SGRS status` muestra disponibilidad HTTP, el PID registrado y la URL de cada componente.
 `SGRS open` abre el puerto real del Dashboard; `SGRS stop` detiene los procesos registrados.
 
 Para seguir los logs en primer plano usar `SGRS --foreground`; `Ctrl + C` detiene sus cuatro servicios.
+
+### Acceso LAN en producción
+
+La instalación LAN publica el dashboard y las APIs en las interfaces LAN configuradas. Conserva `DASHBOARD_HOST=0.0.0.0`, define `SGRS_LAN_ORIGIN` con los orígenes autorizados y limita `SGRS_LAN_CLIENT_CIDRS` a las redes institucionales. Los QR de IDF siempre codifican `http://192.168.38.250:3000`; el runner reserva ese puerto y falla con un error si está ocupado, en vez de cambiar el enlace impreso. `SGRS_PUBLIC_ORIGIN` se deja vacío en este modo. Los servicios verifican TLS hacia FortiGate y OmniVista mediante `FORTIOS_VERIFY_SSL=true` y `OV_VERIFY_SSL=true`.
+Si el appliance usa una CA institucional, configura `FORTIOS_CA_BUNDLE` o `OV_CA_BUNDLE` con una ruta PEM existente. No se desactiva la validación TLS automáticamente.
 Los logs unificados se guardan en `logs/sgrs.log`.
 
 ---

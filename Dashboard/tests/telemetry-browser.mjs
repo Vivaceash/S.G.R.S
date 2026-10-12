@@ -17,7 +17,7 @@ try {
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
     let data;
-    if (path === '/api/auth/session') data = { user: { id: 'test', role, name: 'Prueba', username: 'test', version: 1 }, csrf: 'test', capabilities: role === 'admin' ? ['dashboard.read'] : ['dashboard.read', 'traffic.read', 'users.manage'], roles: [] };
+    if (path === '/api/auth/session') data = { user: { id: 'test', role, name: 'Prueba', username: 'test', version: 1 }, csrf: 'test', capabilities: role === 'admin' ? ['dashboard.read'] : ['dashboard.read', 'traffic.read', 'users.read', 'users.create', 'users.edit', 'users.delete'], roles: [] };
     else if (path === '/api/admin/catalog') data = { modules };
     else if (path === '/api/health') data = { forti: true, omni: true };
     else if (['/api/idfs', '/api/ips', '/api/devices', '/api/reports'].includes(path)) data = demo[path.slice(5)];

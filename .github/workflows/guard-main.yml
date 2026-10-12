@@ -6,17 +6,19 @@ on:
       - main
 
 permissions:
-  contents: write
-  issues: write
+  contents: read
 
 jobs:
   protect-main:
     name: Enforce Main Branch Protection
     if: github.actor != 'Vivaceash'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -55,7 +57,7 @@ jobs:
 
       - name: Notificar vía Issue sobre el rollback
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
             const actor = '${{ github.actor }}';

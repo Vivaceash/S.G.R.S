@@ -76,7 +76,9 @@ class Settings(BaseSettings):
     FORTIOS_DEFAULT_VDOM: str = "root"
     FORTIOS_VERIFY_SSL: bool = True
     FORTIOS_CA_BUNDLE: Optional[str] = None
+    FORTIOS_ALLOW_UNVERIFIED_TLS: bool = False
     FORTIOS_TIMEOUT: float = 15.0
+    REQUIRE_PROVIDER_ON_STARTUP: bool = False
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -134,12 +136,28 @@ class Settings(BaseSettings):
                 raise ValueError("El enrolamiento 2FA debe permanecer cerrado fuera de development/test.")
             if self.ENABLE_2FA and (not self.TOTP_SECRET_KEY or len(self.TOTP_SECRET_KEY.encode("utf-8")) < 32):
                 raise ValueError("TOTP_SECRET_KEY debe contener al menos 32 bytes aleatorios.")
-            if not self.FORTIOS_VERIFY_SSL and not self.FORTIOS_CA_BUNDLE:
-                raise ValueError("La validación TLS de FortiOS es obligatoria fuera de development/test.")
             if self.FORTIOS_SCHEME.lower() != "https":
                 raise ValueError("FORTIOS_SCHEME debe ser https fuera de development/test.")
-            if self.FORTIOS_CA_BUNDLE and not Path(self.FORTIOS_CA_BUNDLE).is_file():
-                raise ValueError("FORTIOS_CA_BUNDLE debe apuntar a un archivo CA existente.")
+            if self.FORTIOS_ALLOW_UNVERIFIED_TLS:
+                if self.FORTIOS_VERIFY_SSL or self.FORTIOS_CA_BUNDLE:
+                    raise ValueError(
+                        "FORTIOS_ALLOW_UNVERIFIED_TLS solo aplica cuando FORTIOS_VERIFY_SSL=false y FORTIOS_CA_BUNDLE está vacío."
+                    )
+                logger.warning(
+                    "[FORTIOS-TLS] HTTPS sigue activo, pero el certificado del servidor upstream no se valida."
+                )
+            elif not self.FORTIOS_VERIFY_SSL and not self.FORTIOS_CA_BUNDLE:
+                raise ValueError(
+                    "La validación TLS de FortiOS es obligatoria; para omitirla se requiere FORTIOS_ALLOW_UNVERIFIED_TLS=true."
+                )
+            if self.FORTIOS_CA_BUNDLE:
+                ca_path = Path(self.FORTIOS_CA_BUNDLE).expanduser()
+                if not ca_path.is_absolute():
+                    candidates = (_ENV_FILE.parent / ca_path, _BASE_DIR.parent / ca_path, Path.cwd() / ca_path)
+                    ca_path = next((candidate for candidate in candidates if candidate.is_file()), ca_path)
+                if not ca_path.is_file():
+                    raise ValueError("FORTIOS_CA_BUNDLE debe apuntar a un archivo CA existente.")
+                self.FORTIOS_CA_BUNDLE = str(ca_path.resolve())
             if "*" in self.ALLOWED_HOSTS:
                 raise ValueError("ALLOWED_HOSTS no puede contener '*' fuera de development/test.")
             if "*" in self.CORS_ORIGINS:

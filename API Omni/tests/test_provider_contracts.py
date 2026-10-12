@@ -63,13 +63,26 @@ def test_omnivista_login_is_required_even_with_legacy_provider_key(monkeypatch):
 
 
 def test_omnivista_startup_rejects_failed_provider_login(monkeypatch):
-    """El servicio no queda listo si OmniVista no autentica al arrancar."""
+    """El modo estricto conserva el fail-fast opcional para instalaciones que lo exijan."""
     monkeypatch.setattr(omnivista_service, "login", lambda: False)
+    monkeypatch.setattr(settings, "REQUIRE_PROVIDER_ON_STARTUP", True)
 
     async def run_lifespan():
         with pytest.raises(RuntimeError, match="no autenticó"):
             async with app.router.lifespan_context(app):
                 pass
+
+    asyncio.run(run_lifespan())
+
+
+def test_omnivista_startup_keeps_local_api_when_provider_is_degraded(monkeypatch):
+    """Sin modo estricto, el liveness local no depende de la disponibilidad upstream."""
+    monkeypatch.setattr(omnivista_service, "login", lambda: False)
+    monkeypatch.setattr(settings, "REQUIRE_PROVIDER_ON_STARTUP", False)
+
+    async def run_lifespan():
+        async with app.router.lifespan_context(app):
+            pass
 
     asyncio.run(run_lifespan())
 

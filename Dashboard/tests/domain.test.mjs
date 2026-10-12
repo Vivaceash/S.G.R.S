@@ -41,7 +41,7 @@ test('roleLabel asigna etiquetas precisas para soporte, admin y super-admin', ()
   assert.equal(roleLabel('super-admin'), 'Admin');
   assert.equal(roleLabel('admin'), 'Administrador');
   assert.equal(roleLabel('soporte'), 'Soporte');
-  assert.equal(roleLabel('viewer'), 'viewer');
+  assert.equal(roleLabel('viewer'), 'Consulta');
 });
 
 test('Catálogo AVAILABLE_PAGES y ROLE_PAGE_DEFAULTS son coherentes con las rutas institucionales', () => {
@@ -77,7 +77,7 @@ test('Filtros de computadoras e impresoras en línea para SupportDashboard', () 
   assert.deepEqual(onlinePrinters.map(p => p.name), ['IMP-PISO-2', 'EPSON-L5190']);
 });
 
-test('Matriz de acceso desacoplada: admin accede a usuarios sin can(users.manage), conexiones queda restringido a super-admin', () => {
+test('Matriz de acceso desacoplada: usuarios usa permisos separados y conexiones queda restringido a super-admin', () => {
   const isRouteAllowed = (path, userRole, allowedPages, can = () => false) => {
     const canViewPage = p => allowedPages.includes(p);
     if (path === 'conexiones') {
@@ -86,7 +86,7 @@ test('Matriz de acceso desacoplada: admin accede a usuarios sin can(users.manage
     return Boolean(canViewPage(path));
   };
 
-  // Rol admin (sin capability users.manage ni integrations.manage)
+  // Rol admin (sin permisos de usuarios ni integrations.manage en este fixture)
   const adminPages = ROLE_PAGE_DEFAULTS.admin;
   assert.equal(isRouteAllowed('usuarios', 'admin', adminPages), true, 'Admin debe poder acceder a #usuarios');
   assert.equal(isRouteAllowed('conexiones', 'admin', adminPages), false, 'Admin no debe poder acceder a #conexiones');
@@ -119,10 +119,10 @@ test('Vista general IDF comparte navegación, pero no autoriza entrada individua
   assert.equal(canViewPageId('idf', []), false);
 });
 
-test('BASE_ROLE_CATALOG y getEffectiveRoles normalizan roles institucionales y excluyen viewer', () => {
+test('BASE_ROLE_CATALOG y getEffectiveRoles normalizan roles institucionales y conservan viewer', () => {
   // 1. Catálogo base
-  assert.equal(BASE_ROLE_CATALOG.length, 3);
-  assert.deepEqual(BASE_ROLE_CATALOG.map(r => r.id), ['soporte', 'admin', 'super-admin']);
+  assert.equal(BASE_ROLE_CATALOG.length, 4);
+  assert.deepEqual(BASE_ROLE_CATALOG.map(r => r.id), ['soporte', 'viewer', 'admin', 'super-admin']);
 
   // 2. Si roleInfo viene vacío o nulo
   const fromEmpty = getEffectiveRoles([]);
@@ -137,25 +137,24 @@ test('BASE_ROLE_CATALOG y getEffectiveRoles normalizan roles institucionales y e
     { id: 'super-admin', title: 'Admin', description: 'Super' },
   ];
   const normalizedLegacy = getEffectiveRoles(legacyRoles);
-  assert.ok(!normalizedLegacy.some(r => r.id === 'viewer'), 'viewer nunca debe estar en roles normalizados');
+  assert.ok(normalizedLegacy.some(r => r.id === 'viewer'), 'viewer debe conservarse como rol asignable');
   assert.ok(!normalizedLegacy.some(r => r.id === 'soporte'), 'no se deben inventar roles ausentes');
-  assert.deepEqual(normalizedLegacy.map(r => r.id), ['admin', 'super-admin']);
+  assert.deepEqual(normalizedLegacy.map(r => r.id), ['viewer', 'admin', 'super-admin']);
 
   // 4. Roles seleccionables en UserForm según jerarquía del actor
-  const isSuperAdminAllowed = ['soporte', 'admin', 'super-admin'];
-  const isAdminAllowed = ['soporte', 'admin'];
+  const isSuperAdminAllowed = ['soporte', 'viewer', 'admin', 'super-admin'];
+  const isAdminAllowed = ['soporte', 'viewer', 'admin'];
 
   // Para super-admin:
   const superSelectable = normalizedLegacy.filter(r => isSuperAdminAllowed.includes(r.id));
-  assert.deepEqual(superSelectable.map(r => r.id), ['admin', 'super-admin']);
-  assert.equal(roleLabel(superSelectable[0].id), 'Administrador');
+  assert.deepEqual(superSelectable.map(r => r.id), ['viewer', 'admin', 'super-admin']);
+  assert.equal(roleLabel(superSelectable[0].id), 'Consulta');
 
   // Para admin (crear usuario):
   const adminSelectable = normalizedLegacy.filter(r => isAdminAllowed.includes(r.id));
-  assert.deepEqual(adminSelectable.map(r => r.id), ['admin']);
-  assert.equal(roleLabel(adminSelectable[0].id), 'Administrador');
+  assert.deepEqual(adminSelectable.map(r => r.id), ['viewer', 'admin']);
+  assert.equal(roleLabel(adminSelectable[0].id), 'Consulta');
   assert.ok(!adminSelectable.some(r => r.id === 'super-admin'), 'Admin no puede seleccionar super-admin');
-  assert.ok(!adminSelectable.some(r => r.id === 'viewer'), 'Admin no puede seleccionar viewer');
 });
 
 test('Diferenciación de roles, tarjetas y proyección de usuarios según jerarquía del actor (admin vs super-admin)', () => {
@@ -174,18 +173,18 @@ test('Diferenciación de roles, tarjetas y proyección de usuarios según jerarq
   const projectedForAdmin = usersForDemo(users, 'admin');
   assert.equal(projectedForAdmin.length, 4, 'Admin no ve cuentas con is_hidden === true');
   assert.ok(!projectedForAdmin.some(u => u.is_hidden), 'Ningún usuario tiene is_hidden visible para admin');
-  assert.ok(!projectedForAdmin.some(u => u.role === 'super-admin'), 'Admin ve a los super-admin proyectados como admin');
+  assert.ok(projectedForAdmin.some(u => u.role === 'super-admin'), 'Admin ve el rol real de las cuentas visibles');
 
   // En la tabla, la columna Rol proyectada:
   const superProjected = projectedForAdmin.find(u => u.id === 'u-super');
-  assert.equal(superProjected.role, 'admin');
-  assert.equal(roleLabel(superProjected.role), 'Administrador', 'En la tabla su columna Rol muestra Administrador, igual que admin');
+  assert.equal(superProjected.role, 'super-admin');
+  assert.equal(roleLabel(superProjected.role), 'Admin', 'La cuenta super-admin conserva su etiqueta interna visible para administrar jerarquía');
 
   // B) Tarjetas de rol (role-cards):
   const adminCards = getCardRoles('admin');
-  assert.equal(adminCards.length, 2, 'Admin solo ve 2 tarjetas de rol');
-  assert.deepEqual(adminCards.map(c => c.id), ['soporte', 'admin']);
-  assert.deepEqual(adminCards.map(c => roleLabel(c.id)), ['Soporte', 'Administrador']);
+  assert.equal(adminCards.length, 3, 'Admin ve las tarjetas de los roles que puede asignar');
+  assert.deepEqual(adminCards.map(c => c.id), ['soporte', 'viewer', 'admin']);
+  assert.deepEqual(adminCards.map(c => roleLabel(c.id)), ['Soporte', 'Consulta', 'Administrador']);
 
   // Conteos en tarjetas para Admin:
   const adminSoporteCount = countUsersForRoleCard(projectedForAdmin, 'soporte', 'admin');
@@ -197,10 +196,10 @@ test('Diferenciación de roles, tarjetas y proyección de usuarios según jerarq
 
   // C) Selector de filtro por Rol en la toolbar:
   const adminFilterRoles = getUserFilterRoles('admin');
-  assert.equal(adminFilterRoles.length, 2, 'Admin solo tiene 2 opciones de rol en el filtro');
-  assert.deepEqual(adminFilterRoles.map(r => r.id), ['soporte', 'admin']);
-  assert.deepEqual(adminFilterRoles.map(r => roleLabel(r.id)), ['Soporte', 'Administrador']);
-  assert.ok(!adminFilterRoles.some(r => r.id === 'super-admin'), 'Admin nunca ve la opción de super-admin ni Admin');
+  assert.equal(adminFilterRoles.length, 3, 'Admin tiene las opciones de rol de su nivel');
+  assert.deepEqual(adminFilterRoles.map(r => r.id), ['soporte', 'viewer', 'admin']);
+  assert.deepEqual(adminFilterRoles.map(r => roleLabel(r.id)), ['Soporte', 'Consulta', 'Administrador']);
+  assert.ok(!adminFilterRoles.some(r => r.id === 'super-admin'), 'Admin no ve la opción de super-admin');
 
   // ==========================================
   // 2. ACTOR: SUPER-ADMIN (user?.role === 'super-admin')
@@ -214,11 +213,11 @@ test('Diferenciación de roles, tarjetas y proyección de usuarios según jerarq
   assert.equal(roleLabel(projectedForSuper.find(u => u.id === 'u-sop-1').role), 'Soporte', 'Super-admin ve soporte como Soporte');
 
   // B) Tarjetas de rol (role-cards):
-  // Ahora las tarjetas visibles son únicamente las operativas ('Soporte' y 'Administrador') para TODOS los usuarios (tanto admin como super-admin)
+  // Las tarjetas visibles corresponden a los roles operativos del catálogo.
   const superCards = getCardRoles('super-admin');
-  assert.equal(superCards.length, 2, 'Super-admin ahora solo ve 2 tarjetas de rol (ocultando Admin)');
-  assert.deepEqual(superCards.map(c => c.id), ['soporte', 'admin']);
-  assert.deepEqual(superCards.map(c => roleLabel(c.id)), ['Soporte', 'Administrador']);
+  assert.equal(superCards.length, 3, 'Super-admin ve las tres tarjetas operativas');
+  assert.deepEqual(superCards.map(c => c.id), ['soporte', 'viewer', 'admin']);
+  assert.deepEqual(superCards.map(c => roleLabel(c.id)), ['Soporte', 'Consulta', 'Administrador']);
   assert.ok(!superCards.some(c => c.id === 'super-admin'), 'getCardRoles no incluye super-admin para super-admin');
   assert.ok(!getCardRoles('admin').some(c => c.id === 'super-admin'), 'getCardRoles no incluye super-admin para admin');
   assert.ok(!getCardRoles().some(c => c.id === 'super-admin'), 'getCardRoles no incluye super-admin para ningún rol');
@@ -228,14 +227,14 @@ test('Diferenciación de roles, tarjetas y proyección de usuarios según jerarq
   const superAdminCount = countUsersForRoleCard(projectedForSuper, 'admin', 'super-admin');
   const superSuperCount = countUsersForRoleCard(projectedForSuper, 'super-admin', 'super-admin');
   assert.equal(superSoporteCount, 1, 'Tarjeta Soporte cuenta 1 técnico');
-  assert.equal(superAdminCount, 4, 'Tarjeta Administrador agrupa tanto administradores como super-administradores (2 admin + 2 super-admin)');
+  assert.equal(superAdminCount, 4, 'Tarjeta Administrador contabiliza administradores y super-administradores');
   assert.equal(superSuperCount, 0, 'No existe conteo para super-admin');
 
   // C) Selector de filtro por Rol en la toolbar:
   const superFilterRoles = getUserFilterRoles('super-admin');
-  assert.equal(superFilterRoles.length, 3, 'Super-admin ve 3 roles en filtro');
-  assert.deepEqual(superFilterRoles.map(r => r.id), ['soporte', 'admin', 'super-admin']);
-  assert.deepEqual(superFilterRoles.map(r => roleLabel(r.id)), ['Soporte', 'Administrador', 'Admin']);
+  assert.equal(superFilterRoles.length, 4, 'Super-admin ve todos los roles en filtro');
+  assert.deepEqual(superFilterRoles.map(r => r.id), ['soporte', 'viewer', 'admin', 'super-admin']);
+  assert.deepEqual(superFilterRoles.map(r => roleLabel(r.id)), ['Soporte', 'Consulta', 'Administrador', 'Admin']);
 
   // ==========================================
   // 3. VALIDACIÓN MODO REAL (consumiendo /api/admin/users)

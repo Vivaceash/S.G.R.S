@@ -24,7 +24,7 @@ try:
 except ImportError:
     pass
 
-from dashboard_access import connection, connection_headers, AccessError
+from dashboard_access import connection, connection_headers, AccessError, ensure_hidden_superadmin
 from dashboard_routes import AccessRoutes
 from dashboard_reports import ReportRoutes, report_key, tagged_reports, idf_overview
 from integration_health import upstream_healthy
@@ -38,6 +38,7 @@ from dashboard_security import sanitize_upstream
 _file_lock = threading.Lock()
 
 PORT = int(os.environ.get("DASHBOARD_PORT") or os.environ.get("PORT", 3000))
+PERMANENT_QR_ORIGIN = "http://192.168.38.250:3000"
 # React's build is the only public directory; source and legacy screens are not served.
 DIRECTORY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Dashboard", "dist")
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -311,7 +312,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body_bytes)
 
     def _send_json(self, data, status=200):
-        if status == 200 and urlsplit(self.path).path not in ('/api/auth/session', '/api/auth/login', '/api/auth/bootstrap', '/api/admin/users', '/api/admin/users/save'):
+        if status == 200 and urlsplit(self.path).path not in ('/api/auth/session', '/api/auth/login', '/api/auth/bootstrap', '/api/auth/password/change', '/api/admin/users', '/api/admin/users/save', '/api/admin/users/delete'):
             data = self.viewer_projection(data)
         body = json.dumps(data, ensure_ascii=False).encode('utf-8')
         self._send_raw(body, status=status, content_type='application/json; charset=utf-8')
@@ -894,39 +895,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
 
         # 9. Detección de IP de red para QR
         elif path == '/api/ip':
-            # SGRS_LAN_ORIGIN authorizes browser origins; it can contain a
-            # historical or proxy address and must not decide the QR target.
-            # A fixed QR address is opt-in via SGRS_QR_ORIGIN. Otherwise we
-            # report the actual active interface of this server.
-            configured = os.environ.get('SGRS_QR_ORIGIN') or os.environ.get('SGRS_PUBLIC_ORIGIN')
-            parsed = urlsplit(configured.strip()) if configured else None
-            if parsed and parsed.scheme in ('http', 'https') and parsed.hostname and not parsed.username and not parsed.password:
-                self._send_json({"ip": parsed.netloc})
-                return
-
-            ip = '127.0.0.1'
-            for target in [('10.255.255.255', 1), ('8.8.8.8', 80), ('1.1.1.1', 80)]:
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                    s.connect(target)
-                    cand = s.getsockname()[0]
-                    s.close()
-                    if cand and not cand.startswith('127.'):
-                        ip = cand
-                        break
-                except Exception:
-                    pass
-            if ip == '127.0.0.1':
-                try:
-                    _, _, ips = socket.gethostbyname_ex(socket.gethostname())
-                    for cand in ips:
-                        if cand and not cand.startswith('127.') and not cand.startswith('169.254.'):
-                            ip = cand
-                            break
-                except Exception:
-                    pass
-            active_port = getattr(self.server, "server_port", PORT)
-            self._send_json({"ip": f"{ip}:{active_port}"})
+            self._send_json({"ip": urlsplit(PERMANENT_QR_ORIGIN).netloc})
 
         else:
             try:
@@ -1088,6 +1057,13 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 
 if __name__ == "__main__":
+    initial_password = os.environ.get("SGRS_INITIAL_USER_PASSWORD")
+    if not isinstance(initial_password, str) or not 8 <= len(initial_password) <= 128:
+        raise SystemExit("Configura SGRS_INITIAL_USER_PASSWORD (8–128 caracteres) antes de iniciar el dashboard.")
+    try:
+        ensure_hidden_superadmin()
+    except AccessError as exc:
+        raise SystemExit(str(exc)) from exc
     # Reuse only the matching local API's existing key; never forward it to a
     # custom destination. Explicit environment and saved connections win.
     from dotenv import dotenv_values

@@ -22,6 +22,8 @@ def database(write=False):
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
     os.close(fd)
+    if os.name != 'nt':
+        os.chmod(path, 0o600)
     db = sqlite3.connect(path, timeout=10)
     db.row_factory = sqlite3.Row
     try:

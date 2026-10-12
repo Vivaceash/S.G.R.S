@@ -66,6 +66,49 @@ async def test_missing_app_key_fails_closed(monkeypatch):
     assert response.status_code == 503
 
 
+def _production_settings(**overrides):
+    values = {
+        "_env_file": None,
+        "ENVIRONMENT": "production",
+        "DEBUG": False,
+        "APP_API_KEY": "test-gateway-query-key-with-more-than-16-chars",
+        "FORTIOS_API_TOKEN": "test-fortios-provider-token",
+        "JWT_SECRET_KEY": "test-signing-secret-with-more-than-32-bytes",
+        "FORTIOS_SCHEME": "https",
+        "FORTIOS_VERIFY_SSL": True,
+        "FORTIOS_CA_BUNDLE": None,
+        "FORTIOS_ALLOW_UNVERIFIED_TLS": False,
+        "ALLOWED_HOSTS": ["api.example.test"],
+        "CORS_ORIGINS": ["https://dashboard.example.test"],
+    }
+    values.update(overrides)
+    return Settings(**values)
+
+
+def test_production_requires_explicit_unverified_tls_override():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="FORTIOS_ALLOW_UNVERIFIED_TLS"):
+        _production_settings(FORTIOS_VERIFY_SSL=False)
+
+
+def test_production_accepts_explicit_unverified_https():
+    value = _production_settings(FORTIOS_VERIFY_SSL=False, FORTIOS_ALLOW_UNVERIFIED_TLS=True)
+    assert value.FORTIOS_VERIFY_SSL is False
+    assert value.FORTIOS_ALLOW_UNVERIFIED_TLS is True
+
+
+@pytest.mark.parametrize("overrides,field", [
+    ({"FORTIOS_SCHEME": "http", "FORTIOS_VERIFY_SSL": False}, "FORTIOS_SCHEME"),
+    ({"FORTIOS_VERIFY_SSL": True}, "FORTIOS_ALLOW_UNVERIFIED_TLS"),
+])
+def test_unverified_tls_override_keeps_https_and_requires_disabled_verification(overrides, field):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match=field):
+        _production_settings(FORTIOS_ALLOW_UNVERIFIED_TLS=True, **overrides)
+
+
 @pytest.mark.anyio
 async def test_fortios_client_requires_provider_token(monkeypatch):
     """El token de FortiOS es independiente de APP_API_KEY y debe existir antes de consultar."""
@@ -117,15 +160,29 @@ async def test_fortios_startup_checks_provider_authentication(monkeypatch):
 
 @pytest.mark.anyio
 async def test_fortios_startup_rejects_provider_authentication_failure(monkeypatch):
-    """Si FortiOS rechaza el token, el proceso no queda listo para recibir tráfico."""
+    """El modo estricto conserva el fail-fast opcional para instalaciones que lo exijan."""
     async def failed_status():
         raise FortiOSAuthError("token de prueba rechazado")
 
     monkeypatch.setattr("app.main.fortios_client.get_system_status", failed_status)
+    monkeypatch.setattr(settings, "REQUIRE_PROVIDER_ON_STARTUP", True)
 
     with pytest.raises(RuntimeError, match="no está autenticado"):
         async with app.router.lifespan_context(app):
             pass
+
+
+@pytest.mark.anyio
+async def test_fortios_startup_keeps_local_api_when_provider_is_degraded(monkeypatch):
+    """Sin modo estricto, el liveness local no depende de la disponibilidad upstream."""
+    async def failed_status():
+        raise FortiOSAuthError("token de prueba rechazado")
+
+    monkeypatch.setattr("app.main.fortios_client.get_system_status", failed_status)
+    monkeypatch.setattr(settings, "REQUIRE_PROVIDER_ON_STARTUP", False)
+
+    async with app.router.lifespan_context(app):
+        pass
 
 
 @pytest.mark.anyio
@@ -152,7 +209,8 @@ async def test_public_health_and_authenticated_dhcp_pool(monkeypatch):
     monkeypatch.setattr("app.routers.network.fortios_client.get_dhcp_leases", fake_leases)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         r_health = await client.get("/api/v1/health")
-        assert r_health.status_code == 200
+        assert r_health.status_code == 401
+        assert (await client.get("/api/v1/health", headers={"X-API-Key": VALID_KEY})).status_code == 200
 
         r_pools = await client.get("/api/v1/network/dhcp-pools")
         assert r_pools.status_code == 401

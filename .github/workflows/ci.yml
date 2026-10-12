@@ -1,0 +1,52 @@
+name: Verify SGRS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Backend, frontend and dependency checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Python dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Verify Python packages
+        run: |
+          python -m pip check
+          python -m compileall -q API\ Forti API\ Omni API\ Inventarios *.py
+
+      - name: Run gateway tests
+        run: python -m pytest -q -ra
+
+      - name: Run API tests
+        run: |
+          (cd "API Forti" && python -m pytest -q -ra)
+          (cd "API Omni" && python -m pytest -q -ra)
+          (cd "API Inventarios" && python -m pytest -q -ra)
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix Dashboard
+
+      - name: Build frontend
+        run: npm run build --prefix Dashboard
+
+      - name: Run frontend tests
+        run: |
+          npm run dev --prefix Dashboard -- --host 127.0.0.1 > /tmp/sgrs-vite.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl --fail --silent http://127.0.0.1:5173/ >/dev/null && break
+            sleep 1
+          done
+          SGRS_TEST_URL=http://127.0.0.1:5173 npm test --prefix Dashboard
+
+      - name: Audit frontend dependencies
+        run: npm audit --prefix Dashboard --audit-level=high

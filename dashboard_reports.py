@@ -38,24 +38,24 @@ def idf_overview(cabinets):
     } for cabinet in cabinets]
 
 
-def _mobile_secret():
-    path = PRIVATE / "mobile-report.key"
-    try:
-        return path.read_bytes()
-    except FileNotFoundError:
-        PRIVATE.mkdir(mode=0o700, parents=True, exist_ok=True)
-        secret = os.urandom(32)
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "wb") as stream:
-            stream.write(secret)
-        return secret
-
-
 def mobile_token(idf_id):
-    # 128 bits are sufficient for this single-IDF capability and keep the QR
-    # compact enough for reliable detection by phone cameras.
-    digest = hmac.new(_mobile_secret(), f"mobile-report:{idf_id}".encode(), hashlib.sha256).digest()[:16]
-    return base64.urlsafe_b64encode(digest).decode().rstrip("=")
+    """Return the permanent QR capability assigned to one IDF.
+
+    The token is derived only from the stable IDF identifier, so it remains
+    unchanged across restarts, deployments, database updates, and secret
+    rotation. The IDF identifier in the URL selects the record separately.
+    """
+    if not isinstance(idf_id, str):
+        return ''
+    payload = f"mobile-report:permanent:v1:{idf_id}"
+    digest = hashlib.sha256(payload.encode()).digest()[:18]
+    return base64.urlsafe_b64encode(digest).decode().rstrip('=')
+
+
+def _valid_mobile_token(idf_id, token):
+    if not isinstance(idf_id, str) or not isinstance(token, str):
+        return False
+    return hmac.compare_digest(mobile_token(idf_id), token)
 
 
 class ReportRoutes:
@@ -161,7 +161,7 @@ class ReportRoutes:
         return mobile_token(idf_id) if isinstance(idf_id, str) else ''
 
     def _mobile_idf(self, idf_id, token):
-        if not isinstance(idf_id, str) or not isinstance(token, str) or not hmac.compare_digest(mobile_token(idf_id), token):
+        if not _valid_mobile_token(idf_id, token):
             raise AccessError(403, "El código QR no es válido para registrar esta visita.")
         reports_file, idfs_file, lock = self.report_context()
         with lock:

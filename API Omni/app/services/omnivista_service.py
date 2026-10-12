@@ -88,7 +88,10 @@ class OmniVistaService:
             logger.warning("[OV-AUTH] %s", self.last_login_error)
             return False
         except requests.exceptions.SSLError:
-            self.last_login_error = "No se pudo validar el certificado TLS de OmniVista."
+            self.last_login_error = (
+                "No se pudo validar el certificado TLS de OmniVista. "
+                "Configure OV_CA_BUNDLE con la CA institucional."
+            )
         except requests.exceptions.Timeout:
             self.last_login_error = "OmniVista agotó el tiempo de espera del login."
         except requests.exceptions.ConnectionError:

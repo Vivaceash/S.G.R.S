@@ -39,7 +39,7 @@ def download(digest: str, principal=Depends(require('export'))):
 
 @router.post('/reconciliation/jobs', tags=['Cotejo de red'], status_code=202, response_model=Response[dict], summary='Iniciar cotejo de red',
              description='Encola una consulta contra Forti/Omni para comparar observaciones de red con el inventario documental. Devuelve el identificador del trabajo.')
-async def start(request: Request):
+async def start(request: Request, principal=Depends(require('write'))):
     return {'data': request.app.state.reconciler.start()}
 
 

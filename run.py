@@ -8,6 +8,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import venv
@@ -24,6 +25,8 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 ROOT_DIR = Path(__file__).resolve().parent
+PERMANENT_QR_ORIGIN = "http://192.168.38.250:3000"
+PERMANENT_QR_PORT = 3000
 
 def load_env_fallback(env_path: Path) -> None:
     """Carga variables desde un archivo .env si python-dotenv no está instalado."""
@@ -60,6 +63,9 @@ except ImportError:
 PID_FILE = ROOT_DIR / ".sgrs_pids.json"
 LOG_DIR = ROOT_DIR / "logs"
 MAIN_LOG = LOG_DIR / "sgrs.log"
+LAUNCHER_DIR = Path.home() / (".local/bin" if sys.platform != "win32" else "bin")
+LAUNCHER_NAMES = ("SGRS", "sgrs")
+MIN_PYTHON = (3, 11)
 
 
 def is_pid_alive(pid: int) -> bool:
@@ -111,6 +117,24 @@ def is_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
         raise PermissionError("No hay permiso de red para comprobar los servicios locales.") from None
 
 
+def can_bind_port(port: int) -> bool:
+    """Comprueba que el proceso pueda volver a enlazar el puerto solicitado."""
+    probe = None
+    try:
+        probe = socket.socket()
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        probe.bind(("0.0.0.0", port))
+        return True
+    except OSError:
+        return False
+    finally:
+        if probe is not None:
+            try:
+                probe.close()
+            except OSError:
+                pass
+
+
 def free_port(port: int):
     """Fuerza la liberación de un puerto ocupado."""
     if sys.platform == "win32":
@@ -144,42 +168,9 @@ def free_port(port: int):
                 pass
 
 
-def get_dashboard_port() -> int:
-    """Retorna el puerto del Dashboard (3000 o 3001 si 3000 está ocupado por un servicio del sistema)."""
-    pids = load_pids()
-    dash_pid = pids.get("dashboard")
-    registered_port = pids.get("dashboard_port")
-
-    # Si hay un dashboard registrado y su proceso sigue realmente vivo, reutilizar ese puerto
-    if isinstance(dash_pid, int) and is_pid_alive(dash_pid):
-        if isinstance(registered_port, int) and registered_port > 0:
-            return registered_port
-        # Compatibilidad con registros generados antes de dashboard_port
-        if is_port_in_use(3000):
-            return 3000
-        if is_port_in_use(3001):
-            return 3001
-
-    # Si no está vivo o no hay registro previo, evalúa el puerto preferido configurado (DASHBOARD_PORT o 3000)
-    env_port = os.environ.get("DASHBOARD_PORT") or os.environ.get("PORT")
-    preferred_port = int(env_port) if (env_port and env_port.isdigit()) else 3000
-
-    candidate_ports = [preferred_port]
-    for alt in (3001, 3002):
-        if alt not in candidate_ports:
-            candidate_ports.append(alt)
-
-    for p in candidate_ports:
-        if is_port_in_use(p):
-            continue
-        s = socket.socket()
-        try:
-            s.bind(("0.0.0.0", p))
-            s.close()
-            return p
-        except Exception:
-            continue
-    return candidate_ports[0]
+def get_dashboard_port(preferred_port=None) -> int:
+    """El Dashboard usa el puerto codificado en todos los QR permanentes."""
+    return PERMANENT_QR_PORT
 
 
 def local_network_ip() -> str:
@@ -314,6 +305,11 @@ def get_python_exe() -> str:
     return sys.executable
 
 
+def ensure_supported_python():
+    if sys.version_info < MIN_PYTHON:
+        raise RuntimeError("S.G.R.S. requiere Python 3.11 o superior.")
+
+
 def get_npm_exe() -> str:
     """Detecta el ejecutable de npm en el sistema."""
     if sys.platform == "win32" and os.path.exists(r"C:\Program Files\nodejs\npm.cmd"):
@@ -339,13 +335,46 @@ def get_env(py_exe: str) -> dict:
     return env
 
 
+def windows_no_console_options() -> dict:
+    """Opciones de Popen para ejecutar APIs sin abrir una consola por servicio."""
+    if sys.platform != "win32":
+        return {}
+    options = {
+        "creationflags": (
+            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        )
+    }
+    startupinfo_factory = getattr(subprocess, "STARTUPINFO", None)
+    if startupinfo_factory:
+        startupinfo = startupinfo_factory()
+        startupinfo.dwFlags |= getattr(subprocess, "STARTF_USESHOWWINDOW", 0)
+        startupinfo.wShowWindow = getattr(subprocess, "SW_HIDE", 0)
+        options["startupinfo"] = startupinfo
+    return options
+
+
 def save_pids(pids: dict):
     """Guarda los identificadores de proceso para poder gestionarlos después."""
+    temporary = None
     try:
-        with open(PID_FILE, "w", encoding="utf-8") as f:
+        PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix=f".{PID_FILE.name}.", dir=PID_FILE.parent)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(pids, f, indent=2)
-    except Exception:
-        pass
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        if sys.platform != "win32":
+            os.chmod(temporary, 0o600)
+        os.replace(temporary, PID_FILE)
+    except OSError as exc:
+        if temporary:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+        raise RuntimeError(f"No se pudo guardar el registro de procesos SGRS: {exc}") from exc
 
 
 def load_pids() -> dict:
@@ -353,14 +382,22 @@ def load_pids() -> dict:
     if PID_FILE.exists():
         try:
             with open(PID_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
         except Exception:
             pass
     return {}
 
 
 def get_inventory_port():
-    return int(os.environ.get("INVENTARIOS_PORT", "8002"))
+    raw_port = os.environ.get("INVENTARIOS_PORT", "8002")
+    try:
+        port = int(raw_port)
+    except (TypeError, ValueError):
+        raise RuntimeError("INVENTARIOS_PORT debe ser un puerto TCP válido.") from None
+    if not 1 <= port <= 65535:
+        raise RuntimeError("INVENTARIOS_PORT debe ser un puerto TCP válido.")
+    return port
 
 
 def service_specs(dash_port=None):
@@ -375,18 +412,40 @@ def service_specs(dash_port=None):
     ]
 
 
-def validate_registered_process(service, pid):
-    """Verifica que un PID vivo pertenece al componente registrado."""
+def process_matches_service(service, pid):
+    """Comprueba la identidad de un proceso SGRS sin enviarle señales."""
     if sys.platform != "linux":
-        return
+        return True
     try:
         cwd = Path(f"/proc/{pid}/cwd").resolve(strict=True)
-        args = Path(f"/proc/{pid}/cmdline").read_bytes().decode().split("\0")
-        entry_matches = any(Path(arg).name == service["entry"] for arg in args if arg)
-        if cwd != service["cwd"].resolve() or not entry_matches:
-            raise RuntimeError(f"El PID de {service['name']} no corresponde al proceso registrado; no se detuvo.")
-    except OSError:
-        raise RuntimeError(f"No se puede verificar el PID de {service['name']}; no se detuvo.") from None
+        args = Path(f"/proc/{pid}/cmdline").read_bytes().decode(errors="replace").split("\0")
+    except (OSError, UnicodeError):
+        return False
+    entry_matches = any(Path(arg).name == service["entry"] for arg in args if arg)
+    return cwd == service["cwd"].resolve() and entry_matches
+
+
+def validate_registered_process(service, pid):
+    """Verifica que un PID vivo pertenece al componente registrado."""
+    if not process_matches_service(service, pid):
+        raise RuntimeError(f"El PID de {service['name']} no corresponde al proceso registrado; no se detuvo.")
+
+
+def discover_service_processes(service):
+    """Encuentra procesos SGRS iniciados sin registro o con un registro perdido."""
+    if sys.platform != "linux":
+        return []
+    matches = []
+    for proc_dir in Path("/proc").glob("[0-9]*"):
+        try:
+            pid = int(proc_dir.name)
+        except ValueError:
+            continue
+        if pid == os.getpid() or not is_pid_alive(pid):
+            continue
+        if process_matches_service(service, pid):
+            matches.append(pid)
+    return matches
 
 
 class RegisteredProcess:
@@ -418,6 +477,10 @@ def provider_startup_error(service):
                 "No se pudo establecer conexión con OmniVista.",
                 "OmniVista devolvió una respuesta de login que no es JSON válido.",
             )
+            if reason.startswith("No se pudo validar el certificado TLS de OmniVista."):
+                if reason == "No se pudo validar el certificado TLS de OmniVista.":
+                    reason += " Configure OV_CA_BUNDLE con la CA institucional; no desactive OV_VERIFY_SSL en producción."
+                return " " + reason
             if reason in allowed or re.fullmatch(r"OmniVista rechazó el login \(HTTP \d{3}\)\.", reason):
                 return " " + reason
             break
@@ -433,7 +496,8 @@ def service_ready(service):
             if response.status != 200:
                 return False
             if service["key"] == "dashboard":
-                return True
+                page = response.read(8192)
+                return b'<div id="root"></div>' in page and b"<title>Centro Operativo" in page
             return json.loads(response.read()).get("status") == "healthy"
     except URLError as exc:
         reason = exc.reason
@@ -473,6 +537,148 @@ def ensure_inventory_config(py_exe):
         subprocess.run([py_exe, str(script)], cwd=str(ROOT_DIR), check=True)
 
 
+def configured_env_value(env_file, key):
+    """Lee una sola variable sin imprimir ni cargar secretos al proceso actual."""
+    if not env_file.is_file():
+        return None
+    try:
+        for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            name, value = line.split("=", 1)
+            if name.strip() != key:
+                continue
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            return value
+    except OSError:
+        return None
+    return None
+
+
+def resolve_configured_path(raw_path, base_dir):
+    """Resuelve rutas de CA absolutas o relativas al servicio/repositorio."""
+    if not raw_path:
+        return None
+    path = Path(raw_path).expanduser()
+    candidates = [path] if path.is_absolute() else [Path.cwd() / path, base_dir / path, ROOT_DIR / path]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    return path
+
+
+def validate_configured_tls_bundles():
+    """Valida rutas CA configuradas antes de crear procesos de servicios."""
+    configurations = (
+        ("OmniVista", ROOT_DIR / "API Omni" / ".env", "OV_CA_BUNDLE"),
+        ("FortiGate", ROOT_DIR / "API Forti" / ".env", "FORTIOS_CA_BUNDLE"),
+    )
+    for name, env_file, variable in configurations:
+        raw_path = os.environ.get(variable) or configured_env_value(env_file, variable)
+        if raw_path and not resolve_configured_path(raw_path, env_file.parent).is_file():
+            raise RuntimeError(f"{name}: {variable} no apunta a un archivo CA existente.")
+
+
+def install_launchers():
+    """Instala los comandos SGRS/sgrs de forma idempotente en el directorio del usuario."""
+    LAUNCHER_DIR.mkdir(parents=True, exist_ok=True)
+    installed = []
+    if sys.platform == "win32":
+        launcher_body = (
+            "@echo off\r\n"
+            "rem SGRS launcher generado por run.py\r\n"
+            f'set "SGRS_ROOT={ROOT_DIR}"\r\n'
+            'set "SGRS_PYTHON=%SGRS_ROOT%\\.venv\\Scripts\\python.exe"\r\n'
+            'if exist "%SGRS_PYTHON%" goto use_venv\r\n'
+            'py -3 "%SGRS_ROOT%\\run.py" %*\r\n'
+            'exit /b %errorlevel%\r\n'
+            ':use_venv\r\n'
+            '"%SGRS_PYTHON%" "%SGRS_ROOT%\\run.py" %*\r\n'
+            'exit /b %errorlevel%\r\n'
+        )
+        for name in LAUNCHER_NAMES:
+            launcher = LAUNCHER_DIR / f"{name}.cmd"
+            if launcher.exists() and "SGRS launcher generado por run.py" not in launcher.read_text(errors="replace"):
+                raise RuntimeError(f"No se reemplazó {launcher}: ya existe y no es un launcher SGRS.")
+            launcher.write_text(launcher_body, encoding="utf-8", newline="")
+            installed.append(launcher)
+        return installed
+
+    target = ROOT_DIR / "sgrs.sh"
+    if not target.is_file():
+        raise RuntimeError(f"No se encontró el launcher {target}.")
+    target.chmod(target.stat().st_mode | 0o111)
+    for name in LAUNCHER_NAMES:
+        link = LAUNCHER_DIR / name
+        if link.is_symlink():
+            if link.resolve() != target.resolve():
+                raise RuntimeError(f"No se reemplazó {link}: ya apunta a otro archivo.")
+        elif link.exists():
+            raise RuntimeError(f"No se reemplazó {link}: ya existe y no es un enlace SGRS.")
+        else:
+            link.symlink_to(target)
+        installed.append(link)
+    return installed
+
+
+def ensure_windows_user_path(directory: Path) -> bool:
+    """Añade un directorio al PATH del usuario de Windows y al proceso actual."""
+    if sys.platform != "win32":
+        return False
+
+    import winreg
+
+    directory = Path(directory).resolve()
+
+    def normalized(entry: str) -> str:
+        expanded = os.path.expandvars(entry.strip().strip('"'))
+        return os.path.normcase(os.path.normpath(expanded))
+
+    access = winreg.KEY_QUERY_VALUE | winreg.KEY_SET_VALUE
+    with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, r"Environment", 0, access) as key:
+        try:
+            user_path, value_kind = winreg.QueryValueEx(key, "Path")
+        except FileNotFoundError:
+            user_path, value_kind = "", winreg.REG_EXPAND_SZ
+
+        entries = [entry for entry in user_path.split(os.pathsep) if entry.strip()]
+        path_added = normalized(str(directory)) not in {normalized(entry) for entry in entries}
+        if path_added:
+            entries.append(str(directory))
+            value_kind = value_kind if value_kind in (winreg.REG_SZ, winreg.REG_EXPAND_SZ) else winreg.REG_EXPAND_SZ
+            winreg.SetValueEx(key, "Path", 0, value_kind, os.pathsep.join(entries))
+
+    process_entries = os.environ.get("PATH", "").split(os.pathsep)
+    if normalized(str(directory)) not in {normalized(entry) for entry in process_entries if entry.strip()}:
+        os.environ["PATH"] = os.pathsep.join([*filter(None, process_entries), str(directory)])
+
+    # Avisar a las aplicaciones de Windows; las terminales ya abiertas conservan su PATH.
+    try:
+        import ctypes
+
+        result = ctypes.c_size_t()
+        ctypes.windll.user32.SendMessageTimeoutW(
+            0xFFFF, 0x001A, 0, ctypes.c_wchar_p("Environment"), 0x0002, 5000, ctypes.byref(result)
+        )
+    except (AttributeError, OSError, TypeError):
+        pass
+
+    return path_added
+
+
+def wait_for_ports_free(ports, timeout=10):
+    """Espera a que los sockets de una sesión anterior dejen de escuchar."""
+    ports = [port for port in ports if isinstance(port, int) and port > 0]
+    deadline = time.monotonic() + timeout
+    while any(is_port_in_use(port) or not can_bind_port(port) for port in ports):
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Los puertos de la sesión anterior siguen ocupados; no se inició otra instancia.")
+        time.sleep(0.2)
+
+
 def status_services():
     """Muestra disponibilidad HTTP de todos los componentes de S.G.R.S."""
     display_host = os.environ.get("SGRS_SERVER_IP", "192.168.38.250")
@@ -488,6 +694,8 @@ def status_services():
         except PermissionError:
             state = "NO COMPROBABLE: SIN PERMISO DE RED"
         pid = pids.get(service["key"])
+        if isinstance(pid, int) and not is_pid_alive(pid):
+            pid = f"{pid} (inactivo)"
         suffix = "/scalar" if service["key"] != "dashboard" else ""
         print(f"  [{index}] {service['name']} ({service['port']}): [{state}] (PID registrado: {pid})")
         print(f"      -> http://{display_host}:{service['port']}{suffix}")
@@ -495,40 +703,88 @@ def status_services():
     print("=" * 72 + "\n")
 
 
+def _signal_process(pid, sig):
+    """Envía una señal al grupo creado por SGRS y evita afectar al grupo del runner."""
+    if sys.platform == "win32":
+        command = ["taskkill"]
+        if sig == signal.SIGKILL:
+            command.append("/F")
+        command.extend(["/T", "/PID", str(pid)])
+        subprocess.run(
+            command,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return
+    try:
+        group = os.getpgid(pid)
+        if group == pid and group != os.getpgrp():
+            os.killpg(group, sig)
+        else:
+            os.kill(pid, sig)
+    except ProcessLookupError:
+        pass
+
+
+def _wait_for_processes_to_exit(pids, timeout):
+    deadline = time.monotonic() + timeout
+    while any(is_pid_alive(pid) for pid in pids):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.2)
+    return True
+
+
 def stop_services():
-    """Detiene únicamente los procesos registrados de esta plataforma."""
+    """Detiene procesos SGRS verificados y limpia registros obsoletos."""
     print("\n[SGRS] Deteniendo servicios de la plataforma...")
     pids = load_pids()
     stopping = {}
-    for service in service_specs(pids.get("dashboard_port") or 3000):
-        pid = pids.get(service["key"])
-        if not pid or not is_pid_alive(pid):
-            continue
-        validate_registered_process(service, pid)
-        stopping[service["key"]] = pid
+    stale = []
+    registry_exists = PID_FILE.exists() and bool(pids)
+    specs = service_specs(pids.get("dashboard_port") or 3000)
 
-    for name, pid in stopping.items():
-        if sys.platform == "win32":
-            subprocess.run(["taskkill", "/T", "/PID", str(pid)], check=True,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        else:
-            try:
-                group = os.getpgid(pid)
-                if group == pid and group != os.getpgrp():
-                    os.killpg(group, signal.SIGTERM)
-                else:
-                    os.kill(pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
+    for service in specs:
+        key = service["key"]
+        recorded_pid = pids.get(key)
+        candidates = []
+        allow_discovery = not registry_exists and not recorded_pid
+        if recorded_pid and is_pid_alive(recorded_pid):
+            if process_matches_service(service, recorded_pid):
+                candidates.append(recorded_pid)
+            else:
+                # Nunca se mata un PID reutilizado por otro programa. Se elimina del
+                # registro para que stop/restart no queden bloqueados para siempre.
+                stale.append(key)
+                print(f"[SGRS] Aviso: el PID registrado de {service['name']} ya pertenece a otro proceso; se omite.")
+        elif recorded_pid:
+            stale.append(key)
 
-    deadline = time.monotonic() + 15
-    while any(is_pid_alive(pid) for pid in stopping.values()):
-        if time.monotonic() >= deadline:
+        # Si el archivo se perdió o quedó incompleto, recuperar solo procesos cuyo
+        # cwd y script coinciden exactamente con el servicio SGRS.
+        if not candidates and allow_discovery:
+            candidates = discover_service_processes(service)
+        for pid in candidates:
+            stopping[key] = pid
+
+    for pid in stopping.values():
+        _signal_process(pid, signal.SIGTERM)
+
+    if not _wait_for_processes_to_exit(stopping.values(), 10):
+        alive = [pid for pid in stopping.values() if is_pid_alive(pid)]
+        for pid in alive:
+            _signal_process(pid, signal.SIGKILL)
+        if not _wait_for_processes_to_exit(alive, 5):
+            remaining = {key: pid for key, pid in stopping.items() if is_pid_alive(pid)}
+            save_pids({**remaining, "dashboard_port": pids.get("dashboard_port")} if remaining else {})
             raise RuntimeError("Hay servicios que no terminaron en 15s. Se conservaron sus PIDs; revisa SGRS logs.")
-        time.sleep(0.2)
 
     PID_FILE.unlink(missing_ok=True)
-    print("[SGRS] [OK] Los procesos registrados de los servicios terminaron.\n")
+    if stale and not stopping:
+        print("[SGRS] [OK] No había procesos SGRS activos; se limpió el registro obsoleto.\n")
+    else:
+        print("[SGRS] [OK] Los procesos registrados de los servicios terminaron.\n")
 
 
 def logs_services():
@@ -594,6 +850,7 @@ def ensure_environment():
     - Asegura permisos estrictos (0o700 / 0o600) en .sgrs-private y sus bases de datos en Linux/POSIX.
     - Si Dashboard/dist no existe y npm está disponible, compila el frontend.
     """
+    ensure_supported_python()
     venv_dir = ROOT_DIR / ".venv"
     py_venv = (
         venv_dir
@@ -677,7 +934,7 @@ def ensure_environment():
             print("[SGRS] Aviso: Dashboard/dist no encontrado y npm no está disponible.")
 
 
-def start_services(detached: bool = True):
+def start_services(detached: bool = True, dashboard_port=None):
     """Inicia todos los servicios (APIs + Dashboard).
 
     Si detached=True: se ejecutan en segundo plano totalmente desacoplados de la terminal.
@@ -686,17 +943,42 @@ def start_services(detached: bool = True):
     # Comprobar permisos de red antes de crear procesos o modificar el registro.
     is_port_in_use(8000)
     ensure_environment()
+    validate_configured_tls_bundles()
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     py_exe = get_python_exe()
     env = get_env(py_exe)
     display_host = os.environ.get("SGRS_SERVER_IP", "192.168.38.250")
 
-    dash_port = get_dashboard_port()
+    dash_port = get_dashboard_port() if dashboard_port is None else get_dashboard_port(dashboard_port)
     services = service_specs(dash_port)
     env["PORT"] = str(dash_port)
+    env["DASHBOARD_PORT"] = str(dash_port)
 
     ensure_inventory_config(py_exe)
+
+    pids = load_pids()
+    fixed_qr_port = PERMANENT_QR_PORT
+    if pids.get("dashboard_port") != fixed_qr_port and is_pid_alive(pids.get("dashboard")):
+        raise RuntimeError(
+            f"El Dashboard activo usa el puerto {pids.get('dashboard_port')}, pero el QR permanente apunta al {fixed_qr_port}. "
+            "Ejecuta SGRS restart para sincronizarlo."
+        )
+    dashboard_service = next(service for service in services if service["key"] == "dashboard")
+    if is_port_in_use(fixed_qr_port):
+        dashboard_pid = pids.get("dashboard")
+        registered_dashboard = (
+            isinstance(dashboard_pid, int)
+            and is_pid_alive(dashboard_pid)
+            and pids.get("dashboard_port") == fixed_qr_port
+            and process_matches_service(dashboard_service, dashboard_pid)
+        )
+        discovered_dashboard = bool(discover_service_processes(dashboard_service))
+        if not registered_dashboard and not discovered_dashboard:
+            raise RuntimeError(
+                f"El puerto {fixed_qr_port} del QR permanente está ocupado por otro proceso; "
+                "libéralo para iniciar SGRS sin cambiar las etiquetas."
+            )
 
     # Si todos los servicios ya están activos, mostrar estado y no duplicar
     if all(service_ready(service) for service in services):
@@ -705,17 +987,36 @@ def start_services(detached: bool = True):
         return
 
     # Recuperar un arranque parcial conservando los componentes ya registrados.
-    pids = load_pids()
     existing = {}
+    cleaned_pids = dict(pids)
     for service in services:
         pid = pids.get(service["key"])
         alive = bool(pid and is_pid_alive(pid))
         occupied = is_port_in_use(service["port"])
         if alive:
-            validate_registered_process(service, pid)
-            existing[service["key"]] = RegisteredProcess(pid)
+            try:
+                validate_registered_process(service, pid)
+            except RuntimeError:
+                cleaned_pids.pop(service["key"], None)
+                recovered = discover_service_processes(service)
+                if recovered:
+                    recovered_pid = recovered[0]
+                    existing[service["key"]] = RegisteredProcess(recovered_pid)
+                    cleaned_pids[service["key"]] = recovered_pid
+                elif occupied:
+                    raise RuntimeError(f"El puerto de {service['name']} ({service['port']}) está ocupado por un proceso no registrado. No se modificó.")
+            else:
+                existing[service["key"]] = RegisteredProcess(pid)
         elif occupied:
-            raise RuntimeError(f"El puerto de {service['name']} ({service['port']}) está ocupado por un proceso no registrado. No se modificó.")
+            recovered = discover_service_processes(service)
+            if recovered:
+                recovered_pid = recovered[0]
+                existing[service["key"]] = RegisteredProcess(recovered_pid)
+                cleaned_pids[service["key"]] = recovered_pid
+            else:
+                raise RuntimeError(f"El puerto de {service['name']} ({service['port']}) está ocupado por un proceso no registrado. No se modificó.")
+    if cleaned_pids != pids:
+        save_pids(cleaned_pids)
     if existing and not detached:
         raise RuntimeError("Hay servicios registrados en ejecución. Usa SGRS para completar el arranque o SGRS restart para reiniciar todos.")
     if existing:
@@ -743,7 +1044,7 @@ def start_services(detached: bool = True):
         if sys.platform != "win32":
             popen_kwargs["start_new_session"] = True
         else:
-            popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
+            popen_kwargs.update(windows_no_console_options())
 
         env_forti = {**api_environment(env, dash_port, "forti"), "PORT": "8001"}
         env_omni = {**api_environment(env, dash_port, "omni"), "PORT": "8000"}
@@ -836,6 +1137,8 @@ def start_services(detached: bool = True):
     }
     if sys.platform != "win32":
         popen_fg["start_new_session"] = True
+    else:
+        popen_fg.update(windows_no_console_options())
 
     env_forti = {**api_environment(env, dash_port, "forti"), "PORT": "8001"}
     env_omni = {**api_environment(env, dash_port, "omni"), "PORT": "8000"}
@@ -915,14 +1218,38 @@ def start_services(detached: bool = True):
 def main():
     cmd = sys.argv[1].lower().strip("-") if len(sys.argv) > 1 else "start"
 
-    if cmd in ("install", "setup", "init"):
+    if cmd == "install":
+        print("=" * 72)
+        print("      S.G.R.S. - Sistema de Gestión de Redes y Seguridad")
+        print("             Configuración y Preparación del Entorno")
+        print("=" * 72)
+        ensure_environment()
+        validate_configured_tls_bundles()
+        ensure_inventory_config(get_python_exe())
+        installed = install_launchers()
+        print("\n[SGRS] [OK] El entorno está listo.")
+        if installed:
+            print("[SGRS] [OK] Comandos instalados: " + ", ".join(str(path) for path in installed))
+        if sys.platform == "win32":
+            path_added = ensure_windows_user_path(LAUNCHER_DIR)
+            if path_added:
+                print(f"[SGRS] [OK] {LAUNCHER_DIR} añadido al PATH global de este usuario.")
+                print("[SGRS] Cierra y vuelve a abrir la aplicación de terminal para cargar el PATH actualizado.")
+            else:
+                print("[SGRS] [OK] El comando SGRS ya está disponible en el PATH de este usuario.")
+            print("[SGRS] Iniciando los cuatro servicios en segundo plano...")
+            start_services(detached=True)
+            print("[SGRS] [OK] Instalación completa; SGRS y sgrs ya pueden usarse desde cualquier terminal.\n")
+        else:
+            print("       Inicia los servicios ejecutando: SGRS\n")
+    elif cmd in ("setup", "init"):
         print("=" * 72)
         print("      S.G.R.S. - Sistema de Gestión de Redes y Seguridad")
         print("             Configuración y Preparación del Entorno")
         print("=" * 72)
         ensure_environment()
         print("\n[SGRS] [OK] El entorno está listo.")
-        print("       Inicia los servicios ejecutando: python run.py\n")
+        print("       Para instalar el comando global usa: python run.py install\n")
     elif cmd in ("stop", "down", "kill"):
         stop_services()
     elif cmd in ("status", "ps"):
@@ -932,8 +1259,14 @@ def main():
     elif cmd in ("restart", "reload"):
         # No detener servicios si este entorno no puede comprobar su reinicio.
         is_port_in_use(8000)
+        current = load_pids()
+        previous_dashboard_port = current.get("dashboard_port")
         stop_services()
-        start_services(detached=True)
+        ports = [8000, 8001, get_inventory_port()]
+        if isinstance(previous_dashboard_port, int):
+            ports.append(previous_dashboard_port)
+        wait_for_ports_free(ports)
+        start_services(detached=True, dashboard_port=previous_dashboard_port)
     elif cmd in ("open", "abrir"):
         pids = load_pids()
         port = pids.get("dashboard_port") or int(os.environ.get("DASHBOARD_PORT", "3000"))
@@ -943,11 +1276,12 @@ def main():
     elif cmd in ("start", "daemon", "d", "bg", "run"):
         start_services(detached=True)
     elif cmd in ("help", "h"):
-        print("Uso: SGRS [start|stop|status|logs|restart|setup|open|--foreground]")
+        print("Uso: SGRS [install|start|stop|status|logs|restart|setup|open|--foreground]")
         print("Equivalente: python run.py <comando>")
-        print("Servicios: OmniVista (8000), FortiGate (8001), Inventarios (8002), Dashboard (3000 o alternativo)")
+        print("Servicios: OmniVista (8000), FortiGate (8001), Inventarios (8002), Dashboard (origen QR fijo)")
         print("  start          Inicia la plataforma en segundo plano (por defecto)")
-        print("  setup/install  Prepara el entorno virtual, dependencias y permisos")
+        print("  install        Prepara dependencias e instala SGRS/sgrs; en Windows también inicia los servicios")
+        print("  setup          Prepara el entorno virtual, dependencias y permisos")
         print("  stop           Detiene todos los servicios y libera los puertos")
         print("  status         Muestra el estado de salud de los servicios")
         print("  logs           Muestra los logs unificados en tiempo real")

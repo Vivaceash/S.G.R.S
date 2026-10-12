@@ -7,7 +7,7 @@ import { createDemo } from '../src/demo.mjs';
 const base = process.env.SGRS_TEST_URL || 'http://127.0.0.1:5173';
 const output = process.env.SGRS_ARTIFACT_DIR || 'artifacts';
 const demoUrl = `${base}/?demo=1&role=admin`;
-const browser = await chromium.launch({ executablePath: process.env.SGRS_BROWSER || '/opt/brave-bin/brave', headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+const browser = await chromium.launch({ ...(process.env.SGRS_BROWSER ? { executablePath: process.env.SGRS_BROWSER } : {}), headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
 const results = [];
 const failures = [];
 const report = (name, details = 'passed') => { results.push({ name, details }); console.log(`${name}: ${details}`); };
@@ -71,7 +71,7 @@ try {
   await page.getByRole('heading', { name: 'Registro IDF', exact: true }).waitFor();
   assert.equal(await page.locator('.idf-console > .idf-cards:first-child').count(), 1);
   assert.equal(await page.getByRole('table', { name: 'Bitácora consolidada de visitas a IDFs' }).count(), 1);
-  assert.equal(await page.getByRole('tab').count(), 0);
+  assert.equal(await page.getByRole('tab').count(), 3);
   report('Registro IDF inicia en Bitácora consolidada');
   await page.getByRole('button', { name: /^IDF-03:/ }).click();
   await page.locator('.idf-cards.is-selected').waitFor();
@@ -84,11 +84,16 @@ try {
   await page.getByRole('button', { name: /^IDF-03:/ }).click();
   await page.getByRole('tab', { name: 'Código QR', exact: true }).click();
   const qrBefore = await page.locator('.qr-template-code img').getAttribute('src');
+  const qrLink = new URL(await page.locator('.qr-template-meta .qr-url').getAttribute('href'));
+  assert.equal(qrLink.origin, 'http://192.168.38.250:3000');
+  assert.equal(qrLink.searchParams.get('idf'), 'idf-3');
+  assert.equal(await page.getByLabel('Origen permanente de los QR', { exact: true }).inputValue(), 'http://192.168.38.250:3000');
+  assert.equal(await page.getByLabel('Origen permanente de los QR', { exact: true }).getAttribute('readonly'), '');
+  await page.evaluate(() => localStorage.setItem('sgrs:qr-host', 'http://192.0.2.20:9999'));
   await page.getByRole('tab', { name: 'Bitácora', exact: true }).click();
   await page.getByRole('tab', { name: 'Código QR', exact: true }).click();
   assert.equal(await page.locator('.qr-template-code img').getAttribute('src'), qrBefore);
-  assert.equal(await page.getByRole('button', { name: 'Detectar IP', exact: true }).isDisabled(), true);
-  await page.getByLabel('Dirección del servidor', { exact: true }).fill('192.0.2.20:3000');
+  assert.equal(new URL(await page.locator('.qr-template-meta .qr-url').getAttribute('href')).origin, 'http://192.168.38.250:3000');
   assert.equal(apiCalls, 0, 'IDF and QR demo must never detect the real server IP');
   await page.getByRole('tab', { name: 'Bitácora', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: '+ Levantar reporte', exact: true }).isEnabled(), true);
@@ -129,7 +134,7 @@ try {
   report('Móvil, menú accesible y preferencia de movimiento reducido');
 
   // All live-mode requests are intercepted; no real production data is read or modified.
-  const identity = { user: { id: 'test-admin', name: 'Operador de prueba', username: 'operador', role: 'admin', active: true, version: 1 }, csrf: 'test-only', capabilities: ['dashboard.read', 'inventory.read', 'idf.read', 'activity.read', 'inventory.write', 'idf.visits.write', 'inventory.export'] };
+  const identity = { user: { id: 'test-admin', name: 'Operador de prueba', username: 'operador', role: 'admin', active: true, version: 1 }, csrf: 'test-only', capabilities: ['dashboard.read', 'inventory.read', 'idf.read', 'activity.read', 'inventory.write', 'idf.visits.write', 'inventory.export', 'users.read', 'users.create', 'users.edit', 'users.delete'] };
   await page.route('**/api/auth/session', route => route.fulfill({ json: identity }));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`${base}/#dispositivos`);
@@ -174,7 +179,8 @@ try {
   await page.getByRole('heading', { name: 'Usuarios y privilegios', exact: true }).waitFor();
   report('Admin accede a usuarios por URL directa');
   await page.goto(`${base}/#conexiones`);
-  await page.getByRole('heading', { name: 'No tienes permiso para esta sección' }).waitFor();
+  await page.getByRole('heading', { name: 'Dashboard Operativo', exact: true }).waitFor();
+  assert.notEqual(new URL(page.url()).hash, '#conexiones');
   report('Admin no accede a conexiones por URL directa');
   assert.deepEqual(pageErrors, []);
   report('Sin errores JavaScript');

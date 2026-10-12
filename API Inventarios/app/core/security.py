@@ -36,8 +36,6 @@ def key_principal(token):
 
 
 async def authenticate(request: Request, api_key=Security(header), credentials=Security(bearer)):
-    if request.method == 'GET' and request.url.path == '/api/v1/system/health':
-        return Principal('public-health', {'read'}, False)
     token = api_key or (credentials.credentials if credentials else '')
     principal = key_principal(token)
     if principal and (principal.dashboard or not settings.ENABLE_2FA):

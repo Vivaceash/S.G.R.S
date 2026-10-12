@@ -21,6 +21,40 @@ def test_get_python_exe_returns_valid_python():
     assert ("python" in py_exe.lower()) or ("py" in py_exe.lower())
 
 
+def test_windows_services_use_hidden_process_options(monkeypatch):
+    monkeypatch.setattr(run_module.sys, "platform", "win32")
+
+    class StartupInfo:
+        def __init__(self):
+            self.dwFlags = 0
+            self.wShowWindow = None
+
+    monkeypatch.setattr(run_module.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200, raising=False)
+    monkeypatch.setattr(run_module.subprocess, "CREATE_NO_WINDOW", 0x8000000, raising=False)
+    monkeypatch.setattr(run_module.subprocess, "STARTUPINFO", StartupInfo, raising=False)
+    monkeypatch.setattr(run_module.subprocess, "STARTF_USESHOWWINDOW", 1, raising=False)
+    monkeypatch.setattr(run_module.subprocess, "SW_HIDE", 0, raising=False)
+
+    options = run_module.windows_no_console_options()
+
+    assert options["creationflags"] == 0x200 | 0x8000000
+    assert options["startupinfo"].dwFlags == 1
+    assert options["startupinfo"].wShowWindow == 0
+
+
+def test_windows_install_creates_idempotent_cmd_launchers(tmp_path, monkeypatch):
+    monkeypatch.setattr(run_module.sys, "platform", "win32")
+    monkeypatch.setattr(run_module, "LAUNCHER_DIR", tmp_path)
+
+    installed = run_module.install_launchers()
+    assert {path.name for path in installed} == {"SGRS.cmd", "sgrs.cmd"}
+    assert all("CREATE_NO_WINDOW" not in path.read_text() for path in installed)
+    assert all("run.py" in path.read_text() for path in installed)
+
+    second = run_module.install_launchers()
+    assert second == installed
+
+
 def test_ensure_environment_sets_permissions_on_private_dir(tmp_path, monkeypatch):
     test_private = tmp_path / ".sgrs-private"
     test_private.mkdir(parents=True)
@@ -131,22 +165,18 @@ def test_is_pid_alive():
     assert run_module.is_pid_alive(None) is False
 
 
-def test_get_dashboard_port_verifies_process_liveness(monkeypatch):
-    monkeypatch.delenv("DASHBOARD_PORT", raising=False)
-    monkeypatch.delenv("PORT", raising=False)
-    monkeypatch.setattr(run_module, "is_port_in_use", lambda port: False)
-    monkeypatch.setattr(run_module.socket, "socket", lambda: Mock())
-
-    # 1. PID guardado vivo: reutiliza el puerto guardado (3001)
+def test_dashboard_port_stays_fixed_for_permanent_qrs(monkeypatch):
+    monkeypatch.setenv("DASHBOARD_PORT", "3001")
+    monkeypatch.setenv("PORT", "3002")
     monkeypatch.setattr(run_module, "load_pids", lambda: {"dashboard": os.getpid(), "dashboard_port": 3001})
-    port = run_module.get_dashboard_port()
-    assert port == 3001
+    assert run_module.get_dashboard_port() == 3000
+    assert run_module.get_dashboard_port(preferred_port=3002) == 3000
 
-    # 2. PID guardado muerto: no reutiliza 3001 y evalúa el puerto preferido (3000)
-    monkeypatch.setattr(run_module, "load_pids", lambda: {"dashboard": 9999999, "dashboard_port": 3001})
-    port_evaluated = run_module.get_dashboard_port()
-    # Si 3000 está libre en la máquina de pruebas, devuelve 3000
-    assert port_evaluated in (3000, 3001)
+
+def test_permanent_qr_origin_and_port_are_constants():
+    assert run_module.PERMANENT_QR_ORIGIN == "http://192.168.38.250:3000"
+    assert run_module.PERMANENT_QR_PORT == 3000
+    assert run_module.get_dashboard_port(preferred_port=3001) == 3000
 
 
 def test_service_specs_include_four_components_and_inventory_override(monkeypatch):
@@ -199,7 +229,7 @@ def test_detached_start_launches_and_verifies_all_four_services(tmp_path, monkey
     monkeypatch.setattr(run_module, "PID_FILE", tmp_path / "pids.json")
     monkeypatch.setattr(run_module, "ensure_environment", lambda: None)
     monkeypatch.setattr(run_module, "ensure_inventory_config", lambda py: None)
-    monkeypatch.setattr(run_module, "get_dashboard_port", lambda: 3002)
+    monkeypatch.setattr(run_module, "get_dashboard_port", lambda: 3000)
     monkeypatch.setattr(run_module, "is_port_in_use", lambda port: False)
     monkeypatch.setattr(run_module, "service_ready", lambda service: False)
     monkeypatch.setattr(run_module, "get_env", lambda py: {})
@@ -216,7 +246,7 @@ def test_detached_start_launches_and_verifies_all_four_services(tmp_path, monkey
     calls = popen.call_args_list
     assert [Path(call.kwargs["cwd"]).name for call in calls] == ["API Forti", "API Omni", "API Inventarios", tmp_path.name]
     assert calls[2].kwargs["env"]["INVENTARIOS_PORT"] == "8002"
-    assert calls[3].kwargs["env"]["DASHBOARD_PORT"] == "3002"
+    assert calls[3].kwargs["env"]["DASHBOARD_PORT"] == "3000"
     verify.assert_called_once()
     assert set(verify.call_args.args[1]) == {"api_omni", "api_forti", "api_inventarios", "dashboard"}
     assert run_module.load_pids()["api_inventarios"] == 403
@@ -229,15 +259,16 @@ def test_start_recovers_failed_omni_while_other_registered_services_keep_running
     monkeypatch.setattr(run_module, "MAIN_LOG", tmp_path / "logs/sgrs.log")
     monkeypatch.setattr(run_module, "PID_FILE", tmp_path / "pids.json")
     registry = {"api_forti": 401, "api_omni": 402, "api_inventarios": 403,
-                "dashboard": 404, "dashboard_port": 3002}
+                "dashboard": 404, "dashboard_port": 3000}
     run_module.save_pids(registry)
     monkeypatch.setattr(run_module, "ensure_environment", lambda: None)
     monkeypatch.setattr(run_module, "ensure_inventory_config", lambda py: None)
-    monkeypatch.setattr(run_module, "get_dashboard_port", lambda: 3002)
-    monkeypatch.setattr(run_module, "is_port_in_use", lambda port: port in (8001, 8002, 3002))
+    monkeypatch.setattr(run_module, "get_dashboard_port", lambda: 3000)
+    monkeypatch.setattr(run_module, "is_port_in_use", lambda port: port in (8001, 8002, 3000))
     monkeypatch.setattr(run_module, "is_pid_alive", lambda pid: pid in (401, 403, 404))
     monkeypatch.setattr(run_module, "service_ready", lambda service: service["key"] != "api_omni")
     monkeypatch.setattr(run_module, "validate_registered_process", lambda service, pid: None, raising=False)
+    monkeypatch.setattr(run_module, "process_matches_service", lambda service, pid: True)
     monkeypatch.setattr(run_module, "get_env", lambda py: {})
     monkeypatch.setenv("INVENTARIOS_PORT", "8002")
     monkeypatch.setattr(run_module, "dashboard_environment", lambda env, port: {**env, "DASHBOARD_PORT": str(port)})
@@ -299,6 +330,20 @@ def test_api_readiness_requires_healthy_json(monkeypatch):
     assert run_module.service_ready(service) is True
 
 
+def test_dashboard_readiness_checks_sgrs_page_content(monkeypatch):
+    response = MagicMock(status=200)
+    response.__enter__.return_value = response
+    response.read.return_value = b'<html><title>Centro Operativo SGRS</title><div id="root"></div></html>'
+    opener = Mock()
+    opener.open.return_value = response
+    monkeypatch.setattr(run_module, "build_opener", lambda *args: opener)
+    service = run_module.service_specs(3000)[-1]
+
+    assert run_module.service_ready(service) is True
+    response.read.return_value = b"<html>another app</html>"
+    assert run_module.service_ready(service) is False
+
+
 def test_status_reports_four_services_and_network_blocker(monkeypatch, capsys):
     monkeypatch.setattr(run_module, "load_pids", lambda: {"dashboard_port": 3002})
     monkeypatch.setattr(run_module, "service_ready", Mock(side_effect=PermissionError("network blocked")))
@@ -320,7 +365,7 @@ def test_restart_does_not_stop_services_when_network_checks_are_blocked(monkeypa
     stop.assert_not_called()
 
 
-def test_stop_rejects_reused_pid_without_signaling_or_erasing_registry(tmp_path, monkeypatch):
+def test_stop_skips_reused_pid_without_signaling_and_cleans_registry(tmp_path, monkeypatch):
     if sys.platform != "linux":
         pytest.skip("La identidad del proceso se comprueba con /proc en Linux")
     registry = tmp_path / "pids.json"
@@ -333,11 +378,10 @@ def test_stop_rejects_reused_pid_without_signaling_or_erasing_registry(tmp_path,
     killpg = Mock()
     monkeypatch.setattr(run_module.os, "kill", kill)
     monkeypatch.setattr(run_module.os, "killpg", killpg)
-    with pytest.raises(RuntimeError, match="no corresponde"):
-        run_module.stop_services()
+    run_module.stop_services()
     kill.assert_not_called()
     killpg.assert_not_called()
-    assert registry.exists()
+    assert not registry.exists()
 
 
 def test_stop_includes_inventory_and_waits_before_erasing_registry(tmp_path, monkeypatch):

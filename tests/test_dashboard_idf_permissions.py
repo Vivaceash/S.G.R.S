@@ -67,6 +67,14 @@ def test_overview_only_operator_cannot_mutate(path):
     assert handler.response[0] == 403
 
 
+@pytest.mark.parametrize('path', ['/api/inventory/reconcile', '/api/altas/concession'])
+def test_viewer_cannot_trigger_operational_writes(path):
+    handler = Boundary(path, ['idf', 'altas'], access.capabilities('viewer'))
+    handled = handler.access_get() if path.endswith('reconcile') else handler.access_post()
+    assert handled
+    assert handler.response[0] == 403
+
+
 @pytest.mark.parametrize('path', ['/api/inventory/catalog', '/api/inventory/reconcile',
                                   '/api/inventory/documents/example', '/api/inventarios/cctv/catalog',
                                   '/api/audit', '/api/reports/evidence/example'])

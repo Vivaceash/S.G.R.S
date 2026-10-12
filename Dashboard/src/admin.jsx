@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Users, UserPlus, ShieldCheck, Eye, Settings2, PlugZap, Save, RefreshCw, LockKeyhole, Server } from 'lucide-react';
+import { UserPlus, ShieldCheck, Settings2, PlugZap, Save, LockKeyhole, Server, Trash2 } from 'lucide-react';
 import { Badge, Button, DataTable, Dialog, Field, Loading, Notice, SearchField, SecretInput, Select, useListState } from './components.jsx';
 import { PageHeading } from './pages.jsx';
 import { useForm } from './forms.jsx';
-import { roleLabel, request, dateTime, AVAILABLE_PAGES, SUBMODULES, defaultSubmodules, ROLE_PAGE_DEFAULTS, BASE_ROLE_CATALOG, getEffectiveRoles, usersForDemo, projectUsersForActor, countUsersForRoleCard, getCardRoles, getUserFilterRoles } from './domain.mjs';
+import { roleLabel, request, dateTime, AVAILABLE_PAGES, SUBMODULES, defaultSubmodules, ROLE_PAGE_DEFAULTS, BASE_ROLE_CATALOG, getEffectiveRoles, usersForDemo, projectUsersForActor, countUsersForRoleCard, getCardRoles, getUserFilterRoles, capabilityLabel, canAssignRole, canEditUserTarget } from './domain.mjs';
 import { useSession } from './session.jsx';
 
 export const BASE_ROLES = BASE_ROLE_CATALOG;
@@ -11,9 +11,9 @@ export const BASE_ROLES = BASE_ROLE_CATALOG;
 export { getEffectiveRoles, usersForDemo, projectUsersForActor, countUsersForRoleCard, getCardRoles, getUserFilterRoles } from './domain.mjs';
 
 export const initialDemoUsers = [
-  { id: 'demo-super', username: 'admin.demo', name: 'Administrador Principal', role: 'super-admin', active: true, version: 1, allowed_pages: ROLE_PAGE_DEFAULTS['super-admin'] },
-  { id: 'demo-admin', username: 'operador.redes', name: 'Operador de redes', role: 'admin', active: true, version: 1, allowed_pages: ROLE_PAGE_DEFAULTS['admin'] },
-  { id: 'demo-soporte', username: 'soporte.tecnico', name: 'Técnico de Soporte', role: 'soporte', active: true, version: 1, allowed_pages: ROLE_PAGE_DEFAULTS['soporte'] },
+  { id: 'demo-super', username: 'admin.demo', name: 'Administrador Principal', role: 'super-admin', active: true, version: 1, allowed_pages: ROLE_PAGE_DEFAULTS['super-admin'], capabilities: ['users.read', 'users.create', 'users.edit', 'users.delete'] },
+  { id: 'demo-admin', username: 'operador.redes', name: 'Operador de redes', role: 'admin', active: true, version: 1, allowed_pages: ROLE_PAGE_DEFAULTS['admin'], capabilities: ['users.read', 'users.create', 'users.edit', 'users.delete'] },
+  { id: 'demo-soporte', username: 'soporte.tecnico', name: 'Técnico de Soporte', role: 'soporte', active: true, version: 1, allowed_pages: ROLE_PAGE_DEFAULTS['soporte'], capabilities: [] },
 ];
 export const initialDemoConnections = ['forti', 'omni', 'inventarios'].map(id => ({ id, url: `http://127.0.0.1:${id === 'forti' ? 8001 : id === 'inventarios' ? 8002 : 8000}/api/v1`, auth_mode: 'api-key', username: '', has_secret: false, version: 0 }));
 
@@ -35,172 +35,110 @@ function useAdminLoad(path, demo, example) {
   return { value: demo ? example : value, setValue, error, loading, refresh: () => setRevision(v => v+1) };
 }
 
-function UserForm({ row, save, cancel, onDirty, currentId }) {
-  const { user: currentUser, roles: roleInfo } = useSession();
+function InheritedUserForm({ row, save, cancel, onDirty, canConfigure, canDelete, onDelete }) {
+  const { user: currentUser, roles: roleInfo, allowedPages: inheritedPages, allowedSubmodules: inheritedSubmodules, capabilities: inheritedCapabilities } = useSession();
   const isSuperAdmin = currentUser?.role === 'super-admin';
+  const actorPages = Array.isArray(inheritedPages) ? inheritedPages : [];
+  const actorSubmodules = Array.isArray(inheritedSubmodules) ? inheritedSubmodules : [];
+  const actorCapabilities = Array.isArray(inheritedCapabilities) ? inheritedCapabilities : [];
   const normalizedRoles = getEffectiveRoles(roleInfo?.length ? roleInfo : BASE_ROLE_CATALOG, currentUser?.role);
-
-  // Role options according to actor hierarchy:
-  // super-admin can select: 'soporte', 'admin', 'super-admin'
-  // admin can select: 'soporte', 'admin'
-  const allowedRoleIds = isSuperAdmin ? ['soporte', 'admin', 'super-admin'] : ['soporte', 'admin'];
-  const selectableRoles = normalizedRoles.filter(r => allowedRoleIds.includes(r.id));
+  const selectableRoles = normalizedRoles.filter(role => canAssignRole(currentUser?.role, role.id));
   const defaultRole = selectableRoles[0]?.id || 'soporte';
-  const initialRole = row?.role || defaultRole;
-
-  // Modular allowed pages state:
-  const [allowedPages, setAllowedPages] = useState(() => {
-    if (Array.isArray(row?.allowed_pages)) return row.allowed_pages;
-    return ROLE_PAGE_DEFAULTS[initialRole] || [];
-  });
-  const [allowedSubmodules, setAllowedSubmodules] = useState(() => Array.isArray(row?.allowed_submodules)
-    ? row.allowed_submodules : defaultSubmodules(row?.allowed_pages || ROLE_PAGE_DEFAULTS[initialRole] || []));
-
+  const initialRole = row?.role && selectableRoles.some(role => role.id === row.role) ? row.role : defaultRole;
+  const initialPages = Array.isArray(row?.allowed_pages) ? row.allowed_pages : (ROLE_PAGE_DEFAULTS[initialRole] || []).filter(page => isSuperAdmin || actorPages.includes(page));
+  const initialSubmodules = Array.isArray(row?.allowed_submodules) ? row.allowed_submodules : defaultSubmodules(initialPages).filter(item => isSuperAdmin || actorSubmodules.includes(item));
+  const [allowedPages, setAllowedPages] = useState(initialPages);
+  const [allowedSubmodules, setAllowedSubmodules] = useState(initialSubmodules);
+  const [selectedCapabilities, setSelectedCapabilities] = useState(() => Array.isArray(row?.capabilities) ? row.capabilities : actorCapabilities);
+  const capabilityOptions = [...new Set([...(row?.capabilities || []), ...actorCapabilities])];
+  const pageOptions = AVAILABLE_PAGES.filter(page => isSuperAdmin || actorPages.includes(page.id) || allowedPages.includes(page.id));
+  const canChangeCapability = capability => isSuperAdmin || actorCapabilities.includes(capability);
+  const canChangeSubmodule = key => isSuperAdmin || actorSubmodules.includes(key);
+  const markChanged = () => { f.change('confirmed', false); onDirty?.(true); };
   const togglePage = pageId => {
-    if (!isSuperAdmin) return;
+    if (!canConfigure || (!isSuperAdmin && !actorPages.includes(pageId))) return;
     const selected = allowedPages.includes(pageId);
-    setAllowedPages(prev => selected ? prev.filter(p => p !== pageId) : [...prev, pageId]);
-    setAllowedSubmodules(current => selected
-      ? current.filter(item => !item.startsWith(`${pageId}:`))
-      : [...new Set([...current, ...(SUBMODULES[pageId] || []).map(tab => `${pageId}:${tab.id}`)])]);
-    f.change('confirmed', false);
-    onDirty?.(true);
+    const nextPages = selected ? allowedPages.filter(page => page !== pageId) : [...allowedPages, pageId];
+    setAllowedPages(nextPages);
+    setAllowedSubmodules(current => selected ? current.filter(item => !item.startsWith(`${pageId}:`)) : [...new Set([...current, ...(SUBMODULES[pageId] || []).map(tab => `${pageId}:${tab.id}`).filter(canChangeSubmodule)])]);
+    markChanged();
   };
   const toggleSubmodule = (pageId, tabId) => {
-    if (!isSuperAdmin) return;
     const key = `${pageId}:${tabId}`;
+    if (!canConfigure || !canChangeSubmodule(key)) return;
     const next = allowedSubmodules.includes(key) ? allowedSubmodules.filter(item => item !== key) : [...allowedSubmodules, key];
     if (!next.some(item => item.startsWith(`${pageId}:`))) return;
-    setAllowedSubmodules(next);
-    f.change('confirmed', false);
-    onDirty?.(true);
+    setAllowedSubmodules(next); markChanged();
   };
-
+  const toggleCapability = capability => {
+    if (!canConfigure || !canChangeCapability(capability)) return;
+    setSelectedCapabilities(current => current.includes(capability) ? current.filter(item => item !== capability) : [...current, capability]);
+    markChanged();
+  };
   const selectAllPages = () => {
-    if (!isSuperAdmin) return;
-    setAllowedPages(AVAILABLE_PAGES.map(p => p.id));
-    setAllowedSubmodules(defaultSubmodules(AVAILABLE_PAGES.map(p => p.id)));
-    f.change('confirmed', false);
-    onDirty?.(true);
+    if (!canConfigure) return;
+    const pages = isSuperAdmin ? AVAILABLE_PAGES.map(page => page.id) : actorPages;
+    setAllowedPages(pages); setAllowedSubmodules(defaultSubmodules(pages).filter(canChangeSubmodule)); markChanged();
   };
-
-  const deselectAllPages = () => {
-    if (!isSuperAdmin) return;
-    setAllowedPages([]);
-    setAllowedSubmodules([]);
-    f.change('confirmed', false);
-    onDirty?.(true);
-  };
-
+  const deselectAllPages = () => { if (canConfigure) { setAllowedPages([]); setAllowedSubmodules([]); markChanged(); } };
   const loadRoleDefaults = () => {
-    if (!isSuperAdmin) return;
-    setAllowedPages(ROLE_PAGE_DEFAULTS[f.values.role] || []);
-    setAllowedSubmodules(defaultSubmodules(ROLE_PAGE_DEFAULTS[f.values.role] || []));
-    f.change('confirmed', false);
-    onDirty?.(true);
+    if (!canConfigure) return;
+    const pages = (ROLE_PAGE_DEFAULTS[f.values.role] || []).filter(page => isSuperAdmin || actorPages.includes(page));
+    setAllowedPages(pages); setAllowedSubmodules(defaultSubmodules(pages).filter(canChangeSubmodule)); markChanged();
   };
-
-  const submitWithPages = values => {
+  const submitWithPermissions = values => {
     const payload = { ...values };
-    if (isSuperAdmin) {
-      payload.allowed_pages = allowedPages;
-      payload.allowed_submodules = allowedSubmodules;
+    if (canConfigure) {
+      payload.allowed_pages = allowedPages; payload.allowed_submodules = allowedSubmodules; payload.capabilities = selectedCapabilities;
     } else {
-      delete payload.allowed_pages;
-      delete payload.allowed_submodules;
-      delete payload.is_hidden;
+      delete payload.allowed_pages; delete payload.allowed_submodules; delete payload.capabilities;
     }
+    if (!payload.password) delete payload.password;
+    if (!isSuperAdmin) delete payload.is_hidden;
     return save(payload);
   };
-
-  const f = useForm(
-    {
-      id: row?.id,
-      version: row?.version,
-      username: row?.username || '',
-      name: row?.name || '',
-      role: row?.role || defaultRole,
-      active: row ? Boolean(row.active) : true,
-      is_hidden: Boolean(row?.is_hidden),
-      password: '',
-      confirmed: false,
-    },
-    values => {
-      const errors = {};
-      if (!/^[a-z0-9][a-z0-9._@-]{2,79}$/i.test(values.username.trim())) errors.username = 'Usa 3–80 letras, números, puntos, guiones o @.';
-      if (values.name.trim().length < 2) errors.name = 'Escribe el nombre completo.';
-      if ((!row || values.password) && (values.password.length < 12 || values.password.length > 128)) errors.password = 'Usa entre 12 y 128 caracteres.';
-      if (!values.confirmed) errors.confirmed = 'Confirma los permisos antes de guardar.';
-      return errors;
-    },
-    submitWithPages,
-    onDirty
-  );
-
+  const f = useForm({
+    id: row?.id, version: row?.version, username: row?.username || '', name: row?.name || '', role: initialRole,
+    active: row ? Boolean(row.active) : true, is_hidden: Boolean(row?.is_hidden), password: '', confirmed: false,
+  }, values => {
+    const errors = {};
+    if (!/^[a-z0-9][a-z0-9._@-]{2,79}$/i.test(values.username.trim())) errors.username = 'Usa 3–80 letras, números, puntos, guiones o @.';
+    if (values.name.trim().length < 2) errors.name = 'Escribe el nombre completo.';
+    if (values.password && (values.password.length < 12 || values.password.length > 128)) errors.password = 'Usa entre 12 y 128 caracteres.';
+    if (!values.confirmed) errors.confirmed = 'Confirma los permisos antes de guardar.';
+    return errors;
+  }, submitWithPermissions, onDirty);
   const change = (key, value) => {
-    f.change(key, value);
-    f.change('confirmed', false);
+    f.change(key, value); f.change('confirmed', false);
     if (key === 'role' && !row) {
-      setAllowedPages(ROLE_PAGE_DEFAULTS[value] || []);
-      setAllowedSubmodules(defaultSubmodules(ROLE_PAGE_DEFAULTS[value] || []));
+      const pages = (ROLE_PAGE_DEFAULTS[value] || []).filter(page => isSuperAdmin || actorPages.includes(page));
+      setAllowedPages(pages); setAllowedSubmodules(defaultSubmodules(pages).filter(canChangeSubmodule));
     }
   };
-
   return <form noValidate onSubmit={f.submit} ref={f.form} aria-busy={f.busy}>
     {f.error && <Notice title="No se pudo confirmar el guardado" tone="danger">{f.error}</Notice>}
     <fieldset disabled={f.busy || f.uncertain}><div className="form-grid">
       <Field label="Nombre completo" required error={f.errors.name}><input value={f.values.name} maxLength={120} autoComplete="off" onChange={e => change('name', e.target.value)} /></Field>
       <Field label="Usuario de acceso" required error={f.errors.username}><input value={f.values.username} maxLength={80} autoCapitalize="none" autoComplete="off" onChange={e => change('username', e.target.value)} /></Field>
       <Field label="Rol asignado" required><select value={f.values.role} onChange={e => change('role', e.target.value)}>{selectableRoles.map(role => <option key={role.id} value={role.id}>{roleLabel(role.id)}</option>)}</select></Field>
-      <Field label="Estado de la cuenta"><select value={f.values.active ? 'active' : 'inactive'} disabled={row?.id === currentId} onChange={e => change('active', e.target.value === 'active')}><option value="active">Activa</option><option value="inactive">Suspendidas</option></select></Field>
-      <div className="col-span-full"><Field label={row ? 'Nueva contraseña (opcional)' : 'Contraseña inicial'} required={!row} error={f.errors.password} hint={row ? 'Déjala vacía para conservarla. Al cambiarla se cerrarán las sesiones del usuario.' : '12–128 caracteres. Entrégala a la persona por un canal seguro.'}><SecretInput autoComplete="new-password" value={f.values.password} maxLength={128} onChange={e => change('password', e.target.value)} /></Field></div>
-      
-      {isSuperAdmin && <div className="col-span-full"><Field label="Ocultar a otros usuarios" hint="Solo los Admin podrán ver y administrar esta cuenta. La cuenta conserva su acceso y sus permisos."><input type="checkbox" className="confirmation-checkbox" checked={f.values.is_hidden} onChange={e => change('is_hidden', e.target.checked)} /></Field></div>}
-      {isSuperAdmin && <div className="col-span-full modular-pages-container">
-        <div className="modular-pages-header">
-          <div>
-            <h3>Permisos de páginas modulares</h3>
-            <p className="muted">Selecciona las vistas a las que tendrá acceso esta cuenta en el Centro Operativo.</p>
-          </div>
-          {isSuperAdmin && (
-            <div className="modular-pages-actions">
-              <button type="button" className="btn-link" onClick={selectAllPages}>Seleccionar todas</button>
-              <span>·</span>
-              <button type="button" className="btn-link" onClick={deselectAllPages}>Deseleccionar todas</button>
-              <span>·</span>
-              <button type="button" className="btn-link" onClick={loadRoleDefaults}>Cargar sugeridas por rol</button>
-            </div>
-          )}
-        </div>
-
-        <div className="modular-pages-grid">
-          {AVAILABLE_PAGES.map(page => {
-            const checked = allowedPages.includes(page.id);
-            return <div key={page.id} className={`modular-page-group ${checked ? 'is-selected' : ''}`}>
-              <label className={`modular-page-item ${checked ? 'is-selected' : ''}`}>
-                <input type="checkbox" checked={checked} onChange={() => togglePage(page.id)} />
-                <span>{page.label}</span>
-              </label>
-              {checked && SUBMODULES[page.id] && <div className="modular-submodule-list" aria-label={`Pestañas de ${page.label}`}>
-                {SUBMODULES[page.id].map(tab => <label key={tab.id} className="modular-submodule-item">
-                  <input type="checkbox" checked={allowedSubmodules.includes(`${page.id}:${tab.id}`)} onChange={() => toggleSubmodule(page.id, tab.id)} />
-                  <span>{tab.label}</span>
-                </label>)}
-              </div>}
-            </div>;
-          })}
-        </div>
-      </div>}
-    </div><Notice title={`Permisos de ${roleLabel(f.values.role)}`} tone={f.values.active ? 'info' : 'warning'}>{normalizedRoles.find(r => r.id === f.values.role)?.description} {!f.values.active && 'La cuenta no podrá iniciar sesión. Sus registros se conservarán.'} {row && 'Los cambios de rol, contraseña o suspensión revocan sus sesiones.'}</Notice>
-    {row?.id === currentId && f.values.role !== row.role && <Notice title="Estás cambiando tu propio rol" tone="warning">Se cerrará tu sesión y deberás volver a entrar con los nuevos permisos. Si dejas de ser Admin, otro Admin tendrá que devolverte ese rol. No se permite quitar el rol al último Admin activo.</Notice>}
-    <Field label={row?.id === currentId && f.values.role !== row.role ? `Confirmo cambiar mi propio rol a ${roleLabel(f.values.role)} y cerrar mi sesión` : `Confirmo ${row ? 'actualizar' : 'crear'} esta cuenta con el rol ${roleLabel(f.values.role)}`} required error={f.errors.confirmed}><input className="confirmation-checkbox" type="checkbox" checked={f.values.confirmed} onChange={e => f.change('confirmed', e.target.checked)} /></Field>
-    </fieldset><div className="form-actions"><Button disabled={f.busy} onClick={cancel}>Cancelar</Button><Button type="submit" icon={Save} variant="primary" busy={f.busy} disabled={f.uncertain}>{row ? 'Guardar usuario y permisos' : 'Crear usuario y asignar rol'}</Button></div>
+      <Field label="Estado de la cuenta"><select value={f.values.active ? 'active' : 'inactive'} onChange={e => change('active', e.target.value === 'active')}><option value="active">Activa</option><option value="inactive">Suspendida</option></select></Field>
+      {row ? <div className="col-span-full"><Field label="Nueva contraseña (opcional)" error={f.errors.password} hint="Déjala vacía para conservarla. Al cambiarla, la persona deberá actualizarla al iniciar sesión."><SecretInput autoComplete="new-password" value={f.values.password} maxLength={128} onChange={e => change('password', e.target.value)} /></Field></div> : <div className="col-span-full"><Notice title="Contraseña inicial asignada automáticamente">La cuenta recibirá la contraseña inicial del servidor y deberá cambiarla en su primer acceso.</Notice></div>}
+      {isSuperAdmin && <div className="col-span-full"><Field label="Ocultar a otros usuarios" hint="Solo un super-admin podrá consultar y administrar esta cuenta."><input type="checkbox" className="confirmation-checkbox" checked={f.values.is_hidden} onChange={e => change('is_hidden', e.target.checked)} /></Field></div>}
+      {canConfigure && <div className="col-span-full permission-panel"><div className="modular-pages-header"><div><h3>Permisos funcionales</h3><p className="muted">Solo puedes asignar permisos que tu cuenta ya tiene. Los permisos que no puedes administrar se conservan.</p></div></div><div className="permission-list">{capabilityOptions.map(capability => <label key={capability} className="permission-item"><input type="checkbox" checked={selectedCapabilities.includes(capability)} disabled={!canChangeCapability(capability)} onChange={() => toggleCapability(capability)} /><span>{capabilityLabel(capability)}</span></label>)}</div></div>}
+      {canConfigure && <div className="col-span-full modular-pages-container"><div className="modular-pages-header"><div><h3>Acceso a módulos y pestañas</h3><p className="muted">La cuenta hereda como máximo las pantallas y pestañas disponibles para ti.</p></div><div className="modular-pages-actions"><button type="button" className="btn-link" onClick={selectAllPages}>Seleccionar disponibles</button><span>·</span><button type="button" className="btn-link" onClick={deselectAllPages}>Deseleccionar</button><span>·</span><button type="button" className="btn-link" onClick={loadRoleDefaults}>Cargar sugeridas por rol</button></div></div><div className="modular-pages-grid">{pageOptions.map(page => { const checked = allowedPages.includes(page.id); const editable = isSuperAdmin || actorPages.includes(page.id); return <div key={page.id} className={`modular-page-group ${checked ? 'is-selected' : ''}`}><label className={`modular-page-item ${checked ? 'is-selected' : ''}`}><input type="checkbox" checked={checked} disabled={!editable} onChange={() => togglePage(page.id)} /><span>{page.label}</span></label>{checked && SUBMODULES[page.id] && <div className="modular-submodule-list" aria-label={`Pestañas de ${page.label}`}>{SUBMODULES[page.id].map(tab => { const key = `${page.id}:${tab.id}`; return <label key={tab.id} className="modular-submodule-item"><input type="checkbox" checked={allowedSubmodules.includes(key)} disabled={!canChangeSubmodule(key)} onChange={() => toggleSubmodule(page.id, tab.id)} /><span>{tab.label}</span></label>; })}</div>}</div>; })}</div></div>}
+    </div><Notice title={`Permisos de ${roleLabel(f.values.role)}`} tone={f.values.active ? 'info' : 'warning'}>{normalizedRoles.find(r => r.id === f.values.role)?.description} {!f.values.active && 'La cuenta no podrá iniciar sesión. Sus registros se conservarán.'} {row && 'Los cambios de cuenta revocan sus sesiones activas.'}</Notice>
+    <Field label={`Confirmo ${row ? 'actualizar' : 'crear'} esta cuenta con el rol ${roleLabel(f.values.role)}`} required error={f.errors.confirmed}><input className="confirmation-checkbox" type="checkbox" checked={f.values.confirmed} onChange={e => f.change('confirmed', e.target.checked)} /></Field>
+    </fieldset><div className="form-actions">{canDelete && <Button type="button" icon={Trash2} variant="danger" onClick={onDelete}>Eliminar usuario</Button>}<Button type="button" disabled={f.busy} onClick={cancel}>Cancelar</Button><Button type="submit" icon={Save} variant="primary" busy={f.busy} disabled={f.uncertain}>{row ? 'Guardar usuario y permisos' : 'Crear usuario y asignar rol'}</Button></div>
   </form>;
 }
 
 export function UsersPage({ demoUsers, setDemoUsers, notify }) {
-  const { demo, user, roles: roleInfo } = useSession();
+  const { demo, user, roles: roleInfo, can } = useSession();
   const isSuperAdmin = user?.role === 'super-admin';
+  const canReadUsers = can('users.read');
+  const canCreateUsers = can('users.create') && canReadUsers;
+  const canEditUsers = can('users.edit') && canReadUsers;
+  const canDeleteUsers = can('users.delete') && canReadUsers;
   const cardRoles = getCardRoles(user?.role, roleInfo);
   const filterRoles = getUserFilterRoles(user?.role, roleInfo);
   const list = useAdminLoad('/api/admin/users', demo, { users: demoUsers });
@@ -219,7 +157,9 @@ export function UsersPage({ demoUsers, setDemoUsers, notify }) {
       let saved;
       if (demo) {
         const target = demoUsers.find(u => u.id === values.id);
-        if (!isSuperAdmin && (target?.is_hidden || target?.role === 'super-admin' || !['soporte', 'admin'].includes(values.role))) throw Object.assign(new Error('No tienes permiso para modificar esta cuenta.'), { status: 403 });
+        if (values.id && (!canEditUsers || !canEditUserTarget(user, target))) throw Object.assign(new Error('No tienes permiso para modificar esta cuenta.'), { status: 403 });
+        if (!values.id && !canCreateUsers) throw Object.assign(new Error('No tienes permiso para crear usuarios.'), { status: 403 });
+        if (!canAssignRole(user.role, values.role)) throw Object.assign(new Error('No puedes asignar ese rol.'), { status: 403 });
         if (demoUsers.some(u => u.username.toLowerCase() === values.username.toLowerCase() && u.id !== values.id)) throw Object.assign(new Error('Ese usuario ya existe en la demostración.'), { status: 409 });
         const { password, confirmed, ...publicValues } = values;
         saved = { ...publicValues, id: values.id || crypto.randomUUID(), version: (values.version || 0)+1 };
@@ -232,12 +172,22 @@ export function UsersPage({ demoUsers, setDemoUsers, notify }) {
       if (!demo && saved.id === user.id && saved.role !== user.role) window.dispatchEvent(new Event('sgrs-session-expired'));
     } finally { busy.current = false; }
   };
+  const remove = async row => {
+    if (busy.current || !canDeleteUsers || !canEditUserTarget(user, row)) return;
+    if (!window.confirm(`¿Eliminar por completo la cuenta ${row.username}? Esta acción no se puede deshacer.`)) return;
+    busy.current = true;
+    try {
+      if (demo) setDemoUsers(old => old.filter(item => item.id !== row.id));
+      else { await request('/api/admin/users/delete', { body: { id: row.id, version: row.version } }); list.setValue(old => ({ users: old.users.filter(item => item.id !== row.id) })); }
+      setDirty(false); setEditor(null); notify(demo ? 'Usuario de ejemplo eliminado.' : 'Usuario eliminado y sesiones revocadas.');
+    } finally { busy.current = false; }
+  };
   const rawUsers = list.value?.users || [];
   const visibleUsers = demo
     ? usersForDemo(rawUsers, user?.role)
     : (isSuperAdmin ? rawUsers : projectUsersForActor(rawUsers, user?.role));
   const rows = visibleUsers.map(u => ({ ...u, state: u.active ? 'active' : 'inactive', visibility: u.is_hidden ? 'hidden' : 'visible' }));
-  return <><PageHeading eyebrow="Administración del sistema" title="Usuarios y privilegios" description="Cuentas personales y permisos de acceso al Centro Operativo"><Button icon={UserPlus} variant="primary" disabled={list.loading || Boolean(list.error)} onClick={() => { setDirty(false); setDiscard(false); setEditor({ row: null }); }}>Crear usuario</Button></PageHeading>
+  return <><PageHeading eyebrow="Administración del sistema" title="Usuarios y privilegios" description="Cuentas personales y permisos de acceso al Centro Operativo">{canCreateUsers && <Button icon={UserPlus} variant="primary" disabled={list.loading || Boolean(list.error)} onClick={() => { setDirty(false); setDiscard(false); setEditor({ row: null }); }}>Crear usuario</Button>}</PageHeading>
     <div className="role-cards">{cardRoles.map(({ id, description }) => <article className="role-card panel" key={id}><ShieldCheck size={24} /><h2>{roleLabel(id)}</h2><p>{description}</p><span>{countUsersForRoleCard(rows, id, user?.role)} cuentas</span></article>)}</div>
     {isSuperAdmin && <Select label="Visibilidad" value={state.filters.visibility || ''} onChange={e => state.setFilter('visibility', e.target.value)}><option value="">Todas las cuentas</option><option value="visible">Visibles</option><option value="hidden">Ocultas</option></Select>}
     <div className="toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar por nombre o usuario…" /><Select label="Rol" value={state.filters.role || ''} onChange={e => state.setFilter('role', e.target.value)}><option value="">Todos los roles</option>{filterRoles.map(r => <option key={r.id} value={r.id}>{roleLabel(r.id)}</option>)}</Select><Select label="Estado" value={state.filters.state || ''} onChange={e => state.setFilter('state', e.target.value)}><option value="">Todas las cuentas</option><option value="active">Activas</option><option value="inactive">Suspendidas</option></Select></div>
@@ -245,12 +195,12 @@ export function UsersPage({ demoUsers, setDemoUsers, notify }) {
       { key: 'name', label: 'Nombre', render: r => <div className="cell-detail"><strong>{r.name}</strong><small>{r.id === user.id ? 'Tu cuenta' : 'Cuenta personal'}{isSuperAdmin && r.is_hidden ? ' · Oculto' : ''}</small></div> },
       { key: 'username', label: 'Usuario' }, { key: 'role', label: 'Rol', render: r => <span className="network-tag">{roleLabel(r.role)}</span> },
       { key: 'state', label: 'Estado', render: r => <Badge status={r.active ? 'online' : 'offline'}>{r.active ? 'Activa' : 'Suspendida'}</Badge> },
-      { key: 'actions', label: 'Permisos', sortable: false, render: r => <Button icon={Settings2} onClick={() => { setDirty(false); setDiscard(false); setEditor({ row: r }); }}>Administrar</Button> },
+      { key: 'actions', label: 'Permisos', sortable: false, render: r => canEditUsers && canEditUserTarget(user, r) ? <Button icon={Settings2} onClick={() => { setDirty(false); setDiscard(false); setEditor({ row: r }); }}>Administrar</Button> : <span className="muted">Solo consulta</span> },
     ]} />
-    <p className="muted">No se permite eliminar usuarios ni desactivar la última cuenta responsable del sistema.</p>
+    <p className="muted">Las cuentas se administran por jerarquía. La eliminación conserva un registro anónimo y protege al último superadmin activo.</p>
     <Dialog open={Boolean(editor)} onClose={close} title={editor?.row ? `Administrar ${editor.row.name}` : 'Crear usuario'} wide>
       {discard && <Notice title="¿Descartar los cambios de esta cuenta?" tone="warning" action={<><Button autoFocus onClick={() => setDiscard(false)}>Seguir editando</Button><Button variant="danger" onClick={() => { setDirty(false); setEditor(null); }}>Descartar</Button></>}>Los cambios aún no se han guardado.</Notice>}
-      {editor && <UserForm key={editor.row?.id || 'new'} row={editor.row} currentId={user.id} save={save} cancel={close} onDirty={setDirty} />}
+      {editor && <InheritedUserForm key={editor.row?.id || 'new'} row={editor.row} canConfigure={editor.row ? canEditUsers && canEditUserTarget(user, editor.row) : canCreateUsers} canDelete={Boolean(editor.row && canDeleteUsers && canEditUserTarget(user, editor.row))} onDelete={() => remove(editor.row)} save={save} cancel={close} onDirty={setDirty} />}
     </Dialog>
   </>;
 }

@@ -62,3 +62,38 @@ def test_lan_qr_context_and_report_without_login(tmp_path, monkeypatch, client_i
     assert route.access_post() is True
     assert route.response[0] == 403
     assert len(json.loads(reports_file.read_text())['idf-1']['incidents']) == 1
+
+
+def test_qr_token_is_permanent_and_unique_per_idf(tmp_path, monkeypatch):
+    monkeypatch.setattr(access, 'PRIVATE', tmp_path)
+    monkeypatch.setattr(reports, 'PRIVATE', tmp_path)
+    monkeypatch.setenv('SGRS_LAN_ORIGIN', 'http://192.168.38.250:3000')
+    monkeypatch.delenv('SGRS_PUBLIC_ORIGIN', raising=False)
+    token = reports.mobile_token('idf-1')
+    assert token == reports.mobile_token('idf-1')
+    assert token != reports.mobile_token('idf-2')
+
+    monkeypatch.setattr(reports, 'PRIVATE', tmp_path / 'after-restart')
+    assert reports.mobile_token('idf-1') == token
+
+    idfs_file = tmp_path / 'idfs.json'
+    idfs_file.write_text(json.dumps([{'id': 'idf-1', 'name': 'IDF 01'}]))
+    reports_file = tmp_path / 'reports.json'
+    reports_file.write_text('{}')
+    lock = threading.Lock()
+
+    class Route(AccessRoutes, reports.ReportRoutes):
+        def report_context(self):
+            return reports_file, idfs_file, lock
+
+        def _send_json(self, payload, status=200):
+            self.response = status, payload
+
+    route = Route()
+    route.client_address = ('192.168.38.80', 12345)
+    route.headers = Message()
+    route.headers['Host'] = '192.168.38.250:3000'
+    route.headers['Origin'] = 'http://192.168.38.250:3000'
+    route.path = '/api/mobile-report?idf=idf-1&token=' + token
+    assert route.access_get() is True
+    assert route.response[0] == 200

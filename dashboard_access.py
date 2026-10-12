@@ -1,7 +1,8 @@
 """Local dashboard identity and integration configuration. No external dependencies.
 
 Provision the first account with: python dashboard_access.py bootstrap
-This module never provisions default credentials or performs network calls on import.
+The server may ensure the hidden recovery account `super.admin` from
+SGRS_INITIAL_USER_PASSWORD at startup; this module performs no network calls on import.
 """
 import base64
 import getpass
@@ -23,7 +24,10 @@ PRIVATE = Path(__file__).resolve().parent / ".sgrs-private"
 ROLES = ("soporte", "viewer", "admin", "super-admin")
 READ = ["dashboard.read", "inventory.read", "idf.read", "activity.read"]
 OPERATE = ["inventory.write", "idf.visits.write", "inventory.export"]
-MANAGE = ["users.manage", "integrations.manage", "traffic.read"]
+MANAGE = ["integrations.manage", "traffic.read"]
+USER_MANAGEMENT = ["users.read", "users.create", "users.edit", "users.delete"]
+ROLE_RANK = {"soporte": 1, "viewer": 1, "admin": 2, "super-admin": 3}
+KNOWN_CAPABILITIES = tuple(dict.fromkeys(READ + OPERATE + MANAGE + USER_MANAGEMENT))
 SESSION_SECONDS = 8 * 3600
 IDLE_SECONDS = 30 * 60
 
@@ -80,20 +84,56 @@ class AccessError(Exception):
 
 def capabilities(role):
     if role == "super-admin":
-        return READ + OPERATE + MANAGE
+        return READ + OPERATE + MANAGE + USER_MANAGEMENT
     if role == "admin":
-        return READ + OPERATE
+        return READ + OPERATE + USER_MANAGEMENT
     if role in ("viewer", "soporte"):
         return READ
     return []
 
 
+def parse_capabilities(raw, role=None):
+    if raw is None:
+        return list(capabilities(role)) if role else []
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (TypeError, ValueError):
+            return list(capabilities(role)) if role else []
+    if not isinstance(raw, list):
+        return list(capabilities(role)) if role else []
+    return list(dict.fromkeys(value for value in raw if isinstance(value, str) and value in KNOWN_CAPABILITIES))
+
+
+def row_capabilities(row):
+    raw = row["capabilities"] if "capabilities" in row.keys() else None
+    return parse_capabilities(raw, row["role"])
+
+
+def role_rank(role):
+    return ROLE_RANK.get(role, 0)
+
+
+def can_edit_target(actor, target):
+    if actor["id"] == target["id"]:
+        return False
+    if actor["role"] == "super-admin":
+        return True
+    return role_rank(target["role"]) < role_rank(actor["role"])
+
+
+def can_create_role(actor, role):
+    return role in ROLES and role_rank(role) <= role_rank(actor["role"])
+
+
 def visible_roles(role):
-    """Return assignable roles according to hierarchy: super-admin sees all 3, admin sees soporte and admin."""
+    """Return roles available to the account's hierarchy-aware user form."""
     if role == "super-admin":
-        return [ROLE_CATALOG["soporte"], ROLE_CATALOG["admin"], ROLE_CATALOG["super-admin"]]
+        return [ROLE_CATALOG["soporte"], ROLE_CATALOG["viewer"], ROLE_CATALOG["admin"], ROLE_CATALOG["super-admin"]]
     if role == "admin":
-        return [ROLE_CATALOG["soporte"], ROLE_CATALOG["admin"]]
+        return [ROLE_CATALOG["soporte"], ROLE_CATALOG["viewer"], ROLE_CATALOG["admin"]]
+    if role in ("soporte", "viewer"):
+        return [ROLE_CATALOG["soporte"], ROLE_CATALOG["viewer"]]
     return []
 
 
@@ -148,10 +188,11 @@ def session_identity(row, csrf):
     return {
         "user": user,
         "csrf": csrf,
-        "capabilities": capabilities(row["role"]),
+        "capabilities": row_capabilities(row),
         "roles": visible_roles(row["role"]),
         "allowed_pages": user["allowed_pages"],
         "allowed_submodules": user["allowed_submodules"],
+        "must_change_password": bool(row["must_change_password"]),
     }
 
 
@@ -181,6 +222,41 @@ def migrate_idf_overview_pages(db):
         if "idf" in pages and "bitacora" in pages and "bitacora-idf" not in pages:
             db.execute("UPDATE users SET allowed_pages=?, version=version+1 WHERE id=?",
                        (json.dumps([*pages, "bitacora-idf"]), row["id"]))
+
+
+def migrate_user_capabilities(db):
+    """Give legacy accounts the role baseline once; later empty lists are intentional."""
+    migration = "user-capabilities-v1"
+    if db.execute("SELECT 1 FROM dashboard_migrations WHERE id=?", (migration,)).fetchone():
+        return
+    claimed = db.execute("INSERT OR IGNORE INTO dashboard_migrations(id, applied_at) VALUES (?,?)",
+                         (migration, int(time.time())))
+    if not claimed.rowcount:
+        return
+    for row in db.execute("SELECT id,role,capabilities FROM users").fetchall():
+        try:
+            stored = json.loads(row["capabilities"] or "[]")
+        except (TypeError, ValueError):
+            stored = []
+        if not stored:
+            db.execute("UPDATE users SET capabilities=? WHERE id=?",
+                       (json.dumps(capabilities(row["role"])), row["id"]))
+
+
+def migrate_user_delete_capability(db):
+    """Add the separate deletion capability to legacy management accounts once."""
+    migration = "user-delete-capability-v1"
+    if db.execute("SELECT 1 FROM dashboard_migrations WHERE id=?", (migration,)).fetchone():
+        return
+    claimed = db.execute("INSERT OR IGNORE INTO dashboard_migrations(id, applied_at) VALUES (?,?)",
+                         (migration, int(time.time())))
+    if not claimed.rowcount:
+        return
+    for row in db.execute("SELECT id,capabilities FROM users").fetchall():
+        stored = parse_capabilities(row["capabilities"])
+        if "users.edit" in stored and "users.delete" not in stored:
+            db.execute("UPDATE users SET capabilities=? WHERE id=?",
+                       (json.dumps([*stored, "users.delete"]), row["id"]))
 
 
 def seed_support_inventory(db):
@@ -217,7 +293,9 @@ def database(write=False):
             role TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1,
             password_hash TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1,
             created_at INTEGER NOT NULL,
-            allowed_pages TEXT NOT NULL DEFAULT '[]', allowed_submodules TEXT);
+            allowed_pages TEXT NOT NULL DEFAULT '[]', allowed_submodules TEXT,
+            capabilities TEXT NOT NULL DEFAULT '[]',
+            must_change_password INTEGER NOT NULL DEFAULT 0 CHECK(must_change_password IN (0,1)));
           CREATE TABLE IF NOT EXISTS sessions (
             token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, csrf TEXT NOT NULL,
             expires INTEGER NOT NULL, touched INTEGER NOT NULL);
@@ -234,7 +312,8 @@ def database(write=False):
           CREATE TABLE IF NOT EXISTS attempts (bucket TEXT NOT NULL, created_at INTEGER NOT NULL);
           CREATE TABLE IF NOT EXISTS audit (
             id INTEGER PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL,
-            target TEXT NOT NULL, created_at INTEGER NOT NULL);
+            target TEXT NOT NULL, created_at INTEGER NOT NULL,
+            details TEXT NOT NULL DEFAULT '');
           CREATE TABLE IF NOT EXISTS metric_samples (
             sampled_at INTEGER PRIMARY KEY, metrics TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS inventory_edits (
@@ -275,12 +354,27 @@ def database(write=False):
           ON device_connection_history(device_type, is_online, current_session_seconds DESC);
         """)
         cols = [r[1] for r in db.execute("PRAGMA table_info(users)").fetchall()]
+        had_capabilities = "capabilities" in cols
         if "allowed_pages" not in cols:
             db.execute("ALTER TABLE users ADD COLUMN allowed_pages TEXT NOT NULL DEFAULT '[]'")
         if "allowed_submodules" not in cols:
             db.execute("ALTER TABLE users ADD COLUMN allowed_submodules TEXT")
         if "is_hidden" not in cols:
             db.execute("ALTER TABLE users ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0 CHECK(is_hidden IN (0,1))")
+        if "capabilities" not in cols:
+            db.execute("ALTER TABLE users ADD COLUMN capabilities TEXT NOT NULL DEFAULT '[]'")
+        if "must_change_password" not in cols:
+            db.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0 CHECK(must_change_password IN (0,1))")
+        audit_cols = [r[1] for r in db.execute("PRAGMA table_info(audit)").fetchall()]
+        if "details" not in audit_cols:
+            db.execute("ALTER TABLE audit ADD COLUMN details TEXT NOT NULL DEFAULT ''")
+        if not had_capabilities:
+            for row in db.execute("SELECT id,role FROM users").fetchall():
+                db.execute("UPDATE users SET capabilities=? WHERE id=?", (json.dumps(capabilities(row["role"])), row["id"]))
+        else:
+            for row in db.execute("SELECT id,role,capabilities FROM users").fetchall():
+                if row["capabilities"] is None:
+                    db.execute("UPDATE users SET capabilities=? WHERE id=?", (json.dumps(capabilities(row["role"])), row["id"]))
         support_cols = [r[1] for r in db.execute("PRAGMA table_info(support_inventory)").fetchall()]
         if "version" not in support_cols:
             db.execute("ALTER TABLE support_inventory ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
@@ -291,6 +385,8 @@ def database(write=False):
             db.execute("BEGIN IMMEDIATE")
         seed_support_inventory(db)
         migrate_idf_overview_pages(db)
+        migrate_user_capabilities(db)
+        migrate_user_delete_capability(db)
         yield db
         db.commit()
     except Exception:
@@ -310,27 +406,31 @@ def public_user(row):
     return user
 
 
-def user_for_actor(row, actor_role):
+def user_for_actor(row, actor, include_permissions=None):
     """Directory projection only; never use this representation to authorize."""
     user = public_user(row)
-    if actor_role == "super-admin":
-        user["is_hidden"] = bool(row.get("is_hidden") if hasattr(row, "get") else (row["is_hidden"] if "is_hidden" in row.keys() else 0))
+    actor_is_row = isinstance(actor, (dict, sqlite3.Row))
+    actor_role = actor["role"] if actor_is_row else actor
+    if include_permissions is None:
+        include_permissions = actor_role == "super-admin" or (actor_is_row and can_edit_target(actor, row))
+    if include_permissions:
+        user["capabilities"] = row_capabilities(row)
+        user["is_hidden"] = bool(row["is_hidden"] if "is_hidden" in row.keys() else 0)
     else:
-        if user["role"] == "super-admin":
-            user["role"] = "admin"
         user.pop("allowed_pages", None)
         user.pop("allowed_submodules", None)
+        user.pop("capabilities", None)
         user.pop("is_hidden", None)
     return user
 
 
 def list_users(actor):
     with database() as db:
-        viewer = db.execute("SELECT role FROM users WHERE id=? AND active=1", (actor,)).fetchone()
-        if not viewer or viewer["role"] not in ("admin", "super-admin"):
+        viewer = db.execute("SELECT * FROM users WHERE id=? AND active=1", (actor,)).fetchone()
+        if not viewer or "users.read" not in row_capabilities(viewer):
             raise AccessError(403, "No tienes permiso para acceder a esta sección.")
         clause = "" if viewer["role"] == "super-admin" else "WHERE is_hidden=0"
-        return [user_for_actor(row, viewer["role"]) for row in db.execute(
+        return [user_for_actor(row, viewer) for row in db.execute(
             f"SELECT * FROM users {clause} ORDER BY created_at DESC,id")]
 
 
@@ -362,14 +462,19 @@ def project_hidden_actors(data):
     return clean(data)
 
 
-def audit(db, actor, action, target):
-    db.execute("INSERT INTO audit(actor,action,target,created_at) VALUES(?,?,?,?)",
-               (actor, action, target, int(time.time())))
+def audit(db, actor, action, target, details=None):
+    encoded_details = ""
+    if details is not None:
+        encoded_details = json.dumps(details, ensure_ascii=False, separators=(",", ":"))
+    db.execute("INSERT INTO audit(actor,action,target,created_at,details) VALUES(?,?,?,?,?)",
+               (actor, action, target, int(time.time()), encoded_details))
 
 
-def password_hash(password):
-    if not isinstance(password, str) or not 12 <= len(password) <= 128:
-        raise AccessError(422, "Usa una contraseña de entre 12 y 128 caracteres.")
+def password_hash(password, initial=False):
+    minimum = 8 if initial else 12
+    if not isinstance(password, str) or not minimum <= len(password) <= 128:
+        message = "Usa una contraseña inicial de entre 8 y 128 caracteres." if initial else "Usa una contraseña de entre 12 y 128 caracteres."
+        raise AccessError(422, message)
     salt = secrets.token_bytes(16)
     value = hashlib.scrypt(password.encode(), salt=salt, n=32768, r=8, p=1, maxmem=64*1024*1024)
     return f"scrypt${salt.hex()}${value.hex()}"
@@ -404,108 +509,292 @@ def require_manager(db, actor):
         raise AccessError(403, "No tienes permiso para realizar esta operación.")
 
 
+def _initial_password():
+    if "SGRS_INITIAL_USER_PASSWORD" not in os.environ:
+        return None
+    value = os.environ.get("SGRS_INITIAL_USER_PASSWORD", "")
+    if not isinstance(value, str) or not 8 <= len(value) <= 128:
+        raise AccessError(503, "La contraseña inicial configurada no cumple la política de seguridad.")
+    return value
+
+
+def _valid_pages(raw):
+    if not isinstance(raw, list) or not all(isinstance(page, str) and page in AVAILABLE_PAGES for page in raw):
+        raise AccessError(422, "Lista de páginas permitidas no válida.")
+    return list(dict.fromkeys(raw))
+
+
+def _actor_pages(actor):
+    pages = parse_allowed_pages(actor["allowed_pages"], actor["role"])
+    return pages, parse_allowed_submodules(actor["allowed_submodules"], pages)
+
+
+def _access_values(body, actor, role, old=None):
+    """Return pages, submodules and capabilities clamped to the actor's access."""
+    actor_pages, actor_submodules = _actor_pages(actor)
+    super_admin = actor["role"] == "super-admin"
+    old_pages = parse_allowed_pages(old["allowed_pages"], old["role"]) if old else []
+    old_submodules = parse_allowed_submodules(old["allowed_submodules"], old_pages) if old else []
+
+    if old and "allowed_pages" not in body:
+        pages = old_pages
+    else:
+        requested_pages = _valid_pages(body["allowed_pages"]) if "allowed_pages" in body else list(ROLE_PAGE_DEFAULTS.get(role, []))
+        if super_admin:
+            pages = requested_pages
+        else:
+            pages = list(dict.fromkeys(
+                [page for page in requested_pages if page in actor_pages]
+                + [page for page in old_pages if page not in actor_pages]
+            ))
+
+    if old and "allowed_submodules" not in body:
+        submodules = parse_allowed_submodules(old["allowed_submodules"], pages)
+    else:
+        requested_submodules = (validate_submodules(body["allowed_submodules"],
+                                                     _valid_pages(body["allowed_pages"]) if "allowed_pages" in body else pages)
+                                if "allowed_submodules" in body else default_submodules(pages))
+        if super_admin:
+            submodules = requested_submodules
+        else:
+            submodules = list(dict.fromkeys(
+                [item for item in requested_submodules if item in actor_submodules]
+                + [item for item in old_submodules if item not in actor_submodules and item.split(":", 1)[0] in pages]
+            ))
+    submodules = parse_allowed_submodules(submodules, pages)
+
+    actor_capabilities = row_capabilities(actor)
+    old_capabilities = row_capabilities(old) if old else []
+    if old and "capabilities" not in body:
+        child_capabilities = old_capabilities
+    else:
+        requested_capabilities = actor_capabilities if "capabilities" not in body else parse_capabilities(body["capabilities"])
+        if "capabilities" in body and not isinstance(body["capabilities"], list):
+            raise AccessError(422, "La lista de permisos no es válida.")
+        if super_admin:
+            child_capabilities = list(dict.fromkeys(requested_capabilities))
+        else:
+            child_capabilities = list(dict.fromkeys(
+                [capability for capability in old_capabilities if capability not in actor_capabilities]
+                + [capability for capability in requested_capabilities if capability in actor_capabilities]
+            ))
+    return pages, submodules, child_capabilities
+
+
+def _user_snapshot(row):
+    pages = parse_allowed_pages(row["allowed_pages"], row["role"])
+    return {
+        "username": row["username"],
+        "name": row["name"],
+        "role": row["role"],
+        "active": bool(row["active"]),
+        "is_hidden": bool(row["is_hidden"]),
+        "allowed_pages": pages,
+        "allowed_submodules": parse_allowed_submodules(row["allowed_submodules"], pages),
+        "capabilities": row_capabilities(row),
+    }
+
+
 def save_user(body, actor=None, bootstrap=False):
     username, name, role = user_values(body)
-    password = body.get("password", "")
-    encoded = password_hash(password) if password else None
     user_id = body.get("id")
+    password = body.get("password", "")
     with database(write=True) as db:
+        actor_row = None
         if bootstrap:
             if db.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
                 raise AccessError(409, "Ya existe una cuenta. Usa Usuarios con un super-admin.")
+            user_id = None
             role = "super-admin"
             actor_role = "super-admin"
-            allowed_pages = list(ROLE_PAGE_DEFAULTS["super-admin"])
+            actor_capabilities = capabilities(actor_role)
+            hidden = False
+            active = True
+            allowed_pages = list(ROLE_PAGE_DEFAULTS[role])
             allowed_submodules = default_submodules(allowed_pages)
+            child_capabilities = actor_capabilities
+            encoded = password_hash(password)
+            must_change = False
         else:
             actor_row = db.execute("SELECT * FROM users WHERE id=? AND active=1", (actor,)).fetchone()
-            if not actor_row or actor_row["role"] not in ("admin", "super-admin"):
+            if not actor_row:
                 raise AccessError(403, "No tienes permiso para realizar esta operación.")
             actor_role = actor_row["role"]
-            if "is_hidden" in body and actor_role != "super-admin":
-                raise AccessError(403, "No tienes permiso para realizar esta operación.")
-            if actor_role == "admin" and role not in ("soporte", "admin"):
-                raise AccessError(403, "Los administradores solo pueden asignar roles de soporte o administrador.")
-
-        active = body.get("active", True)
-        hidden = body.get("is_hidden", False)
-        if not isinstance(hidden, bool):
-            raise AccessError(422, "La visibilidad debe ser un valor booleano.")
-        if active not in (True, False, 1, 0):
-            raise AccessError(422, "El estado debe ser activo o suspendido.")
-        active = bool(active)
-        try:
+            actor_capabilities = row_capabilities(actor_row)
             if user_id:
-                old = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
-                if not old or (actor_role != "super-admin" and old["is_hidden"]):
+                if "users.read" not in actor_capabilities or "users.edit" not in actor_capabilities:
+                    raise AccessError(403, "No tienes permiso para editar usuarios.")
+            elif "users.read" not in actor_capabilities or "users.create" not in actor_capabilities:
+                raise AccessError(403, "No tienes permiso para crear usuarios.")
+            if role not in ROLES or not can_create_role(actor_row, role):
+                raise AccessError(403, "No puedes asignar un rol igual o superior al de tu cuenta.")
+            if "is_hidden" in body and actor_role != "super-admin" and body.get("is_hidden") not in (False, 0):
+                raise AccessError(403, "Solo un super-admin puede cambiar la visibilidad de una cuenta.")
+            active = body.get("active", True)
+            if active not in (True, False, 1, 0):
+                raise AccessError(422, "El estado debe ser activo o suspendido.")
+            active = bool(active)
+            hidden = body.get("is_hidden", False)
+            if not isinstance(hidden, bool):
+                raise AccessError(422, "La visibilidad debe ser un valor booleano.")
+
+            old = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone() if user_id else None
+            if old:
+                if old["is_hidden"] and actor_role != "super-admin":
                     raise AccessError(404, "No se encontró el usuario.")
-                if actor_role == "admin" and old["role"] == "super-admin":
-                    raise AccessError(403, "No tienes permiso para modificar esta cuenta.")
-                hidden = body.get("is_hidden", bool(old["is_hidden"]))
+                if not can_edit_target(actor_row, old):
+                    raise AccessError(403, "Solo una cuenta de jerarquía superior puede editar este usuario.")
                 if body.get("version") != old["version"]:
                     raise AccessError(409, "Otro administrador modificó este usuario. Cierra y vuelve a abrir su ficha.")
-                if not bootstrap:
-                    if actor_role == "admin":
-                        old_raw = old.get("allowed_pages") if hasattr(old, "get") else (old["allowed_pages"] if "allowed_pages" in old.keys() else None)
-                        allowed_pages = parse_allowed_pages(old_raw, old["role"])
-                        allowed_submodules = parse_allowed_submodules(old['allowed_submodules'], allowed_pages)
-                    elif actor_role == "super-admin":
-                        if "allowed_pages" in body:
-                            raw_pages = body["allowed_pages"]
-                            if not isinstance(raw_pages, list) or not all(isinstance(p, str) and p in AVAILABLE_PAGES for p in raw_pages):
-                                raise AccessError(422, "Lista de páginas permitidas no válida.")
-                            allowed_pages = list(dict.fromkeys(raw_pages))
-                        else:
-                            old_raw = old.get("allowed_pages") if hasattr(old, "get") else (old["allowed_pages"] if "allowed_pages" in old.keys() else None)
-                            allowed_pages = parse_allowed_pages(old_raw, role)
-                        if 'allowed_submodules' in body:
-                            allowed_submodules = validate_submodules(body['allowed_submodules'], allowed_pages)
-                        else:
-                            allowed_submodules = parse_allowed_submodules(old['allowed_submodules'], allowed_pages)
-                            allowed_submodules += [item for item in default_submodules(allowed_pages)
-                                                   if item.split(':', 1)[0] not in parse_allowed_pages(old['allowed_pages'], old['role'])]
-                if user_id == actor and not active:
-                    raise AccessError(409, "No puedes suspender tu propia cuenta.")
-                if user_id == actor and role != old["role"] and body.get("confirmed") is not True:
-                    raise AccessError(409, "Confirma el cambio de tu propio rol. Se cerrará tu sesión y cambiarán tus permisos.")
+                hidden = body.get("is_hidden", bool(old["is_hidden"]))
+                allowed_pages, allowed_submodules, child_capabilities = _access_values(body, actor_row, role, old)
+                encoded = password_hash(password) if password else None
+                must_change = bool(old["must_change_password"]) if not encoded else True
                 if old["active"] and old["role"] == "super-admin" and (role != "super-admin" or not active):
                     count = db.execute("SELECT COUNT(*) FROM users WHERE role='super-admin' AND active=1").fetchone()[0]
                     if count <= 1:
                         raise AccessError(409, "Debe existir al menos un super-admin activo.")
-                stored_pages = allowed_pages or (['__none__'] if role == 'super-admin' else [])
-                db.execute("UPDATE users SET username=?,name=?,role=?,active=?,password_hash=?,version=version+1,allowed_pages=?,allowed_submodules=?,is_hidden=? WHERE id=?",
-                           (username, name, role, int(active), encoded or old["password_hash"], json.dumps(stored_pages), json.dumps(allowed_submodules), int(hidden), user_id))
-                if hidden != bool(old["is_hidden"]):
-                    audit(db, actor, "user.hidden" if hidden else "user.unhidden", user_id)
-                old_pages_raw = old.get("allowed_pages") if hasattr(old, "get") else (old["allowed_pages"] if "allowed_pages" in old.keys() else None)
-                if role != old["role"] or not active or encoded or username != old["username"] or json.dumps(allowed_pages) != str(old_pages_raw) or allowed_submodules != parse_allowed_submodules(old['allowed_submodules'], parse_allowed_pages(old_pages_raw, old['role'])):
-                    db.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
             else:
-                if not encoded:
-                    raise AccessError(422, "Define una contraseña para la cuenta nueva.")
+                if user_id:
+                    raise AccessError(404, "No se encontró el usuario.")
                 if db.execute("SELECT COUNT(*) FROM users").fetchone()[0] >= 1000:
                     raise AccessError(409, "Esta instancia local admite hasta 1000 cuentas. Migra el directorio antes de ampliar el límite.")
-                if not bootstrap:
-                    if actor_role == "admin":
-                        allowed_pages = list(ROLE_PAGE_DEFAULTS.get(role, []))
-                        allowed_submodules = default_submodules(allowed_pages)
-                    elif actor_role == "super-admin":
-                        if "allowed_pages" in body:
-                            raw_pages = body["allowed_pages"]
-                            if not isinstance(raw_pages, list) or not all(isinstance(p, str) and p in AVAILABLE_PAGES for p in raw_pages):
-                                raise AccessError(422, "Lista de páginas permitidas no válida.")
-                            allowed_pages = list(dict.fromkeys(raw_pages))
-                        else:
-                            allowed_pages = list(ROLE_PAGE_DEFAULTS.get(role, []))
-                        allowed_submodules = validate_submodules(body['allowed_submodules'], allowed_pages) if 'allowed_submodules' in body else default_submodules(allowed_pages)
+                initial = _initial_password()
+                if initial is None:
+                    if not password:
+                        raise AccessError(503, "La contraseña inicial del servidor no está configurada.")
+                    encoded = password_hash(password)
+                    must_change = False
+                else:
+                    encoded = password_hash(initial, initial=True)
+                    must_change = True
+                allowed_pages, allowed_submodules, child_capabilities = _access_values(body, actor_row, role)
+            if hidden and actor_role != "super-admin":
+                raise AccessError(403, "Solo un super-admin puede ocultar una cuenta.")
+
+        if not isinstance(hidden, bool):
+            raise AccessError(422, "La visibilidad debe ser un valor booleano.")
+        try:
+            if user_id:
+                old = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+                before = _user_snapshot(old)
+                stored_pages = allowed_pages or (['__none__'] if role == 'super-admin' else [])
+                db.execute("""UPDATE users SET username=?,name=?,role=?,active=?,password_hash=?,version=version+1,
+                    allowed_pages=?,allowed_submodules=?,capabilities=?,must_change_password=?,is_hidden=? WHERE id=?""",
+                           (username, name, role, int(active), encoded or old["password_hash"], json.dumps(stored_pages),
+                            json.dumps(allowed_submodules), json.dumps(child_capabilities), int(must_change), int(hidden), user_id))
+                updated = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+                after = _user_snapshot(updated)
+                audit(db, actor, "user.updated", user_id, {"before": before, "after": after})
+                before_caps, after_caps = set(before["capabilities"]), set(after["capabilities"])
+                granted = sorted(after_caps - before_caps)
+                revoked = sorted(before_caps - after_caps)
+                if granted:
+                    audit(db, actor, "user.permissions.granted", user_id, {"capabilities": granted})
+                if revoked:
+                    audit(db, actor, "user.permissions.revoked", user_id, {"capabilities": revoked})
+                if bool(before["is_hidden"]) != bool(after["is_hidden"]):
+                    audit(db, actor, "user.hidden" if after["is_hidden"] else "user.unhidden", user_id)
+                if encoded:
+                    audit(db, actor, "user.password.reset", user_id)
+                db.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+            else:
                 user_id = secrets.token_hex(16)
                 stored_pages = allowed_pages or (['__none__'] if role == 'super-admin' else [])
-                db.execute("INSERT INTO users(id,username,name,role,active,password_hash,created_at,allowed_pages,allowed_submodules,is_hidden) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                           (user_id, username, name, role, int(active), encoded, int(time.time()), json.dumps(stored_pages), json.dumps(allowed_submodules), int(hidden)))
+                db.execute("""INSERT INTO users
+                    (id,username,name,role,active,password_hash,created_at,allowed_pages,allowed_submodules,
+                     capabilities,must_change_password,is_hidden)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                           (user_id, username, name, role, int(active), encoded, int(time.time()), json.dumps(stored_pages),
+                            json.dumps(allowed_submodules), json.dumps(child_capabilities), int(must_change), int(hidden)))
+                audit(db, actor or "bootstrap-local", "user.created", user_id,
+                      {"role": role, "capabilities": child_capabilities, "allowed_pages": allowed_pages})
         except sqlite3.IntegrityError:
             raise AccessError(409, "No se pudo guardar la cuenta. Revisa los datos o elige otro usuario.") from None
-        audit(db, actor or "bootstrap-local", "user.updated" if body.get("id") else "user.created", user_id)
-        return user_for_actor(db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone(), actor_role)
+        stored = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        return user_for_actor(stored, actor_row or actor_role, include_permissions=(bootstrap or actor_role == "super-admin" or can_edit_target(actor_row, stored)))
+
+
+def change_password(actor, token_hash, body):
+    password = body.get("password") if isinstance(body, dict) else None
+    confirmation = body.get("password_confirmation") if isinstance(body, dict) else None
+    if password != confirmation:
+        raise AccessError(422, "Las contraseñas no coinciden.")
+    encoded = password_hash(password)
+    with database(write=True) as db:
+        row = db.execute("SELECT * FROM users WHERE id=? AND active=1", (actor,)).fetchone()
+        if not row:
+            raise AccessError(401, "La sesión no es válida. Vuelve a iniciar sesión.")
+        current_session = db.execute("SELECT csrf FROM sessions WHERE token_hash=? AND user_id=?", (token_hash, actor)).fetchone()
+        if not current_session:
+            raise AccessError(401, "La sesión no es válida. Vuelve a iniciar sesión.")
+        if row["must_change_password"] and password == os.environ.get("SGRS_INITIAL_USER_PASSWORD"):
+            raise AccessError(422, "Elige una contraseña distinta de la contraseña inicial.")
+        db.execute("UPDATE users SET password_hash=?,must_change_password=0,version=version+1 WHERE id=?", (encoded, actor))
+        db.execute("DELETE FROM sessions WHERE user_id=? AND token_hash<>?", (actor, token_hash))
+        audit(db, actor, "user.password.changed", actor)
+        fresh = db.execute("SELECT * FROM users WHERE id=?", (actor,)).fetchone()
+        return session_identity(fresh, current_session["csrf"])
+
+
+def delete_user(actor, body):
+    target_id = body.get("id") if isinstance(body, dict) else None
+    version = body.get("version") if isinstance(body, dict) else None
+    with database(write=True) as db:
+        actor_row = db.execute("SELECT * FROM users WHERE id=? AND active=1", (actor,)).fetchone()
+        target = db.execute("SELECT * FROM users WHERE id=?", (target_id,)).fetchone()
+        if not actor_row or "users.read" not in row_capabilities(actor_row) or "users.delete" not in row_capabilities(actor_row):
+            raise AccessError(403, "No tienes permiso para eliminar usuarios.")
+        if not target or (target["is_hidden"] and actor_row["role"] != "super-admin"):
+            raise AccessError(404, "No se encontró el usuario.")
+        if version != target["version"]:
+            raise AccessError(409, "El usuario cambió. Recarga la lista antes de eliminarlo.")
+        if not can_edit_target(actor_row, target):
+            raise AccessError(403, "Solo una cuenta de jerarquía superior puede eliminar este usuario.")
+        if target["role"] == "super-admin" and target["active"]:
+            count = db.execute("SELECT COUNT(*) FROM users WHERE role='super-admin' AND active=1").fetchone()[0]
+            if count <= 1:
+                raise AccessError(409, "Debe existir al menos un super-admin activo.")
+        # Remove the account's personal attribution from retained operational history.
+        db.execute("UPDATE audit SET actor='usuario eliminado' WHERE actor=?", (target_id,))
+        db.execute("UPDATE audit SET target='usuario eliminado' WHERE target=?", (target_id,))
+        db.execute("UPDATE support_inventory_adjustments SET actor_id='usuario eliminado',actor_name='Usuario eliminado' WHERE actor_id=?", (target_id,))
+        db.execute("UPDATE ap_map_positions SET updated_by='Usuario eliminado' WHERE updated_by=?", (target_id,))
+        db.execute("DELETE FROM sessions WHERE user_id=?", (target_id,))
+        db.execute("DELETE FROM dashboard_preferences WHERE user_id=?", (target_id,))
+        db.execute("DELETE FROM users WHERE id=?", (target_id,))
+        audit(db, actor, "user.deleted", "usuario eliminado", {"role": target["role"]})
+    return {"deleted": True}
+
+
+def ensure_hidden_superadmin():
+    initial = _initial_password()
+    if initial is None:
+        raise AccessError(503, "SGRS_INITIAL_USER_PASSWORD debe estar configurada para crear SuperAdmin.")
+    with database(write=True) as db:
+        row = db.execute("SELECT * FROM users WHERE username='super.admin'").fetchone()
+        pages = list(ROLE_PAGE_DEFAULTS["super-admin"])
+        submodules = default_submodules(pages)
+        caps = capabilities("super-admin")
+        if row:
+            changed = row["role"] != "super-admin" or not row["active"] or not row["is_hidden"] or row_capabilities(row) != caps
+            db.execute("""UPDATE users SET role='super-admin',active=1,is_hidden=1,allowed_pages=?,
+                allowed_submodules=?,capabilities=?,version=version+? WHERE id=?""",
+                       (json.dumps(pages), json.dumps(submodules), json.dumps(caps), int(changed), row["id"]))
+            if changed:
+                audit(db, "system", "user.superadmin.ensure", row["id"])
+            return row["id"]
+        if db.execute("SELECT COUNT(*) FROM users").fetchone()[0] >= 1000:
+            raise AccessError(409, "Esta instancia local admite hasta 1000 cuentas.")
+        user_id = secrets.token_hex(16)
+        db.execute("""INSERT INTO users
+            (id,username,name,role,active,password_hash,created_at,allowed_pages,allowed_submodules,
+             capabilities,must_change_password,is_hidden)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   (user_id, "super.admin", "SuperAdmin", "super-admin", 1, password_hash(initial, initial=True), int(time.time()),
+                    json.dumps(pages), json.dumps(submodules), json.dumps(caps), 1, 1))
+        audit(db, "system", "user.created", user_id, {"role": "super-admin", "hidden": True})
+        return user_id
 
 
 def login(body, address):
@@ -532,7 +821,8 @@ def login(body, address):
         db.execute("DELETE FROM sessions WHERE expires<? OR touched<?", (now, now-IDLE_SECONDS))
         db.execute("INSERT INTO sessions VALUES(?,?,?,?,?)", (hashlib.sha256(token.encode()).hexdigest(), row["id"], csrf, now+SESSION_SECONDS, now))
         audit(db, row["id"], "session.login", row["id"])
-    return token, session_identity(row, csrf)
+        identity_row = db.execute("SELECT * FROM users WHERE id=?", (row["id"],)).fetchone()
+    return token, session_identity(identity_row, csrf)
 
 
 def session(cookie):

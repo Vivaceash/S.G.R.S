@@ -85,32 +85,9 @@ import { generateSvg } from "../qrcode.js";
 import qrTemplate from "./assets/plantilla_qr.jpg";
 import { DocumentaryInventory } from "./inventory.jsx";
 
-const QR_HOST_STORAGE_KEY = "sgrs:qr-host";
+const QR_ORIGIN = "http://192.168.38.250:3000";
 const QR_SVG_STORAGE_PREFIX = "sgrs:qr-svg:v1:";
 const qrSvgCache = new Map();
-
-function readQrHost() {
-  if (typeof localStorage !== "undefined") {
-    try {
-      const saved = localStorage.getItem(QR_HOST_STORAGE_KEY);
-      if (saved) return saved;
-    } catch {}
-  }
-  if (typeof sessionStorage !== "undefined") {
-    try {
-      const legacy = sessionStorage.getItem("sgrs_qr_host");
-      if (legacy) {
-        try { localStorage.setItem(QR_HOST_STORAGE_KEY, legacy); } catch {}
-        return legacy;
-      }
-    } catch {}
-  }
-  return "";
-}
-
-function saveQrHost(value) {
-  try { localStorage.setItem(QR_HOST_STORAGE_KEY, value); } catch {}
-}
 
 function stableHash(value) {
   let hash = 2166136261;
@@ -147,18 +124,10 @@ function cachedQrSource(value, size) {
   return source;
 }
 
-function buildQrValue(row, demo, host) {
-  const base = host?.trim() || readQrHost() || location.host;
-  let url;
-  try {
-    url = new URL(
-      /^https?:\/\//i.test(base) ? base : `${location.protocol}//${base}`,
-    );
-  } catch {
-    url = new URL(`${location.protocol}//${location.host}`);
-  }
-  // mobile_token is an HMAC of the permanent IDF id on the server. It is
-  // intentionally reused so every printed IDF QR keeps the same capability.
+function buildQrValue(row, demo) {
+  const url = new URL(QR_ORIGIN);
+  // mobile_token is a permanent capability derived from the stable IDF id.
+  // It intentionally remains unchanged so printed QR sheets never expire.
   url.searchParams.set("mobile", "1");
   url.searchParams.set("idf", row.id);
   if (row.mobile_token) url.searchParams.set("token", row.mobile_token);
@@ -286,6 +255,7 @@ function Nav({
 
   if (administration) {
     const adminVisible = adminItems.filter(([path]) => {
+      if (path === "usuarios" && (!can || !can("users.read"))) return false;
       if (
         path === "conexiones" &&
         user?.role !== "super-admin" &&
@@ -378,14 +348,13 @@ function QrCard({
   row,
   demo,
   toast,
-  host,
   compact = false,
   size = 300,
   template = false,
 }) {
   const value = useMemo(
-    () => buildQrValue(row, demo, host),
-    [row.id, row.mobile_token, demo, host],
+    () => buildQrValue(row, demo),
+    [row.id, row.mobile_token, demo],
   );
   const idfNumber = String(row.id || "").match(/idf[-\s]?0*(\d+)/i)?.[1];
   const printableIdf = idfNumber ? `IDF-${Number(idfNumber)}` : row.name;
@@ -841,10 +810,6 @@ function IdfHub({
   });
   const selectedId = canOpenIdfs ? viewState.selectedId : "";
   const tab = viewState.tab;
-  const [host, setHost] = useState(
-    () => readQrHost() || location.host,
-  );
-  const [detectingHost, setDetectingHost] = useState(false);
   const idfs = useMemo(
     () => data.idfs.filter((idf) => idf.id !== "idf-13" && idf.name !== "IDF 13"),
     [data.idfs],
@@ -884,54 +849,6 @@ function IdfHub({
   useEffect(() => {
     if (availableTab !== tab) updateViewState({ tab: availableTab });
   }, [availableTab, tab]);
-  const detectHost = async () => {
-    setDetectingHost(true);
-    try {
-      const response = await fetch("/api/ip", { credentials: "same-origin" });
-      const result = await response.json();
-      if (!response.ok || !result.ip || result.ip.startsWith("127."))
-        throw new Error("No se detectó una IP de red.");
-      // Older gateways return an address alone; the current endpoint includes
-      // its port. Never add it twice or the QR URL becomes invalid.
-      const reportedHost = String(result.ip).trim();
-      const hasPort =
-        /^\[[^\]]+\]:\d+$/.test(reportedHost) ||
-        /^[^:]+:\d+$/.test(reportedHost);
-      const detectedHost = hasPort
-        ? reportedHost
-        : `${reportedHost}${location.port ? `:${location.port}` : ""}`;
-      setHost(detectedHost);
-      saveQrHost(detectedHost);
-      notify("IP de red detectada. El QR se actualizó para el teléfono.");
-    } catch {
-      notify(
-        "No se pudo detectar la IP de red. Configúrala manualmente antes de escanear.",
-      );
-    } finally {
-      setDetectingHost(false);
-    }
-  };
-  useEffect(() => {
-    if (demo || !canViewQr) return;
-    if (
-      !readQrHost() ||
-      /^(localhost|127(?:\.\d{1,3}){3})(?::|$)/i.test(host)
-    ) {
-      detectHost();
-    }
-  }, [demo, canViewQr, host]);
-  // Do not overwrite the address selected by the operator every time the QR
-  // tab opens. A gateway/VPN route can report a different interface even
-  // though the selected LAN address is the one reachable by the phone.
-  useEffect(() => {
-    if (demo || !canViewQr) return;
-    if (
-      tab === "qr" &&
-      /^(localhost|127(?:\.\d{1,3}){3})(?::|$)/i.test(host)
-    ) {
-      detectHost();
-    }
-  }, [demo, canViewQr, tab, host]);
   if (!idfs.length)
     return (
       <>
@@ -1190,23 +1107,16 @@ function IdfHub({
                 </div>
 
                 <div className="qr-host-bar">
-                  <label htmlFor="qr-host">Dirección IP del servidor en red institucional</label>
+                  <label htmlFor="qr-host">Origen permanente de los QR</label>
                   <div className="qr-host-controls">
                     <input
                       id="qr-host"
-                      value={host}
-                      onChange={(e) => {
-                        setHost(e.target.value);
-                        saveQrHost(e.target.value);
-                      }}
-                      placeholder="192.168.1.25:3001"
+                      value={QR_ORIGIN}
+                      readOnly
                     />
-                    <Button onClick={detectHost} busy={detectingHost} disabled={demo}>
-                      Detectar IP
-                    </Button>
                   </div>
                   <small>
-                    El celular debe estar conectado a la misma red Wi‑Fi institucional para abrir el formulario.
+                    Todos los IDF usan esta misma dirección base. El celular debe poder acceder a ella desde la red institucional.
                   </small>
                 </div>
 
@@ -1246,7 +1156,6 @@ function IdfHub({
                   row={selected}
                   demo={demo}
                   toast={notify}
-                  host={host}
                   compact
                   size={720}
                   template
@@ -2060,7 +1969,7 @@ export default function App() {
       />
     );
   } else if (route.path === "usuarios") {
-    page = !canViewPage?.("usuarios") ? (
+    page = !(canViewPage?.("usuarios") && can("users.read")) ? (
       <>
         <PageHeading
           eyebrow="Acceso restringido · 403"
@@ -2155,7 +2064,7 @@ export default function App() {
       titles[route.path] ||
       "Página no encontrada";
 
-  const canManageUsers = Boolean(canViewPage?.("usuarios"));
+  const canManageUsers = Boolean(canViewPage?.("usuarios") && can("users.read"));
   const canManageConnections = Boolean(
     canViewPage?.("conexiones") &&
     (user?.role === "super-admin" || can("integrations.manage")),

@@ -234,7 +234,7 @@ Las nuevas rutas del gateway deberían representar necesidades de producto, por 
 | Consultas técnicas adicionales por proxy | No | No | GET de la lista autorizada |
 | Cambiar equipos externos o ejecutar comandos | No | No | No existe esa funcionalidad |
 
-El administrador mantiene los permisos operativos existentes; esta etapa no le concede gestión de cuentas ni conexiones. Ser el nivel ejecutivo más alto no implica controlar las credenciales del proveedor. Si se delega en el futuro creación de viewers, será un permiso nuevo y un listado filtrado independiente; no una exposición del directorio completo seguida de ocultación en React.
+El administrador conserva sus permisos operativos y puede recibir por separado la consulta, creación, edición y eliminación de cuentas. La herencia de permisos y la jerarquía se validan en el servidor; las cuentas visibles pueden consultarse sin exponer las cuentas ocultas ni convertir la interfaz en el control de seguridad. Las conexiones siguen reservadas al permiso de integración del nivel superior.
 
 La implementación mueve el catálogo real de roles al servidor y lo proyecta según la identidad autenticada. Login y consulta de sesión usan la misma función. El frontend deja de distribuir el nombre y la definición del rol interno como constantes; los recibe solo en una sesión autorizada. Los errores públicos son genéricos y la telemetría reservada se omite del detalle del dispositivo para quienes no tienen permiso. La demo pública representa un administrador operativo, no un superusuario.[^12]
 

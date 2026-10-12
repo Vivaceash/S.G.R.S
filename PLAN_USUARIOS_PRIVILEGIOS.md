@@ -8,7 +8,7 @@ La ampliación solicitada incorpora creación/asignación de usuarios locales, s
 
 No se han completado las fases de OIDC/MFA, ámbitos, delegación a los microservicios, cifrado en reposo y auditoría integral. Esta implementación local no marca como terminado el roadmap de producción. Por indicación del usuario, no se ejecutaron pruebas funcionales ni conexiones a los equipos en esta ampliación.
 
-Decisión vigente posterior: Superusuario es un rol interno, no visible en el catálogo recibido por viewer/admin; Administrador es el mayor nivel operativo visible. No se conceden permisos Linux ni nuevos permisos al admin. La revisión detallada y la distinción entre cambios implementados y páginas propuestas están en [ANALISIS_APIS_Y_EVOLUCION_DASHBOARD.md](ANALISIS_APIS_Y_EVOLUCION_DASHBOARD.md).
+Decisión vigente posterior: Superusuario es un rol interno y no seleccionable por cuentas operativas; las cuentas con permiso de consulta pueden ver las cuentas visibles, incluido el nivel superior. La asignación y edición siguen la jerarquía, la herencia y los permisos separados implementados. No se conceden permisos Linux. La revisión detallada y la distinción entre cambios implementados y páginas propuestas están en [ANALISIS_APIS_Y_EVOLUCION_DASHBOARD.md](ANALISIS_APIS_Y_EVOLUCION_DASHBOARD.md).
 
 ## 1. Alcance y decisiones propuestas
 
@@ -83,7 +83,7 @@ Todos los permisos están sujetos a sede/IDF/segmento/VDOM autorizado. `super-ad
 | Tráfico individual `traffic.sensitive.read` | No | En su ámbito, con justificación | Sí, con justificación |
 | Sesiones VPN `vpn.sensitive.read` | No | En su ámbito | Sí |
 | Diagnóstico profundo `integrations.diagnose` | No | Lectura en su ámbito | Sí |
-| Usuarios, roles y ámbitos `users.manage` | No | No | Sí, con MFA reciente |
+| Usuarios `users.read/create/edit/delete` | Según delegación | Según delegación y jerarquía | Sí, con las protecciones del servidor |
 | Credenciales de integración `integrations.manage` | No | No | Rotar/configurar; secretos no revelados por defecto |
 | Auditoría de seguridad `audit.read` | No | No por defecto | Sí |
 | Editar/borrar auditoría | No | No | No |

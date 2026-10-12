@@ -1,4 +1,5 @@
 import sys
+import pytest
 from pathlib import Path
 
 forti_dir = str(Path(__file__).resolve().parent.parent)
@@ -12,4 +13,15 @@ if "app" in sys.modules and not getattr(sys.modules["app"], "__file__", "").star
             del sys.modules[mod]
 
 from app.core.config import settings
+from app.clients.fortios import fortios_client
 settings.ALLOWED_HOSTS = ["test", "localhost", "127.0.0.1"]
+
+
+@pytest.fixture(autouse=True)
+def mock_fortigate_startup(monkeypatch):
+    """Las pruebas no deben depender del certificado ni de un FortiGate real."""
+    monkeypatch.setattr(fortios_client, "get_system_status", lambda **kwargs: _status())
+
+
+async def _status():
+    return {"status": "success", "results": {}}

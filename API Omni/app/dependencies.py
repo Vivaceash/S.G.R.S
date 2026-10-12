@@ -205,9 +205,7 @@ def verify_api_key(
     2. O una clave de API válida configurada en APP_API_KEY / API_SECRET_KEY.
     """
     # Solo liveness mínimo es público; el resto de la API conserva autenticación.
-    if request.method == "GET" and request.url.path in {
-        "/health", "/api/v1/health", "/api/v1/system/health"
-    }:
+    if request.method == "GET" and request.url.path == "/health":
         return True
 
     # Solo permitir el bypass en pruebas automatizadas; nunca en un proceso desplegado.

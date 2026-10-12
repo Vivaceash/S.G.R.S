@@ -56,7 +56,7 @@ Una sustitución documental posterior requiere preparar el nuevo JSON con el imp
 - `POST /api/v1/reconciliation/jobs`; consulta el resultado en `GET /api/v1/reconciliation/jobs/{id}`.
 - `/api/v1/catalogs/networks` combina resumen documental y redes observadas, con procedencia.
 - `/api/v1/sources` y `/sources/{sha256}/download`.
-- `GET /health` es público; `GET /api/v1/system/health` requiere autenticación de lectura.
+- `GET /health` es público; `GET /api/v1/system/health` requiere autenticación de lectura; `POST /api/v1/reconciliation/jobs` requiere permiso de escritura.
 - Todas las consultas `/api/v1/cctv/*` requieren autenticación, incluidas catálogo, resumen, exportación e historiales. Usa una credencial de lectura configurada, enviada en `X-API-Key` o `Authorization: Bearer`. Las modificaciones requieren una credencial con permiso de escritura.
 
 `192.168.99.x` ayuda a localizar dispositivos, pero VLAN y máscara vienen de la configuración consultada en FortiGate. El octeto de la IP no se interpreta como VLAN. Una relación obtenida por interfaz observada se distingue de una inferida por subred. Estado de inventario, observación de red y salud de video son dimensiones distintas.

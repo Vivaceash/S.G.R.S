@@ -18,7 +18,8 @@ import dashboard_inventarios as inventories_api
 from dashboard_device_history import get_longest_connected_devices
 
 from dashboard_access import (AccessError, SESSION_SECONDS, database, session, login,
-                              list_users, project_hidden_actors, save_user, connection, connection_values,
+                              list_users, project_hidden_actors, save_user, change_password, delete_user,
+                              connection, connection_values,
                               save_connection, audit, dashboard_preferences, save_dashboard_preferences,
                               identity_pages, identity_submodules)
 
@@ -247,9 +248,12 @@ class AccessRoutes:
             raise AccessError(401, "Inicia sesión para acceder al sistema.")
         if mutation and not hmac.compare_digest(self.headers.get("X-CSRF-Token", ""), self.identity["csrf"]):
             raise AccessError(403, "La sesión cambió. Inicia sesión nuevamente antes de guardar.")
+        if self.identity.get("must_change_password") and urlsplit(self.path).path not in (
+                "/api/auth/password/change", "/api/auth/logout"):
+            raise AccessError(428, "Cambia tu contraseña inicial antes de continuar.")
 
     def _manage(self):
-        if self.identity["user"]["role"] != "super-admin" or "users.manage" not in self.identity["capabilities"]:
+        if self.identity["user"]["role"] != "super-admin" or "integrations.manage" not in self.identity["capabilities"]:
             raise AccessError(403, "No tienes permiso para acceder a esta sección.")
 
     def _require_pages(self, pages, capability):
@@ -341,6 +345,7 @@ class AccessRoutes:
                 self._send_json(result)
                 return True
             if path == '/api/inventory/reconcile':
+                self._require_pages(('idf', 'aps', 'cctv'), 'inventory.write')
                 if inventories_api.active():
                     actor = self.identity.get('user', {}).get('id')
                     self._send_json(inventories_api.reconcile(actor))
@@ -371,8 +376,6 @@ class AccessRoutes:
                 self._send_json({"modules": CATALOG})
                 return True
             if path == "/api/admin/users":
-                if self.identity["user"]["role"] not in ("admin", "super-admin"):
-                    raise AccessError(403, "No tienes permiso para acceder a esta sección.")
                 self._send_json({"users": list_users(self.identity["user"]["id"])})
                 return True
             if path == "/api/admin/connections":
@@ -393,7 +396,7 @@ class AccessRoutes:
                     rows = db.execute("""
                         SELECT a.id, a.actor, COALESCE(u.name, u.username, a.actor) as actor_name,
                                COALESCE(u.username, '') as username, COALESCE(u.role, '') as user_role,
-                               a.action, a.target, a.created_at
+                               a.action, a.target, a.created_at, a.details
                         FROM audit a
                         LEFT JOIN users u ON u.id = a.actor
                         ORDER BY a.id DESC LIMIT 300
@@ -504,6 +507,9 @@ class AccessRoutes:
                 self.save_mobile_report(self._body(), self.client_address[0])
                 return True
             self._authorize(mutation=True)
+            if path == "/api/auth/password/change":
+                self._send_json(change_password(self.identity["user"]["id"], self.identity["token_hash"], self._body()))
+                return True
             if path == '/api/support/inventory/quantity':
                 self._require_submodule('soporte', 'inventory', 'inventory.write')
                 body = self._body()
@@ -578,9 +584,10 @@ class AccessRoutes:
                 self._send_json({"status": "success"})
                 return True
             if path == "/api/admin/users/save":
-                if self.identity["user"]["role"] not in ("admin", "super-admin"):
-                    raise AccessError(403, "No tienes permiso para realizar esta operación.")
                 self._send_json({"user": save_user(self._body(), actor)})
+                return True
+            if path == "/api/admin/users/delete":
+                self._send_json(delete_user(actor, self._body()))
                 return True
             match = re.fullmatch(r"/api/admin/connections/(forti|omni|inventarios)/(save|test)", path)
             if match:
@@ -618,7 +625,7 @@ class AccessRoutes:
                     self._require_pages(("idf",), "inventory.write")
                 return False
             if path == "/api/altas/concession":
-                self._require_pages(("altas",), "inventory.read")
+                self._require_pages(("altas",), "inventory.write")
                 return False
             raise AccessError(403, "No tienes permiso para realizar esta operación.")
         except AccessError as exc:

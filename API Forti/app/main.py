@@ -87,7 +87,12 @@ async def lifespan(app: FastAPI):
         await fortios_client.get_system_status()
     except Exception as exc:
         logger.error("FortiOS no autenticó durante el arranque (%s).", type(exc).__name__)
-        raise RuntimeError("FortiOS no está autenticado; el servicio no puede quedar listo.") from exc
+        if settings.REQUIRE_PROVIDER_ON_STARTUP:
+            raise RuntimeError("FortiOS no está autenticado; el servicio no puede quedar listo.") from exc
+        logger.warning(
+            "FortiOS está temporalmente degradado; la API local continuará disponible "
+            "y reintentará el enlace en segundo plano."
+        )
 
     keepalive_task = asyncio.create_task(_fortios_telemetry_keepalive())
     yield

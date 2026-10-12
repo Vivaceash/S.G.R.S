@@ -15,10 +15,11 @@ const demoSession = {
     active: true,
     allowed_pages: ROLE_PAGE_DEFAULTS['super-admin'],
   },
+  must_change_password: false,
   capabilities: [
     'dashboard.read', 'inventory.read', 'idf.read', 'activity.read',
     'inventory.write', 'inventory.export', 'idf.visits.write',
-    'users.manage', 'integrations.manage', 'traffic.read',
+    'users.read', 'users.create', 'users.edit', 'users.delete', 'integrations.manage', 'traffic.read',
   ],
   roles: [
     { id: 'soporte', title: 'Soporte', description: 'Atención y diagnóstico técnico: consulta de dispositivos, fichas técnicas y DHCP.' },
@@ -53,6 +54,29 @@ function Login({ onLogin, onBootstrap, setup, setupAllowed, error, retry, expire
       <Field label="Contraseña" required error={f.errors.password}><SecretInput autoComplete="current-password" value={f.values.password} onChange={e => f.change('password', e.target.value)} maxLength={128} /></Field>
       <Button type="submit" variant="primary" className="w-full" busy={f.busy} icon={LogIn}>Iniciar sesión</Button>
     </fieldset></form>}<div className="login-footer"><ShieldCheck size={19} /><span>Sesión personal · Acceso por privilegios</span></div>
+  </section></main>;
+}
+
+function PasswordChange({ onChanged }) {
+  const f = useForm({ password: '', password_confirmation: '' }, values => {
+    const errors = {};
+    if (values.password.length < 12 || values.password.length > 128) errors.password = 'Usa entre 12 y 128 caracteres.';
+    if (values.password_confirmation !== values.password) errors.password_confirmation = 'Las contraseñas no coinciden.';
+    return errors;
+  }, async values => {
+    const result = await request('/api/auth/password/change', { body: values });
+    setCsrfToken(result.csrf);
+    onChanged(result);
+  }, null, true);
+  return <main className="login-page"><section className="login-panel panel password-change-panel">
+    <p className="eyebrow">Primer acceso</p><h1>Actualiza tu contraseña</h1>
+    <p className="muted">La contraseña inicial es temporal. Define una contraseña personal para continuar al dashboard.</p>
+    {f.error && <Notice title="No se pudo actualizar la contraseña" tone="danger">{f.error}</Notice>}
+    <form noValidate ref={f.form} onSubmit={f.submit} aria-busy={f.busy}><fieldset disabled={f.busy}>
+      <Field label="Nueva contraseña" required error={f.errors.password}><SecretInput autoComplete="new-password" value={f.values.password} maxLength={128} onChange={e => f.change('password', e.target.value)} /></Field>
+      <Field label="Repetir contraseña" required error={f.errors.password_confirmation}><SecretInput autoComplete="new-password" value={f.values.password_confirmation} maxLength={128} onChange={e => f.change('password_confirmation', e.target.value)} /></Field>
+      <Button type="submit" variant="primary" className="w-full" busy={f.busy}>Guardar contraseña y continuar</Button>
+    </fieldset></form>
   </section></main>;
 }
 
@@ -120,9 +144,9 @@ export function SessionProvider({ children }) {
   const activeDemoRole = demoRole in ROLE_PAGE_DEFAULTS ? demoRole : 'super-admin';
   const activeDemoPages = ROLE_PAGE_DEFAULTS[activeDemoRole];
   const demoCapabilities = activeDemoRole === 'super-admin'
-    ? ['dashboard.read', 'inventory.read', 'idf.read', 'activity.read', 'inventory.write', 'inventory.export', 'idf.visits.write', 'users.manage', 'integrations.manage', 'traffic.read']
+    ? ['dashboard.read', 'inventory.read', 'idf.read', 'activity.read', 'inventory.write', 'inventory.export', 'idf.visits.write', 'users.read', 'users.create', 'users.edit', 'users.delete', 'integrations.manage', 'traffic.read']
     : activeDemoRole === 'admin'
-      ? ['dashboard.read', 'inventory.read', 'idf.read', 'activity.read', 'inventory.write', 'inventory.export', 'idf.visits.write']
+      ? ['dashboard.read', 'inventory.read', 'idf.read', 'activity.read', 'inventory.write', 'inventory.export', 'idf.visits.write', 'users.read', 'users.create', 'users.edit', 'users.delete']
       : ['dashboard.read', 'inventory.read', 'idf.read', 'activity.read'];
 
   const computedDemo = {
@@ -169,7 +193,9 @@ export function SessionProvider({ children }) {
     can: name => Boolean(current?.capabilities?.includes(name)),
   }}>
     {!ready ? <div className="login-page"><Loading /></div> : <>
-      {current && (demo || !expired) && <div key={`${demo ? `demo-${activeDemoRole}` : 'live'}-${current.user.id}-${current.user.role}-${current.user.version}`}>{children}</div>}
+      {current && (demo || !expired) && (current.must_change_password
+        ? <PasswordChange onChanged={setIdentity} />
+        : <div key={`${demo ? `demo-${activeDemoRole}` : 'live'}-${current.user.id}-${current.user.role}-${current.user.version}`}>{children}</div>)}
       {(!current || (!demo && expired)) && <Login onLogin={signIn} onBootstrap={bootstrap} setup={setup} setupAllowed={setupAllowed} error={error} retry={() => setRevision(r => r+1)} expired={Boolean(current)} />}
     </>}
   </SessionContext.Provider>;

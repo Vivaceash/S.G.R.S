@@ -1,7 +1,30 @@
 export const LOCALE = 'es-MX';
 export const TIME_ZONE = 'America/Mexico_City';
 export const IDF_VIEW_SESSION_PREFIX = 'sgrs:idf-view:';
-export const roleLabel = role => role === 'super-admin' ? 'Admin' : role === 'admin' ? 'Administrador' : role === 'soporte' ? 'Soporte' : (role || '');
+export const roleLabel = role => role === 'super-admin' ? 'Admin' : role === 'admin' ? 'Administrador' : role === 'soporte' ? 'Soporte' : role === 'viewer' ? 'Consulta' : (role || '');
+export const ROLE_RANK = { soporte: 1, viewer: 1, admin: 2, 'super-admin': 3 };
+export const USER_CAPABILITY_LABELS = {
+  'users.read': 'Consultar usuarios',
+  'users.create': 'Crear usuarios',
+  'users.edit': 'Editar usuarios',
+  'users.delete': 'Eliminar usuarios',
+};
+export const CAPABILITY_LABELS = {
+  'dashboard.read': 'Consultar el dashboard',
+  'inventory.read': 'Consultar inventarios',
+  'idf.read': 'Consultar registros IDF',
+  'activity.read': 'Consultar bitácoras',
+  'inventory.write': 'Modificar inventarios',
+  'idf.visits.write': 'Registrar visitas e incidencias',
+  'inventory.export': 'Exportar inventarios',
+  'integrations.manage': 'Administrar conexiones API',
+  'traffic.read': 'Consultar tráfico de red',
+  ...USER_CAPABILITY_LABELS,
+};
+export const capabilityLabel = capability => CAPABILITY_LABELS[capability] || capability;
+export const canAssignRole = (actorRole, targetRole) => Boolean(ROLE_RANK[targetRole] && ROLE_RANK[targetRole] <= (ROLE_RANK[actorRole] || 0));
+export const canEditUserTarget = (actor, target) => Boolean(actor && target && actor.id !== target.id
+  && (actor.role === 'super-admin' || (ROLE_RANK[target.role] || 0) < (ROLE_RANK[actor.role] || 0)));
 
 export function clearIdfViewSession(userId) {
   if (typeof sessionStorage === 'undefined' || !userId) return;
@@ -38,6 +61,7 @@ export const canViewSubmoduleId = (page, tab, pages, submodules) => Array.isArra
 
 export const BASE_ROLE_CATALOG = [
   { id: 'soporte', title: 'Soporte', description: 'Atención y diagnóstico técnico: consulta de dispositivos, fichas técnicas y DHCP.' },
+  { id: 'viewer', title: 'Consulta', description: 'Consulta el dashboard, inventario y reportes. No modifica datos.' },
   { id: 'admin', title: 'Administrador', description: 'Administra la operación: inventario, visitas e incidencias de IDF y gestión de usuarios.' },
   { id: 'super-admin', title: 'Admin', description: 'Gestiona cuentas, privilegios modulares, conexiones y consultas técnicas.' },
 ];
@@ -57,10 +81,7 @@ export function getEffectiveRoles(roleInfo, actorRole) {
 export function projectUsersForActor(users, actorRole) {
   if (!Array.isArray(users)) return [];
   if (actorRole === 'super-admin') return users;
-  return users.filter(user => !user.is_hidden).map(({ is_hidden, allowed_pages, ...user }) => ({
-    ...user,
-    role: user.role === 'super-admin' ? 'admin' : user.role,
-  }));
+  return users.filter(user => !user.is_hidden);
 }
 
 export function usersForDemo(users, actorRole) {

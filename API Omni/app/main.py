@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 from fastapi import FastAPI, Request, status, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -25,13 +26,21 @@ from app.routers import (
 )
 from app.services.omnivista_service import omnivista_service
 
+logger = logging.getLogger("omnivista_api")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """No publicar la API de datos hasta autenticar OmniVista."""
+    """Publica la API local aunque el upstream esté temporalmente degradado."""
     if not omnivista_service.login():
         reason = omnivista_service.last_login_error or "No se recibió una sesión válida."
-        raise RuntimeError(f"OmniVista no autenticó con OV_USERNAME/OV_PASSWORD. {reason}")
+        if settings.REQUIRE_PROVIDER_ON_STARTUP:
+            raise RuntimeError(f"OmniVista no autenticó con OV_USERNAME/OV_PASSWORD. {reason}")
+        logger.warning(
+            "OmniVista no autenticó durante el arranque; la API local continuará disponible "
+            "y reintentará al recibir consultas. Causa: %s",
+            reason,
+        )
     yield
 
 # Inicialización de FastAPI: Scalar condicionado por ENABLE_DOCS

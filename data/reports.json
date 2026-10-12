@@ -110,9 +110,12 @@
         "temp": 23.0,
         "title": "Reporte de incidencia",
         "description": "dwkdnkaw",
-        "status": "open",
+        "status": "resolved",
         "tech": "Israel Garcia",
-        "actor_id": "9276a7d9981a7c3ff6a1df06cb376a47"
+        "actor_id": "9276a7d9981a7c3ff6a1df06cb376a47",
+        "resolved_at": "2026-10-12T19:57:22.336297+00:00",
+        "resolved_by": "9276a7d9981a7c3ff6a1df06cb376a47",
+        "origin_key": "IDF-63822ea1-c52d-46a5-b40c-ec66dd7331f3"
       },
       {
         "id": "FOL-PACS-GJYCZ",

@@ -25,7 +25,7 @@ def test_provider_unauthorized_does_not_expire_dashboard_session(monkeypatch, tm
             pass
 
         def _authorize(self, mutation=False):
-            self.identity = {'user': {'id': 'operator-1', 'role': 'admin'}, 'capabilities': ['inventory.read']}
+            self.identity = {'user': {'id': 'operator-1', 'role': 'admin'}, 'capabilities': ['inventory.read', 'inventory.write']}
 
         def _send_json(self, payload, status=200):
             self.response = status, payload
@@ -93,7 +93,7 @@ def test_dashboard_reconcile_uses_inventory_service_when_active(monkeypatch):
             pass
 
         def _authorize(self, mutation=False):
-            self.identity = {'user': {'id': 'operator-1', 'role': 'admin'}, 'capabilities': ['inventory.read']}
+            self.identity = {'user': {'id': 'operator-1', 'role': 'admin'}, 'capabilities': ['inventory.read', 'inventory.write']}
 
         def _send_json(self, payload, status=200):
             self.response = status, payload
