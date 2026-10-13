@@ -1,6 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Camera, CheckCircle2, MapPin, RefreshCw, Send, TriangleAlert } from 'lucide-react';
-import { Button, Field, Loading, Notice } from './components.jsx';
+import { Button, Field, Loading, Notice, SearchField } from './components.jsx';
+import { SessionProvider } from './session.jsx';
+
+function ReturnToQr({ onReturn }) {
+  useEffect(() => { onReturn(); }, []);
+  return <Loading />;
+}
 
 const params = () => {
   const query = new URLSearchParams(location.search);
@@ -38,6 +44,7 @@ export function MobileReport() {
   const isDemo = token.startsWith('demo-') || new URLSearchParams(location.search).get('demo') === '1';
   const [context, setContext] = useState(null);
   const [supportUser, setSupportUser] = useState(null);
+  const [supportLogin, setSupportLogin] = useState(false);
   const [sessionUser, setSessionUser] = useState(null);
   const [supportCsrf, setSupportCsrf] = useState('');
   const sessionRequest = useRef(0);
@@ -158,6 +165,8 @@ export function MobileReport() {
     }
   };
 
+  if (supportLogin) return <SessionProvider><ReturnToQr onReturn={() => { checkSession(); setSupportLogin(false); }} /></SessionProvider>;
+
   if (error && !context) return (
     <main className="mobile-report-page">
       <section className="mobile-report-card panel mobile-error">
@@ -179,7 +188,7 @@ export function MobileReport() {
 
   if (sessionError) return <main className="mobile-report-page"><section className="mobile-report-card panel"><Notice title="No se pudo verificar tu cuenta" tone="danger">{sessionError}</Notice><Button icon={RefreshCw} onClick={checkSession}>Reintentar</Button></section></main>;
 
-  if (supportUser) return <SupportMobileMovement context={context} idf={idf} token={token} user={supportUser} csrf={supportCsrf} />;
+  if (supportUser && idf === 'idf-3') return <SupportMobileMovement context={context} idf={idf} token={token} user={supportUser} csrf={supportCsrf} />;
 
   if (sent) return (
     <main className="mobile-report-page">
@@ -214,7 +223,7 @@ export function MobileReport() {
         </header>
         <form className="mobile-report-form" onSubmit={submit} noValidate aria-busy={busy}>
           {error && <Notice title="Revisa el reporte" tone="danger">{error}</Notice>}
-          {!isDemo && !sessionUser && <div className="mobile-support-entry"><strong>¿Eres de soporte?</strong><p>Inicia sesión en otra pestaña y vuelve aquí para abrir el registro de retiro del mismo IDF.</p><div><Button type="button" variant="secondary" onClick={() => window.open(`${location.origin}${location.pathname}#soporte`, '_blank', 'noopener')}>Abrir sesión de soporte</Button><Button type="button" onClick={checkSession}>Ya inicié sesión</Button></div></div>}
+          {!isDemo && !sessionUser && idf === 'idf-3' && <div className="mobile-support-entry"><strong>¿Eres de soporte?</strong><p>Inicia sesión para continuar a la bitácora de este IDF. Volverás aquí automáticamente.</p><div><Button type="button" variant="secondary" onClick={() => setSupportLogin(true)}>Iniciar sesión de soporte</Button></div></div>}
           <div className="mobile-report-summary">
             <span><i /> Alerta nueva</span>
             <small>Se enviará a Bitácora</small>
@@ -296,8 +305,11 @@ function SupportMobileMovement({ context, idf, token, user, csrf }) {
       <p>Cuenta de soporte: <strong>{user.name}</strong></p>
       <p className="mobile-inventory-origin">Los artículos retirados salen del inventario de Soporte IDF 3.</p>
       {inventoryError && <Notice tone="danger">{inventoryError}</Notice>}
-      <Field label="Buscar artículo" ><input value={itemSearch} onChange={event => { setItemSearch(event.target.value); setItemId(''); }} placeholder="Nombre del artículo…" /></Field>
-      <Field label="Artículo retirado" required><select value={itemId} onChange={event => setItemId(event.target.value)}><option value="">Selecciona un artículo ({matches.length} disponibles)</option>{matches.map(item => <option key={item.id} value={item.id} disabled={item.quantity < 1}>{item.description} — {item.quantity} {item.unit}</option>)}</select></Field>
+      <section className="mobile-inventory-picker" aria-label="Seleccionar artículo del inventario">
+        <Field label="Buscar en el inventario"><SearchField value={itemSearch} onChange={value => { setItemSearch(value); setItemId(''); }} placeholder="Escribe el nombre del artículo…" label="Buscar artículo por nombre" /></Field>
+        <Field label="Artículo retirado" required><select value={itemId} onChange={event => setItemId(event.target.value)}><option value="">Selecciona un artículo</option>{matches.map(item => <option key={item.id} value={item.id} disabled={item.quantity < 1}>{item.description}</option>)}</select></Field>
+        {itemSearch && <p className="mobile-inventory-results" role="status">{matches.length ? `${matches.length} ${matches.length === 1 ? 'artículo encontrado' : 'artículos encontrados'}` : 'No hay coincidencias. Prueba con otro nombre.'}</p>}
+      </section>
       {selectedItem && <p className="mobile-inventory-stock">Existencia actual: <strong>{selectedItem.quantity} {selectedItem.unit}</strong></p>}
       <Field label="Cantidad retirada" required><input type="number" min="1" max={selectedItem?.quantity || undefined} step="1" inputMode="numeric" value={quantity} onChange={event => setQuantity(event.target.value)} /></Field>
       <Field label="Número de identificación" required hint="Serie, inventario o código del elemento"><input value={identifier} onChange={event => setIdentifier(event.target.value)} maxLength={120} /></Field>

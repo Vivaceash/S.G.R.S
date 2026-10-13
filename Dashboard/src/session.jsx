@@ -68,7 +68,7 @@ function PasswordChange({ onChanged }) {
     setCsrfToken(result.csrf);
     onChanged(result);
   }, null, true);
-  return <main className="login-page"><section className="login-panel panel password-change-panel">
+  return <main className="login-page password-change-page"><section className="login-panel panel password-change-panel">
     <p className="eyebrow">Primer acceso</p><h1>Actualiza tu contraseña</h1>
     <p className="muted">La contraseña inicial es temporal. Define una contraseña personal para continuar al dashboard.</p>
     {f.error && <Notice title="No se pudo actualizar la contraseña" tone="danger">{f.error}</Notice>}

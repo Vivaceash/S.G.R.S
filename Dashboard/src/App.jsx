@@ -30,6 +30,9 @@ import {
   Camera,
   Headset,
   Package,
+  Thermometer,
+  AlertTriangle,
+  Calendar,
 } from "lucide-react";
 import {
   Badge,
@@ -83,7 +86,9 @@ import {
 } from "./telemetry.jsx";
 import { generateSvg } from "../qrcode.js";
 import qrTemplate from "./assets/plantilla_qr.jpg";
+import { createQrDocument, createQrPrintPages } from "./qr-document.mjs";
 import { DocumentaryInventory } from "./inventory.jsx";
+import { RefreshControl } from "./refresh-control.jsx";
 
 const QR_ORIGIN = "http://192.168.38.250:3000";
 const QR_SVG_STORAGE_PREFIX = "sgrs:qr-svg:v1:";
@@ -373,30 +378,35 @@ function QrCard({
   if (template) {
     return (
       <div className="qr-card qr-template-card">
-        <div
-          className="qr-template-sheet"
-          role="img"
-          aria-label={`Planilla carta con código QR para registrar una visita a ${row.name}`}
-        >
-          <img
-            className="qr-template-background"
-            src={qrTemplate}
-            alt=""
-            aria-hidden="true"
-          />
-          <div className="qr-template-code">
-            <img src={qrSrc} alt={`Código QR para registrar una visita a ${row.name}`} />
+        <div className="qr-template-sheet-wrap">
+          <div
+            className="qr-template-sheet"
+            role="img"
+            aria-label={`Planilla carta con código QR para registrar una visita a ${row.name}`}
+          >
+            <img
+              className="qr-template-background"
+              src={qrTemplate}
+              alt=""
+              aria-hidden="true"
+            />
+            <div className="qr-template-code">
+              <img src={qrSrc} alt={`Código QR para registrar una visita a ${row.name}`} />
+            </div>
+            <span className="qr-template-idf-label">{printableIdf}</span>
           </div>
-          <span className="qr-template-idf-label">{printableIdf}</span>
         </div>
         <div className="qr-template-meta qr-template-screen-only">
-          <strong>{row.name}</strong>
-          <span>Planilla carta · QR de bitácora IDF</span>
+          <div className="qr-template-meta-header">
+            <strong>{row.name}</strong>
+            <span className="qr-template-tag-sheet">Planilla carta oficial · Cartel de bitácora</span>
+          </div>
           <div className="qr-url-row">
-            <a className="qr-url" href={value}>
+            <span className="qr-url-label">Enlace directo:</span>
+            <a className="qr-url" href={value} target="_blank" rel="noopener noreferrer">
               {value}
             </a>
-            <Button icon={Copy} onClick={copyUrl}>
+            <Button icon={Copy} onClick={copyUrl} className="qr-url-copy-btn">
               Copiar
             </Button>
           </div>
@@ -815,6 +825,62 @@ function IdfHub({
     [data.idfs],
   );
   const canViewQr = canViewQrAllowed;
+  const [qrDocumentBusy, setQrDocumentBusy] = useState(false);
+  const qrPrintFrame = useRef(null);
+  useEffect(() => () => {
+    if (qrPrintFrame.current) {
+      URL.revokeObjectURL(qrPrintFrame.current.src);
+      qrPrintFrame.current.remove();
+    }
+  }, []);
+  const exportQrDocument = async (print = false) => {
+    if (qrDocumentBusy) return;
+    setQrDocumentBusy(true);
+    try {
+      const entries = idfs.map(row => ({
+        source: cachedQrSource(buildQrValue(row, demo), 900),
+        label: String(row.id || '').match(/idf[-\s]?0*(\d+)/i)
+          ? `IDF-${Number(String(row.id).match(/idf[-\s]?0*(\d+)/i)[1])}` : row.name,
+      }));
+      if (print) {
+        if (qrPrintFrame.current) {
+          URL.revokeObjectURL(qrPrintFrame.current.src);
+          qrPrintFrame.current.remove();
+        }
+        const pages = await createQrPrintPages(qrTemplate, entries);
+        const frame = document.createElement('iframe');
+        frame.title = 'Documento de todos los QR de IDF';
+        frame.style.cssText = 'position:fixed;width:1px;height:1px;bottom:0;right:0;border:0';
+        const ready = new Promise((resolve, reject) => {
+          frame.onload = async () => {
+            try {
+              await Promise.all([...frame.contentDocument.images].map(image => image.decode()));
+              frame.contentWindow.focus();
+              frame.contentWindow.print();
+              resolve();
+            } catch (error) { reject(error); }
+          };
+          frame.onerror = () => reject(new Error('No se pudo abrir el documento para imprimir.'));
+        });
+        frame.srcdoc = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>QR de todos los IDF</title><style>@page{size:letter portrait;margin:0}html,body{margin:0;padding:0}img{display:block;width:100%;height:auto;break-after:page;page-break-after:always}img:last-child{break-after:auto;page-break-after:auto}@media print{img{width:8.5in;height:11in;object-fit:contain}}</style></head><body>${pages.map(source => `<img src="${source}" alt="Código QR de IDF">`).join('')}</body></html>`;
+        qrPrintFrame.current = frame;
+        document.body.appendChild(frame);
+        await ready;
+      } else {
+        const blob = await createQrDocument(qrTemplate, entries);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'QR-todos-los-IDF.pdf';
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }
+    } catch (error) {
+      notify(error.message || 'No se pudo preparar el documento de QR.');
+    } finally {
+      setQrDocumentBusy(false);
+    }
+  };
   const firstTab = canViewActivity ? 'activity' : canViewInventory ? 'inventory' : 'qr';
   const selected = idfs.find((idf) => idf.id === selectedId) || null;
   const availableTab = (tab === 'activity' && canViewActivity) || (tab === 'inventory' && canViewInventory) || (tab === 'qr' && canViewQr) ? tab : firstTab;
@@ -827,7 +893,7 @@ function IdfHub({
   };
   const choose = (id) => updateWithViewTransition(() => updateViewState({
     selectedId: id,
-    tab: firstTab,
+    tab: availableTab,
   }));
   const showAll = () => updateWithViewTransition(() => updateViewState({
     selectedId: "",
@@ -1120,34 +1186,36 @@ function IdfHub({
                   </small>
                 </div>
 
-                <ol className="qr-steps" aria-label="Pasos para registrar una visita">
-                  <li>
-                    <b>1</b>
-                    <div>
-                      <strong>Conéctate</strong>
-                      <span>A la red Wi‑Fi institucional.</span>
-                    </div>
-                  </li>
-                  <li>
-                    <b>2</b>
-                    <div>
-                      <strong>Escanea</strong>
-                      <span>Apunta con la cámara del teléfono.</span>
-                    </div>
-                  </li>
-                  <li>
-                    <b>3</b>
-                    <div>
-                      <strong>Registra</strong>
-                      <span>Llena la bitácora o reporta incidencias.</span>
-                    </div>
-                  </li>
-                </ol>
+                <div className="qr-direct-access-card">
+                  <div className="qr-direct-code-box">
+                    <img
+                      src={cachedQrSource(buildQrValue(selected, demo), 220)}
+                      alt={`Código QR directo de ${selected.name || selected.id}`}
+                      className="qr-direct-img"
+                    />
+                    <span className="qr-direct-tag">Escaneo Directo</span>
+                  </div>
+                  <div className="qr-direct-info">
+                    <h4>Escaneo rápido en pantalla</h4>
+                    <p>
+                      Apunta tu celular a este código para ingresar de inmediato al registro del <strong>{selected.name || selected.id}</strong> sin necesidad de imprimir.
+                    </p>
+                    <ol className="qr-steps-compact" aria-label="Pasos rápidos">
+                      <li><b>1</b><span>Wi-Fi institucional</span></li>
+                      <li><b>2</b><span>Apunta cámara</span></li>
+                      <li><b>3</b><span>Registra entrada</span></li>
+                    </ol>
+                  </div>
+                </div>
 
                 <div className="qr-showcase-actions">
-                  <Button icon={Printer} variant="primary" onClick={() => window.print()}>
-                    Imprimir cartel carta para el gabinete
+                  <Button icon={Printer} variant="primary" busy={qrDocumentBusy} onClick={() => exportQrDocument(true)}>
+                    Imprimir todos los QR
                   </Button>
+                  <Button icon={Download} disabled={qrDocumentBusy} onClick={() => exportQrDocument(false)}>
+                    Descargar documento PDF
+                  </Button>
+                  <p className="qr-document-note">{idfs.length} carteles · Una hoja carta por IDF</p>
                 </div>
               </div>
 
@@ -1168,9 +1236,9 @@ function IdfHub({
     </>
   );
 }
-function SupportWorkspace({ data, demo, openEditor, loading, errors, refresh, canEditInventory }) {
+function SupportWorkspace({ data, demo, openEditor, loading, errors, refresh, canEditInventory, initialTab }) {
   const { canViewSubmodule } = useSession();
-  const [tab, setTab] = useState('dashboard');
+  const [tab, setTab] = useState(() => ['dashboard', 'log', 'inventory'].includes(initialTab) ? initialTab : 'dashboard');
   const visibleTabs = ['dashboard', 'log', 'inventory'].filter(value => canViewSubmodule('soporte', value === 'dashboard' ? 'live' : value));
   const activeTab = visibleTabs.includes(tab) ? tab : visibleTabs[0];
   return <>
@@ -1235,6 +1303,20 @@ export default function App() {
   const [discardModal, setDiscardModal] = useState(false);
   const [toast, setToast] = useState("");
   const [globalQuery, setGlobalQuery] = useState("");
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        const input = document.querySelector(".header-search input");
+        if (input) {
+          input.focus();
+          input.select();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
   const [releaseBusy, setReleaseBusy] = useState(false);
   const [releaseError, setReleaseError] = useState("");
   const [releaseUncertain, setReleaseUncertain] = useState(false);
@@ -1867,10 +1949,10 @@ export default function App() {
       />
     );
   } else if (route.path === "soporte") {
-    page = <SupportWorkspace {...shared} openEditor={openEditor} canEditInventory={can('inventory.write')} />;
+    page = <SupportWorkspace {...shared} openEditor={openEditor} canEditInventory={can('inventory.write')} initialTab={route.params.get('vista')} />;
   } else if (route.path === "resumen") {
     page = (
-      <Overview {...shared} userId={user.id} errors={Object.values(errors)} />
+      <Overview {...shared} userId={user.id} />
     );
   } else if (route.path === "altas") {
     page = <Requests {...shared} />;
@@ -2109,12 +2191,15 @@ export default function App() {
           <span>Centro Operativo · Redes e Infraestructura</span>
         </div>
         <div className="header-search">
-          <SearchField
-            value={globalQuery}
-            onChange={setGlobalQuery}
-            label="Buscar una sección"
-            placeholder="Buscar una sección del centro operativo…"
-          />
+          <div className="header-search-wrapper">
+            <SearchField
+              value={globalQuery}
+              onChange={setGlobalQuery}
+              label="Buscar una sección"
+              placeholder="Buscar una sección del centro operativo…"
+            />
+            <kbd className="header-search-kbd" title="Atajo de teclado">Ctrl K</kbd>
+          </div>
           {globalQuery && (
             <div className="global-results">
               {searchableItems
@@ -2143,18 +2228,16 @@ export default function App() {
             </div>
           )}
         </div>
-        <IconButton
-          icon={RefreshCw}
-          label="Actualizar información"
-          disabled={loading}
-          className={`header-refresh ${loading ? "refreshing" : ""}`}
-          onClick={refresh}
-        />
-        <IconButton
-          icon={Bell}
-          label="Consultar estado de servicios"
-          onClick={() => openEditor("services")}
-        />
+        <RefreshControl loading={loading} onRefresh={refresh} demo={demo} />
+        <div className="header-bell-wrapper">
+          <IconButton
+            icon={Bell}
+            label="Consultar estado de servicios"
+            onClick={() => openEditor("services")}
+            className="header-bell-btn"
+          />
+          <span className="header-bell-badge" aria-label="Todos los servicios operativos" title="Servicios en línea" />
+        </div>
         <button
           className="account-button"
           type="button"
@@ -2167,15 +2250,11 @@ export default function App() {
               .slice(0, 2)
               .join("")}
           </span>
-          <span>
-            <strong>{user.name}</strong>
-            <small>
-              {demo
-                ? `Perfil de ejemplo (${roleLabel(user.role)})`
-                : roleLabel(user.role)}
-            </small>
+          <span className="account-info">
+            <strong className="account-name">{user.name}</strong>
+            <small className="account-username">@{user.username || 'usuario'}</small>
           </span>
-          <ChevronDown size={14} />
+          <ChevronDown size={14} className="account-chevron" />
         </button>
         <div className="mexico-wordmark">
           Servir a<br />
@@ -2348,7 +2427,7 @@ export default function App() {
         open={Boolean(modal)}
         onClose={closeModal}
         title={modalTitle}
-        wide={["resource", "stock", "request", "device-detail"].includes(
+        wide={["resource", "stock", "request", "device-detail", "report-detail"].includes(
           modal?.kind,
         )}
         busy={releaseBusy}
@@ -2447,40 +2526,158 @@ export default function App() {
             canReadTraffic={can("traffic.read")}
           />
         )}
-        {modal && ["request-detail", "report-detail"].includes(modal.kind) && (
+        {modal?.kind === "request-detail" && (
           <dl className="detail-grid">
-            {Object.entries(
-              modal.kind === "request-detail"
-                ? {
-                    Folio: modal.row.id,
-                    Usuario: modal.row.name,
-                    Área: modal.row.area,
-                    Red: modal.row.network,
-                    Responsable: modal.row.actor,
-                    Fecha: dateTime(modal.row.date),
-                  }
-                : {
-                    Folio: modal.row.id,
-                    "IDF / Gabinete": modal.row.idf,
-                    ...(modal.row.device ? { "Equipo / Componente": modal.row.device } : {}),
-                    Responsable: modal.row.actor,
-                    Actividad: modal.row.title,
-                    Descripción: modal.row.description,
-                    Estado: modal.row.status === "resolved" ? "Resuelto / Sin pendientes" : "Pendiente de atención",
-                    ...(modal.row.severity ? { "Severidad": modal.row.severity === "high" ? "Alta" : modal.row.severity === "medium" ? "Media" : "Baja" } : {}),
-                    Temperatura:
-                      modal.row.temp == null ? "—" : `${modal.row.temp} °C${Number(modal.row.temp) >= 25 ? " (Alerta térmica)" : ""}`,
-                    Evidencia: (modal.row.evidence || modal.row.evidenceDemo) ? "Fotografía adjunta" : "Sin evidencia fotográfica",
-                    "Fecha de inspección": dateTime(modal.row.date),
-                    ...(modal.row.resolved_at ? { "Fecha de resolución": dateTime(modal.row.resolved_at) } : {}),
-                  },
-            ).map(([key, value]) => (
+            {Object.entries({
+              Folio: modal.row.id,
+              Usuario: modal.row.name,
+              Área: modal.row.area,
+              Red: modal.row.network,
+              Responsable: modal.row.actor,
+              Fecha: dateTime(modal.row.date),
+            }).map(([key, value]) => (
               <div key={key}>
                 <dt>{key}</dt>
                 <dd>{value}</dd>
               </div>
             ))}
           </dl>
+        )}
+        {modal?.kind === "report-detail" && (
+          <div className="idf-report-sheet">
+            {/* Cabecera visual del reporte */}
+            <div className="idf-report-sheet-header">
+              <div className="idf-report-sheet-titles">
+                <span className="idf-report-badge-folio">Folio: {modal.row.id}</span>
+                <h3 className="idf-report-sheet-activity">{modal.row.title || "Visita / Reporte de IDF"}</h3>
+                <p className="idf-report-sheet-subtitle">
+                  Inspección realizada en <strong>{modal.row.idf}</strong>
+                  {modal.row.device ? <> · Equipo: <strong>{modal.row.device}</strong></> : null}
+                </p>
+              </div>
+              <div className="idf-report-sheet-badges">
+                <span className={`idf-status-pill ${modal.row.status === "resolved" ? "is-resolved" : "is-pending"}`}>
+                  <span className="idf-pill-dot" />
+                  {modal.row.status === "resolved" ? "Resuelto" : "Pendiente"}
+                </span>
+                {modal.row.severity && (
+                  <span className={`idf-severity-pill is-${modal.row.severity}`}>
+                    Severidad {modal.row.severity === "high" ? "Alta" : modal.row.severity === "medium" ? "Media" : "Baja"}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Cuadrícula organizada en secciones claras */}
+            <div className="idf-report-sections">
+              {/* Sección 1: Datos Operativos */}
+              <div className="idf-report-card">
+                <h4 className="idf-card-title">Datos Operativos</h4>
+                <div className="idf-card-grid">
+                  <div className="idf-info-item">
+                    <span className="idf-info-label">Gabinete / IDF</span>
+                    <strong className="idf-info-val highlight">{modal.row.idf}</strong>
+                  </div>
+                  {modal.row.device && (
+                    <div className="idf-info-item">
+                      <span className="idf-info-label">Equipo / Componente</span>
+                      <strong className="idf-info-val">{modal.row.device}</strong>
+                    </div>
+                  )}
+                  <div className="idf-info-item">
+                    <span className="idf-info-label">Responsable</span>
+                    <strong className="idf-info-val">{modal.row.actor}</strong>
+                  </div>
+                  <div className="idf-info-item">
+                    <span className="idf-info-label">Fecha de inspección</span>
+                    <strong className="idf-info-val">{dateTime(modal.row.date)}</strong>
+                  </div>
+                  {modal.row.resolved_at && (
+                    <div className="idf-info-item">
+                      <span className="idf-info-label">Fecha de resolución</span>
+                      <strong className="idf-info-val text-success">{dateTime(modal.row.resolved_at)}</strong>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Sección 2: Métrica y Diagnóstico */}
+              <div className="idf-report-card">
+                <h4 className="idf-card-title">Condición Térmica</h4>
+                <div className="idf-temp-box">
+                  <div className={`idf-temp-indicator ${Number(modal.row.temp) >= 25 ? "temp-alert" : "temp-normal"}`}>
+                    <Thermometer size={26} aria-hidden="true" />
+                    <div>
+                      <span className="idf-temp-value">
+                        {modal.row.temp == null ? "—" : `${modal.row.temp} °C`}
+                      </span>
+                      <span className="idf-temp-tag">
+                        {modal.row.temp == null
+                          ? "Sin registro"
+                          : Number(modal.row.temp) >= 25
+                          ? "Temperatura Elevada (Alerta)"
+                          : "Rango Térmico Nominal"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sección 3: Descripción detallada */}
+            <div className="idf-report-card full-span">
+              <h4 className="idf-card-title">Descripción y Hallazgos</h4>
+              <p className="idf-description-text">
+                {modal.row.description || "Sin descripción proporcionada."}
+              </p>
+            </div>
+
+            {/* Sección 4: Evidencia Fotográfica */}
+            <div className="idf-report-card full-span">
+              <div className="idf-card-header-flex">
+                <h4 className="idf-card-title">Evidencia Fotográfica</h4>
+                {(modal.row.evidence || modal.row.evidenceDemo) && (
+                  <a
+                    className="button button-secondary idf-btn-download"
+                    href={
+                      demo
+                        ? modal.row.evidenceDemo
+                        : `/api/reports/evidence/${encodeURIComponent(modal.row.evidence)}`
+                    }
+                    download="evidencia-idf"
+                  >
+                    <Download size={15} />
+                    Descargar foto original
+                  </a>
+                )}
+              </div>
+
+              {modal.row.evidence || modal.row.evidenceDemo ? (
+                <div className="idf-photo-showcase">
+                  <div className="idf-photo-frame">
+                    <img
+                      src={
+                        demo
+                          ? modal.row.evidenceDemo
+                          : `/api/reports/evidence/${encodeURIComponent(modal.row.evidence)}?view=1`
+                      }
+                      alt={`Evidencia fotográfica del reporte ${modal.row.id}`}
+                      className="idf-photo-img"
+                    />
+                  </div>
+                  <div className="idf-photo-meta">
+                    <Camera size={16} aria-hidden="true" />
+                    <span>Fotografía adjunta capturada durante la inspección en {modal.row.idf}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="idf-no-photo">
+                  <Camera size={30} strokeWidth={1.5} aria-hidden="true" />
+                  <span>Sin evidencia fotográfica adjunta para este reporte</span>
+                </div>
+              )}
+            </div>
+          </div>
         )}
         {modal?.kind === "services" && (
           <>
@@ -2494,32 +2691,6 @@ export default function App() {
             </Button>
           </>
         )}
-        {modal?.kind === "report-detail" &&
-          (modal.row.evidence || modal.row.evidenceDemo) && (
-            <figure className="evidence-preview">
-              <img
-                src={
-                  demo
-                    ? modal.row.evidenceDemo
-                    : `/api/reports/evidence/${encodeURIComponent(modal.row.evidence)}?view=1`
-                }
-                alt={`Evidencia fotográfica del reporte ${modal.row.id}`}
-              />
-              <figcaption>Evidencia fotográfica adjunta</figcaption>
-              <a
-                className="button button-secondary evidence-download"
-                href={
-                  demo
-                    ? modal.row.evidenceDemo
-                    : `/api/reports/evidence/${encodeURIComponent(modal.row.evidence)}`
-                }
-                download="evidencia-idf"
-              >
-                <Download size={18} />
-                Descargar
-              </a>
-            </figure>
-          )}
         {modal?.kind === "report-resolve" && canOpenIdfs && can("idf.visits.write") && (
           <ResolveReport row={modal.row} save={resolveReport} />
         )}

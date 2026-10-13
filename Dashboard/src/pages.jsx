@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, AlertCircle, ArrowRight, ArrowUpDown, Building2, Calendar, Camera, Check, CheckCircle2, Eye, Thermometer, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Copy, Download, FileText, Grid, HardDrive, Headset, Info, Laptop, Layers3, List, Monitor, Network, Package, Plus, Printer, Radio, RotateCcw, Router, Server, ShieldCheck, Smartphone, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X, LogIn, LogOut, UserPlus, KeyRound, PlugZap, MapPin, MapPinOff } from 'lucide-react';
+import { Activity, AlertCircle, ArrowRight, ArrowUpDown, Building2, Calendar, Camera, Check, CheckCircle2, Eye, Thermometer, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Copy, Download, FileText, Grid, HardDrive, Headset, Info, Laptop, Layers3, List, Monitor, Network, Package, Plus, Printer, Radio, RotateCcw, Router, Search, Server, ShieldCheck, Smartphone, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X, LogIn, LogOut, UserPlus, KeyRound, PlugZap, MapPin, MapPinOff } from 'lucide-react';
 import { Badge, Button, DataTable, Dialog, Empty, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, downloadExcel, useListState } from './components.jsx';
 import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getOverviewSegmentDevices, isMeztliSegment, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, getSupportSegments, normalizeText } from './domain.mjs';
 import { useSession } from './session.jsx';
+import { DashboardWidgets } from './dashboard-widgets.jsx';
 
 export function PageHeading({ eyebrow, title, description, updatedAt, children, headingId = 'page-title' }) {
   const hasActions = Boolean(children);
@@ -35,7 +36,7 @@ const cachePrincipalSegments = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Account preferences remain authoritative when browser storage is unavailable. */ }
 };
 
-export function Overview({ data, demo, navigate, loading, errors, userId, openEditor }) {
+export function Overview({ data, demo, navigate, loading, errors, userId, openEditor, refresh }) {
   const [activeSegmentKey, setActiveSegmentKey] = useState(null);
   const devicesPanelRef = useRef(null);
   const { segments, ips, devices, resources } = data;
@@ -140,13 +141,14 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
   };
   return <>
     <PageHeading eyebrow="Centro operativo" title="Dashboard Operativo" description="Métricas generales y estado de la infraestructura de red" updatedAt={data.updatedAt} />
-    <section className="overview-metrics" aria-label="Indicadores de infraestructura">
+    <DashboardWidgets key={`${demo ? 'demo' : 'live'}:${userId}`} data={data} demo={demo} userId={userId} navigate={navigate} loading={loading} errors={errors} refresh={refresh}>
+    <section data-widget-id="metrics" className="overview-metrics" aria-label="Indicadores de infraestructura">
       <Metric icon={Network} label={demo ? 'Disponibilidad de red' : 'Direcciones disponibles'} value={demo ? '98.7%' : loading ? '—' : number(available)} caption={demo ? '+2.3% vs. mes anterior · Ejemplo' : 'Sin asignar en el inventario IP'} />
       <Metric icon={Monitor} tone="success" label="Dispositivos activos" value={loading ? '—' : number(online)} caption={`De ${number(devices.length)} equipos consultados`} />
       <Metric icon={Users} label="Concesiones activas" value={loading ? '—' : number(segments.reduce((sum, s) => sum + (s.active_leases || 0), 0))} caption="Asignaciones reportadas por DHCP" />
       <article className="network-pressure"><div className="network-pressure-header"><h3>Redes más cerca del límite</h3><small>uso de IPs</small></div>{pressureSegments.length ? <ol>{pressureSegments.map(segment => <li key={segmentKey(segment)}><span><strong>{segment.name || segment.interface || 'Red sin nombre'}</strong><small>{number(segment.active_leases)} / {number(segment.capacity)}</small></span><i><em style={{ width: `${Math.min(100, Math.max(0, segment.fillPercent))}%` }} /></i><b>{number(segment.fillPercent)}%</b></li>)}</ol> : <p className="muted">Sin datos de utilización por segmento.</p>}</article>
     </section>
-    <section className="segment-section"><div className="section-heading"><Layers3 className="section-icon" size={31} aria-hidden="true" /><div><h2>Segmentos de Red y VLANs</h2><p>Capacidad y asignación de los principales segmentos de la infraestructura</p></div><div className="section-actions"><span>{number(segments.length)} segmentos</span><Button onClick={editSegments} icon={Plus} disabled={loading || preferenceBusy || !segments.length}>Elegir principales</Button><Button onClick={() => setAll(!all)} icon={ArrowRight}>{all ? 'Ver principales' : 'Ver todos'}</Button></div></div>
+    <section data-widget-id="segments" className="segment-section"><div className="section-heading"><Layers3 className="section-icon" size={31} aria-hidden="true" /><div><h2>Segmentos de Red y VLANs</h2><p>Capacidad y asignación de los principales segmentos de la infraestructura</p></div><div className="section-actions"><span>{number(segments.length)} segmentos</span><Button onClick={editSegments} icon={Plus} disabled={loading || preferenceBusy || !segments.length}>Elegir principales</Button><Button onClick={() => setAll(!all)} icon={ArrowRight}>{all ? 'Ver principales' : 'Ver todos'}</Button></div></div>
       {preferenceSaved && <Notice title="Preferencia guardada" role="status">{demo ? 'La selección se conserva en este navegador.' : 'La selección se conservará al volver a iniciar sesión.'}</Notice>}
       {preferenceError && !editing && <Notice title="Preferencia no disponible" tone="warning">{preferenceError}</Notice>}
       {segments.length ? <><div className="segment-grid">{visibleSegments.map((segment, index) => {
@@ -163,8 +165,7 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
         <Button variant={isSelected ? 'secondary' : 'primary'} className={`w-full ${isSelected ? 'is-selected' : ''}`} icon={Server} aria-expanded={isSelected} onClick={() => { const key = segmentKey(segment); if (activeSegmentKey === key) { setActiveSegmentKey(null); } else { setActiveSegmentKey(key); setTimeout(() => { devicesPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 60); } }}>{isSelected ? 'Ocultar dispositivos' : 'Ver dispositivos'} {isSelected ? <ChevronDown size={17} /> : <ArrowRight size={17} />}</Button>
       </article>; })}</div>{!visibleSegments.length && <Empty title="Sin segmentos principales" action={<Button icon={Plus} onClick={editSegments}>Elegir principales</Button>}>Agrega los segmentos que quieres ver en tu dashboard.</Empty>}</> : <div className="panel"><Empty title={loading ? 'Consultando segmentos de red' : 'Sin segmentos disponibles'}>{loading ? 'Espera mientras se consulta la capacidad DHCP.' : 'La conexión con el servicio DHCP no devolvió segmentos. Puedes revisar el inventario IP o actualizar la consulta.'}</Empty></div>}
     </section>
-    {activeSegment && <SegmentDevicesPanel panelRef={devicesPanelRef} segment={activeSegment} devices={devices} onClose={() => setActiveSegmentKey(null)} openEditor={openEditor} />}
-    <section className="network-usage panel" aria-labelledby="network-usage-title">
+    <section data-widget-id="network" className="network-usage panel" aria-labelledby="network-usage-title">
       <div className="network-usage-heading"><div><p className="eyebrow">Conectividad por red</p><h2 id="network-usage-title">Usuarios conectados por red</h2><p>Distribución de las concesiones DHCP activas por segmento.</p></div><p className="network-usage-total"><strong>{number(totalConnections)}</strong><span>conexiones activas</span></p></div>
       {networkUsage.length ? <div className="network-usage-content">
         <div className="network-usage-chart" style={{ background: usageChart }} role="img" aria-label={`${number(totalConnections)} conexiones activas distribuidas en ${number(networkUsage.length)} redes`}><div><strong>{number(totalConnections)}</strong><span>conexiones</span></div></div>
@@ -175,6 +176,8 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
       </div> : <Empty title="Sin conexiones por red">El servicio DHCP aún no devolvió concesiones activas por segmento.</Empty>}
       <p className="network-usage-note">Una concesión DHCP representa una conexión o dispositivo con dirección asignada; una persona puede usar más de un equipo.</p>
     </section>
+    </DashboardWidgets>
+    {activeSegment && <SegmentDevicesPanel panelRef={devicesPanelRef} segment={activeSegment} devices={devices} onClose={() => setActiveSegmentKey(null)} openEditor={openEditor} />}
     <Dialog open={editing} onClose={() => setEditing(false)} title="Elegir segmentos principales" wide busy={preferenceBusy}>
       <p className="muted">Selecciona las tarjetas que quieres mostrar al abrir el dashboard. {demo ? 'En la demostración se guarda en este navegador.' : 'La selección se guarda en tu cuenta y se conserva al volver a iniciar sesión.'}</p>
       <div className="segment-picker">{segments.map(segment => { const key = segmentKey(segment); const selected = draft.includes(key); return <article className="panel" key={key}><div><strong>{segment.name || segment.interface}</strong><p className="muted font-mono">{segment.subnet || segment.ip_ranges?.join(', ') || segment.default_gateway || 'Rango no informado'}</p></div><Button disabled={preferenceBusy} aria-pressed={selected} aria-label={`${selected ? 'Quitar' : 'Agregar'} ${segment.name || segment.interface}`} icon={selected ? Check : Plus} variant={selected ? 'primary' : 'secondary'} onClick={() => setDraft(old => selected ? old.filter(value => value !== key) : [...old, key])}>{selected ? 'Visible · Quitar' : 'Agregar'}</Button></article>; })}</div>
@@ -396,7 +399,7 @@ export function Requests({ demo }) {
       label: 'Usuario',
       render: row => (
         <div style={{ lineHeight: 1.25 }}>
-          <strong style={{ display: 'block', fontSize: '13px' }}>{row.username}</strong>
+          <span style={{ display: 'block', fontSize: '13px', fontWeight: 500 }}>{row.username}</span>
           <small className="text-muted" style={{ fontSize: '11px', display: 'block', maxWidth: '190px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.fullName}>
             {row.fullName || '—'}
           </small>
@@ -411,20 +414,20 @@ export function Requests({ demo }) {
         if (row.diffMs === null) return <span className="text-muted text-xs">Indefinido</span>;
         if (row.isExpired) {
           return (
-            <span className="badge badge-danger" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 7px' }}>
-              <Clock3 size={12} /> Expirado
+            <span className="badge badge-danger concession-countdown">
+              <Clock3 size={16} /> Expirado
             </span>
           );
         }
         const hours = row.diffMs / (3600 * 1000);
         const tone = hours < 3 ? 'danger' : hours < 12 ? 'warning' : 'info';
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', lineHeight: 1.2 }}>
-            <span className={`badge badge-${tone}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 700, padding: '3px 8px' }}>
-              <Clock size={12} /> {formatCountdown(row.diffMs)}
+          <div className="concession-time">
+            <span className={`badge badge-${tone} concession-countdown`}>
+              <Clock size={16} /> {formatCountdown(row.diffMs)}
             </span>
-            <small style={{ fontSize: '9.5px', color: '#64748b' }}>
-              {new Date(row.effectiveTime).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            <small className="concession-expiry">
+              Vence {new Date(row.effectiveTime).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
             </small>
           </div>
         );
@@ -910,6 +913,8 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
   const eligible = data.devices.filter(device => device.status === 'online' || device.is_reserved === true);
   const devices = selectedSegment ? eligible.filter(device => deviceInSegment(device, segment)) : eligible;
   const omniMatchedCount = devices.filter(d => d.omnivista?.matched).length;
+  const typeOptions = Array.from(new Set(devices.map(d => formatDeviceType(d.type, d.os || d.omnivista?.os || d.raw?.os_name, d.omnivista?.device_name || d.name, d.vendor)).filter(Boolean))).sort((a, b) => a.localeCompare(b, "es"));
+  const vendorOptions = Array.from(new Set(devices.map(d => d.vendor).filter(Boolean))).sort((a, b) => a.localeCompare(b, "es"));
   const sizeChoice = ['25', '50', '100', 'all'].includes(state.pageSize) ? state.pageSize : '25';
   const pageSize = sizeChoice === 'all' ? Math.max(1, devices.length) : Number(sizeChoice);
 
@@ -1002,16 +1007,21 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
     }
   ];
 
-  const rows = devices.map((d, i) => ({
-    ...d,
-    id: `${d.interface || ''}:${d.mac || d.ip}:${i}`,
-    _search_name: d.omnivista?.device_name || d.name || '',
-    _search_loc: d.omnivista?.location || formatLocation(d.location, d.vendor, segment?.name || d.interface) || '',
-    _search_type: formatDeviceType(d.type, d.os || d.omnivista?.os || d.raw?.os_name, d.omnivista?.device_name || d.name, d.vendor) || '',
-    _search_acc: d.omnivista?.account || '',
-    _search_ap: d.omnivista?.ap_name || '',
-    _search_mac: d.mac || '',
-  }));
+  const rows = devices.map((d, i) => {
+    const computedType = formatDeviceType(d.type, d.os || d.omnivista?.os || d.raw?.os_name, d.omnivista?.device_name || d.name, d.vendor) || '';
+    return {
+      ...d,
+      id: `${d.interface || ''}:${d.mac || d.ip}:${i}`,
+      type: computedType,
+      vendor: d.vendor || '',
+      _search_name: d.omnivista?.device_name || d.name || '',
+      _search_loc: d.omnivista?.location || formatLocation(d.location, d.vendor, segment?.name || d.interface) || '',
+      _search_type: computedType,
+      _search_acc: d.omnivista?.account || '',
+      _search_ap: d.omnivista?.ap_name || '',
+      _search_mac: d.mac || '',
+    };
+  });
 
   return (
     <>
@@ -1027,27 +1037,40 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
       )}
 
       <div className="toolbar devices-toolbar">
-        <SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar por equipo, IP, MAC o fabricante…" />
-        <Select label="Estado" value={state.filters.status || ''} onChange={e => state.setFilter('status', e.target.value)}>
-          <option value="">Todos los estados</option>
-          <option value="online">En servicio</option>
-          <option value="offline">Reservados fuera de línea</option>
-        </Select>
-        <Select label="Dispositivos por página" value={sizeChoice} onChange={e => state.setPageSize(e.target.value)}>
-          <option value="25">25 dispositivos</option>
-          <option value="50">50 dispositivos</option>
-          <option value="100">100 dispositivos</option>
-          <option value="all">Todos los dispositivos</option>
-        </Select>
-        {canExport && (
-          <Button
-            icon={Download}
-            disabled={!devices.length}
-            onClick={() => downloadCsv('Dispositivos-de-Red', columns, rows)}
-          >
-            Exportar
-          </Button>
-        )}
+        <div className="devices-toolbar-main">
+          <SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar por equipo, IP, MAC o fabricante…" />
+          <div className="devices-filters-group">
+            <Select label="Tipo de dispositivo" value={state.filters.type || ''} onChange={e => state.setFilter('type', e.target.value)} className="devices-filter-select">
+              <option value="">Todos los tipos</option>
+              {typeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+            </Select>
+            <Select label="Marca / Fabricante" value={state.filters.vendor || ''} onChange={e => state.setFilter('vendor', e.target.value)} className="devices-filter-select">
+              <option value="">Todas las marcas</option>
+              {vendorOptions.map(v => <option key={v} value={v}>{v}</option>)}
+            </Select>
+            <Select label="Estado" value={state.filters.status || ''} onChange={e => state.setFilter('status', e.target.value)} className="devices-filter-select">
+              <option value="">Todos los estados</option>
+              <option value="online">En servicio</option>
+              <option value="offline">Reservados fuera de línea</option>
+            </Select>
+            <Select label="Por página" value={sizeChoice} onChange={e => state.setPageSize(e.target.value)} className="devices-filter-select">
+              <option value="25">25 dispositivos</option>
+              <option value="50">50 dispositivos</option>
+              <option value="100">100 dispositivos</option>
+              <option value="all">Todos</option>
+            </Select>
+          </div>
+          {canExport && (
+            <Button
+              icon={Download}
+              disabled={!devices.length}
+              onClick={() => downloadCsv('Dispositivos-de-Red', columns, rows)}
+              className="devices-export-btn"
+            >
+              Exportar
+            </Button>
+          )}
+        </div>
         <div className="devices-toolbar-right">
           {omniMatchedCount > 0 && <span className="network-tag omni-badge">{number(omniMatchedCount)} cotejados en OmniVista</span>}
           <div className="segment-devices-hint">
@@ -1278,15 +1301,21 @@ export function AuditLog({
       label: 'IDF / Folio',
       value: r => `${r.idf} ${r.id}`,
       render: r => (
-        <div className="audit-cell-group">
-          <span className="audit-idf-tag">
-            <Building2 size={13} aria-hidden="true" />
-            <b>{r.idf || 'IDF'}</b>
-          </span>
-          <span className="audit-folio-pill" title={r.id}>
-            {r.id}
-          </span>
-          {r.device && <small className="audit-device-subtext">{r.device}</small>}
+        <div className="audit-cell-block">
+          <div className="audit-idf-main">
+            <span className="audit-idf-icon-wrap" aria-hidden="true">
+              <Building2 size={15} />
+            </span>
+            <div className="audit-idf-info">
+              <strong className="audit-idf-name">{r.idf || 'IDF'}</strong>
+              {r.device && <span className="audit-component-label">{r.device}</span>}
+            </div>
+          </div>
+          <div className="audit-folio-line">
+            <span className="audit-folio-chip" title={r.id}>
+              {r.id ? (r.id.length > 20 ? `${r.id.slice(0, 16)}…` : r.id) : '—'}
+            </span>
+          </div>
         </div>
       ),
     },
@@ -1296,7 +1325,7 @@ export function AuditLog({
       value: r => `${r.title || ''} ${r.description || ''}`,
       render: r => (
         <div className="audit-activity-content">
-          <strong>{r.title || 'Inspección técnica'}</strong>
+          <strong className="audit-activity-title">{r.title || 'Inspección técnica'}</strong>
           <p className="audit-desc-text" title={r.description}>
             {r.description || 'Sin notas adicionales.'}
           </p>
@@ -1330,7 +1359,7 @@ export function AuditLog({
           <div className="audit-conditions-group">
             {r.temp != null ? (
               <span className={`audit-temp-pill ${isHot ? 'is-hot' : 'is-normal'}`}>
-                <Thermometer size={12} aria-hidden="true" />
+                <Thermometer size={13} aria-hidden="true" />
                 <b>{r.temp} °C</b>
               </span>
             ) : (
@@ -1346,7 +1375,7 @@ export function AuditLog({
                 }}
                 title="Ver fotografía adjunta"
               >
-                <Camera size={12} aria-hidden="true" />
+                <Camera size={13} aria-hidden="true" />
                 <span>Foto</span>
               </button>
             )}
@@ -1530,15 +1559,22 @@ export function AuditLog({
 export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, openEditor }) {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [vendorFilter, setVendorFilter] = useState('');
   const [pageSizeChoice, setPageSizeChoice] = useState('25');
   const [currentPage, setCurrentPage] = useState(1);
 
   const segmentDevices = getOverviewSegmentDevices(devices, segment);
   const onlineCount = segmentDevices.filter(d => d.status === 'online').length;
   const omniMatchedCount = segmentDevices.filter(d => d.omnivista?.matched).length;
+  const typeOptions = Array.from(new Set(segmentDevices.map(d => formatDeviceType(d.type, d.os || d.omnivista?.os || d.raw?.os_name, d.omnivista?.device_name || d.name, d.vendor)).filter(Boolean))).sort((a, b) => a.localeCompare(b, "es"));
+  const vendorOptions = Array.from(new Set(segmentDevices.map(d => d.vendor).filter(Boolean))).sort((a, b) => a.localeCompare(b, "es"));
 
   const filtered = segmentDevices.filter(d => {
+    const computedType = formatDeviceType(d.type, d.os || d.omnivista?.os || d.raw?.os_name, d.omnivista?.device_name || d.name, d.vendor);
     if (statusFilter && d.status !== statusFilter) return false;
+    if (typeFilter && computedType !== typeFilter) return false;
+    if (vendorFilter && (d.vendor || '') !== vendorFilter) return false;
     if (!query.trim()) return true;
     const q = query.toLowerCase();
     const devType = formatDeviceType(d.type, d.os || d.omnivista?.os || d.raw?.os_name, d.omnivista?.device_name || d.name, d.vendor).toLowerCase();
@@ -1590,18 +1626,30 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
       </div>
     </div>
     <div className="segment-devices-toolbar">
-      <SearchField value={query} onChange={handleQuery} placeholder="Buscar por equipo, IP, MAC o fabricante…" />
-      <Select label="Estado" value={statusFilter} onChange={handleStatus}>
-        <option value="">Todos los estados</option>
-        <option value="online">En servicio</option>
-        <option value="offline">Fuera de línea / Reservados</option>
-      </Select>
-      <Select label="Dispositivos por página" value={pageSizeChoice} onChange={handleSize}>
-        <option value="25">25 dispositivos</option>
-        <option value="50">50 dispositivos</option>
-        <option value="100">100 dispositivos</option>
-        <option value="all">Todos los dispositivos</option>
-      </Select>
+      <div className="devices-toolbar-main">
+        <SearchField value={query} onChange={handleQuery} placeholder="Buscar por equipo, IP, MAC o fabricante…" />
+        <div className="devices-filters-group">
+          <Select label="Tipo de dispositivo" value={typeFilter} onChange={e => { setTypeFilter(e.target.value); setCurrentPage(1); }} className="devices-filter-select">
+            <option value="">Todos los tipos</option>
+            {typeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+          </Select>
+          <Select label="Marca / Fabricante" value={vendorFilter} onChange={e => { setVendorFilter(e.target.value); setCurrentPage(1); }} className="devices-filter-select">
+            <option value="">Todas las marcas</option>
+            {vendorOptions.map(v => <option key={v} value={v}>{v}</option>)}
+          </Select>
+          <Select label="Estado" value={statusFilter} onChange={handleStatus} className="devices-filter-select">
+            <option value="">Todos los estados</option>
+            <option value="online">En servicio</option>
+            <option value="offline">Fuera de línea / Reservados</option>
+          </Select>
+          <Select label="Por página" value={pageSizeChoice} onChange={handleSize} className="devices-filter-select">
+            <option value="25">25 dispositivos</option>
+            <option value="50">50 dispositivos</option>
+            <option value="100">100 dispositivos</option>
+            <option value="all">Todos</option>
+          </Select>
+        </div>
+      </div>
       <div className="segment-devices-hint"><Info size={16} aria-hidden="true" /><span>Selecciona cualquier fila para abrir el detalle técnico</span></div>
     </div>
     <div className="segment-devices-list">
@@ -1681,13 +1729,41 @@ export function SupportMovements({ demo }) {
   return <section className="support-log-view">
     <PageHeading eyebrow="Movimientos" title="Bitácora de soporte" description="Retiros de tóner y otros elementos provenientes del IDF 3" />
     <div className="support-log-origin" role="note">
-      <span className="support-log-origin-icon"><Building2 size={28} aria-hidden="true" /></span>
-      <div><strong>Todo el inventario de Soporte sale del IDF 3</strong><p>Los artículos, retiros y movimientos de esta área deben registrarse desde el IDF 3.</p></div>
+      <span className="support-log-origin-icon">
+        <Building2 size={24} aria-hidden="true" />
+      </span>
+      <div className="support-log-origin-text">
+        <div className="support-log-origin-header">
+          <strong>Punto de origen centralizado: IDF 3</strong>
+          <span className="support-inventory-badge-live">Norma Operativa</span>
+        </div>
+        <p>Todo el inventario de soporte se gestiona y despacha exclusivamente desde el IDF 3.</p>
+      </div>
     </div>
-    <div className="support-log-toolbar"><label>Buscar<input value={query} onChange={event => setQuery(event.target.value)} placeholder="Elemento, identificación, responsable o nota…" /></label>
-      <Button icon={RefreshCw} onClick={reload}>Actualizar</Button>
+
+    <div className="support-log-toolbar">
+      <div className="support-log-search">
+        <SearchField
+          value={query}
+          onChange={setQuery}
+          label="Buscar movimientos de soporte"
+          placeholder="Buscar por elemento, identificación, responsable o nota…"
+        />
+      </div>
+      <Button icon={RefreshCw} onClick={reload} className="support-log-btn-refresh">
+        Actualizar
+      </Button>
     </div>
+
+    <div className="support-log-meta-bar">
+      <span className="support-log-count-pill" role="status">
+        <b>{visible.length}</b> {visible.length === 1 ? 'movimiento registrado' : 'movimientos registrados'}
+        {query ? ' (filtrados)' : ''}
+      </span>
+    </div>
+
     {error && <Notice tone="danger">{error}</Notice>}
+
     <div className="support-log-table-wrap">
       <table className="support-log-table desktop-only-table">
         <thead>
@@ -1695,19 +1771,74 @@ export function SupportMovements({ demo }) {
             <th>IDF / Folio</th>
             <th>Elemento e identificación</th>
             <th>Responsable y fecha</th>
-            <th>Foto</th>
+            <th>Evidencia</th>
             <th>Observaciones</th>
           </tr>
         </thead>
         <tbody>
-          {visible.map(row => <tr key={row.id}>
-            <td><strong>{row.idf_name}</strong><small>{row.id.slice(0, 8).toUpperCase()}</small></td>
-            <td><strong>{row.element}</strong>{row.quantity != null && <small>Retirado: {row.quantity} {row.unit || ''}</small>}<small>{row.identifier}</small></td>
-            <td><strong>{row.actor_name || row.actor}</strong><small>{dateTime(row.date)} · Cuenta: {row.actor}</small></td>
-            <td>{row.evidence ? <a className="support-evidence-link" href={`/api/support/movements/evidence/${encodeURIComponent(row.evidence)}?view=1`} target="_blank" rel="noopener noreferrer"><Camera size={16} /> Ver foto</a> : '—'}</td>
-            <td>{row.notes || '—'}</td>
-          </tr>)}
-          {!visible.length && <tr><td colSpan={5} className="support-log-empty">{rows.length ? 'No hay movimientos con esos filtros.' : 'Aún no hay retiros registrados.'}</td></tr>}
+          {visible.map(row => (
+            <tr key={row.id}>
+              <td>
+                <div className="support-cell-idf">
+                  <span className="support-idf-pill">{row.idf_name}</span>
+                  <span className="support-folio-chip" title={row.id}>
+                    {row.id.slice(0, 8).toUpperCase()}
+                  </span>
+                </div>
+              </td>
+              <td>
+                <div className="support-cell-element">
+                  <strong className="support-element-name">{row.element}</strong>
+                  {row.quantity != null && (
+                    <span className="support-qty-badge">
+                      Retirado: <b>{row.quantity}</b> {row.unit || 'pza'}
+                    </span>
+                  )}
+                  {row.identifier && (
+                    <small className="support-identifier-tag">{row.identifier}</small>
+                  )}
+                </div>
+              </td>
+              <td>
+                <div className="support-cell-actor">
+                  <div className="audit-actor-line">
+                    <span className="audit-actor-avatar" aria-hidden="true">
+                      {(row.actor_name || row.actor || 'T').charAt(0).toUpperCase()}
+                    </span>
+                    <span className="audit-actor-name">{row.actor_name || row.actor}</span>
+                  </div>
+                  <span className="audit-date-subtext">
+                    {dateTime(row.date)} · <small className="text-muted">{row.actor}</small>
+                  </span>
+                </div>
+              </td>
+              <td>
+                {row.evidence ? (
+                  <a
+                    className="support-evidence-link"
+                    href={`/api/support/movements/evidence/${encodeURIComponent(row.evidence)}?view=1`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Camera size={14} aria-hidden="true" />
+                    <span>Ver foto</span>
+                  </a>
+                ) : (
+                  <span className="text-muted text-xs">—</span>
+                )}
+              </td>
+              <td>
+                <span className="support-notes-cell">{row.notes || '—'}</span>
+              </td>
+            </tr>
+          ))}
+          {!visible.length && (
+            <tr>
+              <td colSpan={5} className="support-log-empty">
+                {rows.length ? 'No hay movimientos con esos filtros.' : 'Aún no hay retiros registrados.'}
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
 
@@ -1791,12 +1922,146 @@ export function SupportInventory({ canEdit = false }) {
     <PageHeading eyebrow="IDF 3" title="Inventario soporte IDF 3" description="Inventario inicial del área de soporte" />
     {error && <Notice tone="danger">{error}</Notice>}
     {loading ? <p>Cargando inventario…</p> : <>
-      <div className="support-inventory-summary"><span className="support-inventory-summary-icon"><Package size={30} aria-hidden="true" /></span><div><strong><b>{items.length}</b> artículos inventariados</strong><span>Inventario del IDF 3 · Fuente: {items[0]?.source_file || 'Inventario IDF 3'} · 05/10/2026</span></div></div>
-      <div className="support-log-toolbar support-inventory-search"><label>Buscar artículo<input value={query} onChange={event => setQuery(event.target.value)} placeholder="Busca por descripción, unidad, estado u observaciones…" /></label></div>
-      <div className="support-log-table-wrap"><table className="support-log-table support-inventory-table"><thead><tr><th>N.º</th><th>Artículo</th><th>Cantidad</th><th>Unidad</th><th>Estado</th><th>Observaciones</th>{canEdit && <th>Acciones</th>}</tr></thead><tbody>
-        {visible.map(item => <tr key={item.id}><td><span className="support-inventory-number">{item.source_number}</span></td><td><strong className="support-inventory-name">{item.description}</strong><small>{item.location}</small></td><td><strong className="support-inventory-quantity">{item.quantity}</strong></td><td><span className="support-inventory-unit">{item.unit}</span></td><td><span className="support-inventory-status">{item.status}</span></td><td>{item.notes || '—'}</td>{canEdit && <td><Button variant="secondary" onClick={() => { setEditing(item); setDraftQuantity(String(item.quantity)); setReason(''); setError(''); }}>Modificar cantidad</Button></td>}</tr>)}
-        {!visible.length && <tr><td colSpan={canEdit ? 7 : 6} className="support-log-empty">{items.length ? 'No hay artículos que coincidan con la búsqueda.' : 'No hay artículos cargados.'}</td></tr>}
-      </tbody></table></div>
+      <div className="support-inventory-summary">
+        <span className="support-inventory-summary-icon">
+          <Package size={26} aria-hidden="true" />
+        </span>
+        <div className="support-inventory-summary-content">
+          <div className="support-inventory-summary-title">
+            <strong><b>{items.length}</b> artículos inventariados</strong>
+            <span className="support-inventory-badge-live">Registro activo</span>
+          </div>
+          <span className="support-inventory-summary-meta">
+            Inventario operativo del IDF 3 · Actualizado al 05/10/2026
+          </span>
+        </div>
+      </div>
+      <div className="support-inventory-search-wrap">
+        <label className="support-inventory-search-label">
+          Buscar artículo
+          <div className="support-inventory-search-input-box">
+            <Search size={18} className="support-inventory-search-icon" aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Busca por descripción, unidad, estado u observaciones…"
+              className="support-inventory-search-input"
+            />
+          </div>
+        </label>
+      </div>
+      <div className="support-log-table-wrap">
+        <table className="support-log-table support-inventory-table">
+          <thead>
+            <tr>
+              <th>N.º</th>
+              <th>Artículo</th>
+              <th>Cantidad</th>
+              <th>Unidad</th>
+              <th>Estado</th>
+              <th>Observaciones</th>
+              {canEdit && <th>Acciones</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map(item => (
+              <tr key={item.id}>
+                <td>
+                  <span className="support-inventory-number">{item.source_number}</span>
+                </td>
+                <td>
+                  <strong className="support-inventory-name">{item.description}</strong>
+                  {item.location && <small className="support-inventory-loc">{item.location}</small>}
+                </td>
+                <td>
+                  <strong className="support-inventory-quantity">{item.quantity}</strong>
+                </td>
+                <td>
+                  <span className="support-inventory-unit">{item.unit}</span>
+                </td>
+                <td>
+                  <span className="support-inventory-status">{item.status || 'Sin verificar'}</span>
+                </td>
+                <td>
+                  <span className="support-inventory-notes">{item.notes || '—'}</span>
+                </td>
+                {canEdit && (
+                  <td>
+                    <Button
+                      variant="secondary"
+                      className="support-inventory-btn-edit"
+                      onClick={() => {
+                        setEditing(item);
+                        setDraftQuantity(String(item.quantity));
+                        setReason('');
+                        setError('');
+                      }}
+                    >
+                      Modificar cantidad
+                    </Button>
+                  </td>
+                )}
+              </tr>
+            ))}
+            {!visible.length && (
+              <tr>
+                <td colSpan={canEdit ? 7 : 6} className="support-log-empty">
+                  {items.length ? 'No hay artículos que coincidan con la búsqueda.' : 'No hay artículos cargados.'}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+
+        {/* Tarjetas táctiles adaptadas a pantallas móviles (smartphones) */}
+        <div className="support-inventory-mobile-list" aria-label="Lista de inventario para pantallas pequeñas">
+          {visible.map(item => (
+            <article key={item.id} className="support-inventory-mobile-card">
+              <div className="support-inventory-mobile-card-header">
+                <span className="support-inventory-number">#{item.source_number}</span>
+                <span className="support-inventory-status">{item.status || 'Sin verificar'}</span>
+              </div>
+              <div className="support-inventory-mobile-card-body">
+                <strong className="support-inventory-name">{item.description}</strong>
+                {item.location && <small className="support-inventory-loc">{item.location}</small>}
+                <div className="support-inventory-mobile-qty-row">
+                  <div className="support-inventory-mobile-qty-pill">
+                    <span className="support-inventory-mobile-qty-label">Cantidad:</span>
+                    <strong className="support-inventory-quantity">{item.quantity}</strong>
+                    <span className="support-inventory-unit">{item.unit}</span>
+                  </div>
+                  {canEdit && (
+                    <Button
+                      variant="secondary"
+                      className="support-inventory-btn-edit"
+                      onClick={() => {
+                        setEditing(item);
+                        setDraftQuantity(String(item.quantity));
+                        setReason('');
+                        setError('');
+                      }}
+                    >
+                      Modificar
+                    </Button>
+                  )}
+                </div>
+                {item.notes && (
+                  <div className="support-inventory-mobile-notes">
+                    <span className="support-inventory-mobile-notes-label">Observaciones:</span>
+                    <p>{item.notes}</p>
+                  </div>
+                )}
+              </div>
+            </article>
+          ))}
+          {!visible.length && (
+            <div className="support-log-empty-mobile">
+              {items.length ? 'No hay artículos que coincidan con la búsqueda.' : 'No hay artículos cargados.'}
+            </div>
+          )}
+        </div>
+      </div>
       <p className="support-inventory-footnote">Las cantidades conservan sus unidades originales: piezas, cajas, kits, pares, paquetes o bolsas. Ningún estado se ha verificado físicamente.</p>
     </>}
     {editing && <div className="support-inventory-edit-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !saving) setEditing(null); }}><form className="support-inventory-edit panel" onSubmit={saveQuantity} aria-label={`Modificar cantidad de ${editing.description}`}>
@@ -2605,9 +2870,9 @@ export function ProjectAuditLog({
       width: '13%',
       value: r => r.categoryLabel,
       render: r => (
-        <Badge tone={r.categoryTone}>
+        <span className={`audit-category audit-category-${r.category}`}>
           {r.categoryLabel}
-        </Badge>
+        </span>
       ),
     },
     {
@@ -2673,12 +2938,13 @@ export function ProjectAuditLog({
         updatedAt={data.updatedAt}
       />
 
-      <section className="audit-kpi-grid" aria-label="Indicadores globales de la bitácora">
+      <section className="audit-kpi-grid project-audit-summary" aria-label="Indicadores globales de la bitácora">
         {auditKpis.map(({ id, label, value, caption, icon: Icon, tone, pct, isActive, onClick }) => (
           <button
             key={id}
             type="button"
             className={`audit-kpi audit-kpi-${tone} ${isActive ? 'is-active' : ''}`}
+            aria-pressed={isActive}
             onClick={onClick}
           >
             <span className="audit-kpi-heading">

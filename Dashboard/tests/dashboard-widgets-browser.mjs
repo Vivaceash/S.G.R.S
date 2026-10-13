@@ -1,0 +1,107 @@
+import { chromium, expect } from '@playwright/test';
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+import { createDemo } from '../src/demo.mjs';
+import { ROLE_PAGE_DEFAULTS, defaultSubmodules } from '../src/domain.mjs';
+
+const browser = await chromium.launch({ headless: true });
+const data = createDemo();
+const pages = ROLE_PAGE_DEFAULTS['super-admin'];
+const capabilities = ['dashboard.read', 'inventory.read', 'idf.read', 'activity.read', 'traffic.read'];
+const writes = [];
+const errors = [];
+try {
+  const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  const page = await context.newPage();
+  page.on('pageerror', error => errors.push(error.message));
+  let userId = 'widget-test-a';
+  let restrict = false;
+  let failStock = true;
+  const requests = [];
+  await page.route('**/api/**', async route => {
+    const req = route.request();
+    if (req.method() !== 'GET') { writes.push(req.url()); return route.fulfill({ status: 500, json: { error: 'Unexpected write' } }); }
+    const path = new URL(req.url()).pathname;
+    requests.push(path);
+    let body;
+    if (path === '/api/auth/session') body = { user: { id: userId, name: 'Prueba de widgets', role: restrict ? 'viewer' : 'super-admin', allowed_pages: restrict ? ['resumen'] : pages }, csrf: 'mock', capabilities: restrict ? ['dashboard.read'] : capabilities, allowed_pages: restrict ? ['resumen'] : pages, allowed_submodules: restrict ? [] : defaultSubmodules(pages), roles: [] };
+    else if (path === '/api/dashboard/preferences') body = { principal_segments: null };
+    else if (path === '/api/admin/catalog') body = { modules: [] };
+    else if (path === '/api/idfs') body = data.idfs;
+    else if (path === '/api/reports') body = data.reports;
+    else if (path === '/api/devices') body = data.devices;
+    else if (path === '/api/ips') body = data.ips;
+    else if (path === '/api/audit') body = { events: data.audit };
+    else if (path === '/api/health') body = data.health;
+    else if (path === '/api/forti/network/dhcp-pools') body = { data: { pools: data.segments } };
+    else if (path === '/api/forti/network/dhcp-leases') body = { data: [] };
+    else if (path === '/api/support/inventory') {
+      if (failStock) return route.fulfill({ status: 503, json: { error: 'Inventario temporalmente no disponible' } });
+      body = { items: [{ id: 'toner', description: 'Tóner funcional', quantity: 2, unit: 'piezas' }, { id: 'ok', description: 'Existencia suficiente', quantity: 20, unit: 'piezas' }] };
+    } else if (path === '/api/aps/omnivista') body = { aps: data.aps };
+    else if (path === '/api/forti/system/resources') body = { success: true, data: { cpu_percent: 21, memory_percent: 46, session_count: 999 } };
+    else if (path === '/api/altas/omnivista') body = { success: true, data: { users: [{ username: 'vence.pronto', description: 'Oficio', dateOfEffective: Date.now() + 3600000 }] } };
+    else if (path === '/api/inventory/catalog') body = { assets: [{ id: 'c', dataset: 'cctv', issues: ['Pendiente'], decommissioned: false }] };
+    else if (path === '/api/support/movements') body = { movements: [] };
+    else return route.fulfill({ status: 404, json: { error: `Unexpected: ${path}` } });
+    await route.fulfill({ json: body });
+  });
+  await page.goto('http://127.0.0.1:3000/#resumen');
+  const grid = page.locator('.dashboard-widget-grid');
+  const cells = grid.locator(':scope > section');
+  await expect(cells).toHaveCount(3);
+  assert.equal(requests.includes('/api/support/inventory'), false, 'Unselected widgets must not fetch');
+  await page.getByRole('button', { name: 'Personalizar dashboard', exact: true }).click();
+  for (const title of ['Estado de dispositivos', 'Disponibilidad de direcciones IP', 'Existencias bajas de soporte', 'Recursos de FortiGate', 'Concesiones próximas a vencer', 'Estado de access points', 'Inventario CCTV', 'Últimos movimientos', 'Incidencias abiertas por IDF', 'Retiros recientes de soporte', 'Redes con mayor ocupación', 'Equipos por tipo', 'Dispositivos fuera de línea', 'Incidencias recientes', 'Conexión con los servicios']) {
+    await page.getByRole('button', { name: `Agregar ${title}`, exact: true }).click();
+  }
+  await expect(cells).toHaveCount(18);
+  await expect(grid.locator('[data-widget="network-pressure"] .widget-bar-rows li')).toHaveCount(5);
+  await expect(grid.locator('[data-widget="device-types"] .widget-bar-rows li').first()).toBeVisible();
+  await expect(grid.locator('[data-widget="services"]').getByText('Responde', { exact: true })).toHaveCount(2);
+  await expect(grid.locator('[data-widget="devices"] .widget-donut')).toBeVisible();
+  await expect(grid.locator('[data-widget="stock"]').getByText('No se pudo actualizar', { exact: true })).toBeVisible();
+  failStock = false;
+  await page.getByRole('button', { name: 'Actualizar Existencias bajas de soporte', exact: true }).click();
+  await expect(grid.getByText('Tóner funcional', { exact: true })).toBeVisible();
+  await expect(grid.getByText('Existencia suficiente', { exact: true })).toHaveCount(0);
+  await expect(grid.getByText('vence.pronto', { exact: true })).toBeVisible();
+  await expect(grid.getByText('999', { exact: true })).toBeVisible();
+  await page.getByLabel('Ancho de Estado de dispositivos', { exact: true }).selectOption('3');
+  await page.getByLabel('Ancho de Usuarios conectados por red', { exact: true }).selectOption('6');
+  await page.getByRole('button', { name: 'Subir Usuarios conectados por red', exact: true }).click();
+  await page.getByRole('button', { name: 'Quitar Segmentos de red y VLANs', exact: true }).click();
+  await page.getByRole('button', { name: 'Guardar diseño', exact: true }).click();
+  await expect(page.getByText('Diseño guardado para tu usuario en este navegador.')).toBeVisible();
+  await page.reload();
+  await expect(cells).toHaveCount(17);
+  await expect(cells.nth(1)).toHaveAttribute('data-widget', 'network');
+  await expect(grid.locator('[data-widget="devices"]')).toHaveClass(/widget-span-3/);
+  await expect(grid.locator('[data-widget="network"]')).toHaveClass(/widget-span-6/);
+  const dimensions = await grid.locator('[data-widget="network"]').evaluate(el => ({ width: el.getBoundingClientRect().width, grid: el.parentElement.getBoundingClientRect().width }));
+  assert.ok(dimensions.width / dimensions.grid > .45 && dimensions.width / dimensions.grid < .55);
+  await page.getByRole('button', { name: 'Personalizar dashboard', exact: true }).click();
+  await page.getByRole('button', { name: 'Restablecer diseño', exact: true }).click();
+  await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await expect(cells).toHaveCount(17);
+  await mkdir('tmp/widgets', { recursive: true });
+  await page.screenshot({ path: 'tmp/widgets/dashboard-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: 'tmp/widgets/dashboard-mobile.png', fullPage: true });
+  userId = 'widget-test-b';
+  await page.reload();
+  await expect(cells).toHaveCount(3);
+  userId = 'widget-test-a';
+  restrict = true;
+  requests.length = 0;
+  await page.reload();
+  await expect(cells).toHaveCount(4); // Only dashboard widgets remain when module permissions are revoked.
+  await page.getByRole('button', { name: 'Personalizar dashboard', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Agregar Existencias bajas de soporte', exact: true })).toHaveCount(0);
+  assert.equal(requests.includes('/api/support/inventory'), false);
+  assert.equal(requests.includes('/api/forti/system/resources'), false);
+  assert.deepEqual(writes, [], 'Personalization must never write to backend');
+  assert.deepEqual(errors, []);
+  console.log('PASS: 18 widgets, charts, service status, remote data/retry, filters, widths/order/removal, persistence/cancel, mobile, user isolation, revoked permissions and zero backend writes.');
+} finally { await browser.close(); }
