@@ -14,6 +14,7 @@ from app.schemas.network import (
     InterfaceItem,
     InterfaceConfigItem,
 )
+from app.operational_devices import normalize_interface_name
 
 router = APIRouter(
     prefix="/network",
@@ -54,7 +55,7 @@ async def get_interface_config(vdom: Optional[str] = Query(None, pattern=r'^[a-z
                 vlan = int(vlan)
             except (ValueError, TypeError):
                 raise HTTPException(502, 'Identificador VLAN no válido.') from None
-        result.append(InterfaceConfigItem(name=row['name'], alias=row.get('alias'), type=row.get('type'),
+        result.append(InterfaceConfigItem(name=normalize_interface_name(row['name']), alias=row.get('alias'), type=row.get('type'),
                                           vlan_id=vlan, parent=row.get('interface'), vdom=row_vdom,
                                           addresses=addresses, subnets=sorted({str(ipaddress.ip_interface(a).network) for a in addresses})))
     return BaseResponse(data=result, vdom=raw.get('vdom') or vdom, message='Configuración de red consultada; campos limitados a inventario.')
@@ -101,7 +102,7 @@ async def get_dhcp_pools(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9
     leases_by_intf: Dict[str, int] = {}
     for l in leases:
         if isinstance(l, dict):
-            intf_name = l.get("interface") or l.get("intf")
+            intf_name = normalize_interface_name(l.get("interface") or l.get("intf"))
             if intf_name:
                 leases_by_intf[intf_name] = leases_by_intf.get(intf_name, 0) + 1
 
@@ -119,7 +120,7 @@ async def get_dhcp_pools(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9
             continue
 
         s_id = s.get("id", 0)
-        intf = s.get("interface") or "N/A"
+        intf = normalize_interface_name(s.get("interface") or "N/A")
         gw = s.get("default-gateway") or s.get("default_gateway")
         netmask = s.get("netmask")
         lease_time = s.get("lease-time") or s.get("lease_time")
@@ -225,7 +226,7 @@ async def get_dhcp_leases(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-
     for server in servers:
         if not isinstance(server, dict) or server.get("status", "enable") != "enable":
             continue
-        interface = server.get("interface") or server.get("intf")
+        interface = normalize_interface_name(server.get("interface") or server.get("intf"))
         if interface and isinstance(server.get("lease-time"), int):
             lease_times[interface] = server["lease-time"]
         for reservation in server.get("reserved-address", []) or []:
@@ -253,7 +254,7 @@ async def get_dhcp_leases(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-
     leases: List[DHCPLeaseItem] = []
     for item in leases_raw:
         if isinstance(item, dict):
-            interface = item.get("interface") or item.get("intf")
+            interface = normalize_interface_name(item.get("interface") or item.get("intf"))
             mac = normalize_mac(item.get("mac"))
             reserved_ip = reservations.get((interface, mac))
             expires = item.get("expire_time") or item.get("expire") or item.get("expiry")
@@ -305,7 +306,7 @@ async def get_arp_table(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9_
                 ARPEntry(
                     ip=item.get("ip"),
                     mac=item.get("mac"),
-                    interface=item.get("interface") or item.get("intf"),
+                    interface=normalize_interface_name(item.get("interface") or item.get("intf")),
                     state=item.get("state") or (f"age: {item['age']}" if "age" in item else None),
                 )
             )
@@ -339,7 +340,7 @@ async def get_interfaces_status(vdom: Optional[str] = Query(None, pattern=r"^[a-
             if isinstance(data, dict):
                 items.append(
                     InterfaceItem(
-                        name=name,
+                        name=normalize_interface_name(name),
                         link_up=data.get("link", False) or data.get("status") == "up",
                         ip=data.get("ip"),
                         speed=data.get("speed"),
@@ -356,7 +357,7 @@ async def get_interfaces_status(vdom: Optional[str] = Query(None, pattern=r"^[a-
             if isinstance(data, dict):
                 items.append(
                     InterfaceItem(
-                        name=data.get("name", "unknown"),
+                        name=normalize_interface_name(data.get("name", "unknown")),
                         link_up=data.get("link", False) or data.get("status") == "up",
                         ip=data.get("ip"),
                         speed=data.get("speed"),

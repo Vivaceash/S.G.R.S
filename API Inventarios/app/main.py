@@ -38,6 +38,7 @@ app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION,
                   {'name': 'Salud', 'description': 'Comprobaciones públicas y autenticadas del servicio, almacenamiento y proveedores.'},
                   {'name': 'Autenticación y 2FA', 'description': 'Estado de autenticación, enrolamiento TOTP y emisión/verificación de sesiones.'},
                   {'name': 'CCTV', 'description': 'Catálogo, consulta, exportación, correcciones e historial de cámaras CCTV.'},
+                  {'name': 'Bitacora', 'description': 'Consulta de visitas e incidencias registradas en los IDF. Permite filtrar por IDF, estado, severidad o texto, ordenar y paginar. Las rutas son de solo lectura y requieren credencial de lectura mediante X-API-Key o Bearer.'},
                   {'name': 'Catálogos', 'description': 'Catálogos de gabinetes e información de redes documentadas y observadas.'},
                   {'name': 'Fuentes documentales', 'description': 'Fuentes importadas y descarga controlada de los archivos originales.'},
                   {'name': 'Cotejo de red', 'description': 'Ejecución y consulta de trabajos que comparan inventario documental contra Forti/Omni.'},
@@ -104,5 +105,5 @@ def docs_alias():
     return RedirectResponse('/docs')
 
 
-for router in (auth.router, cctv.router, catalogs.router):
+for router in (auth.router, cctv.router, cctv.reports_router, catalogs.router):
     app.include_router(router, prefix='/api/v1')

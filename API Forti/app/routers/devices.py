@@ -7,7 +7,7 @@ from app.core.security import verify_api_key
 from app.clients.fortios import fortios_client
 from app.schemas.common import BaseResponse
 from app.schemas.devices import DeviceItem, DeviceListSummary
-from app.operational_devices import collection, current_devices, mac as normalize_mac
+from app.operational_devices import collection, current_devices, mac as normalize_mac, normalize_interface_name
 
 router = APIRouter(
     prefix="/devices",
@@ -43,6 +43,7 @@ def _parse_device(
     interface = item.get("interface") or item.get("detected_interface") or item.get("master_interface")
     if not interface and isinstance(item.get("online_interfaces"), list) and len(item["online_interfaces"]) > 0:
         interface = item["online_interfaces"][0]
+    interface = normalize_interface_name(interface)
 
     last_seen = item.get("last_seen")
     now = current_time or time.time()

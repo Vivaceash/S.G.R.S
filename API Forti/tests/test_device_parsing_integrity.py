@@ -39,7 +39,7 @@ def test_parse_device_active_device_is_marked_online():
         "ip": "15.40.1.39",
         "hostname": "LAPTOP-MEDICO-01",
         "is_online": True,
-        "online_interfaces": ["SSID-Quetzacoat"],
+        "online_interfaces": ["SSID-Quetzacoatl"],
         "last_seen": now - 120,  # Visto hace 2 minutos
     }
 

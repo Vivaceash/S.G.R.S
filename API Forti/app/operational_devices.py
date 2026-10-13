@@ -6,6 +6,12 @@ def mac(value):
     return ''.join(c for c in str(value or '').lower() if c.isalnum())
 
 
+def normalize_interface_name(value):
+    """Return the canonical name for known FortiGate interface aliases."""
+    name = str(value or '')
+    return 'SSID-Quetzacoatl' if name == 'SSID-Quetzacoat' else name
+
+
 def collection(payload, key):
     if payload.get('status') not in (None, 'success') or payload.get('limit_reached'):
         raise ValueError('Incomplete provider response')
@@ -27,7 +33,7 @@ def current_devices(devices, servers, leases, arp):
             return False
 
     def scope(row):
-        return str(row.get('interface') or row.get('intf') or '')
+        return normalize_interface_name(row.get('interface') or row.get('intf'))
 
     def seen(row):
         try:

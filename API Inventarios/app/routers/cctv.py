@@ -1,11 +1,12 @@
 from typing import Literal
-from fastapi import APIRouter, Depends, Query, Response as HttpResponse
+from fastapi import APIRouter, Depends, Path, Query, Response as HttpResponse
 from app.core.security import require
 from app.schemas.common import Response
-from app.schemas.cctv import Camera, CameraPage, Catalog, Correction
-from app.services import inventory
+from app.schemas.cctv import Camera, CameraPage, Catalog, Correction, ReportPage
+from app.services import inventory, reports
 
 router = APIRouter(prefix='/cctv', tags=['CCTV'], dependencies=[Depends(require('read'))])
+reports_router = APIRouter(prefix='/cctv', tags=['Bitacora'], dependencies=[Depends(require('read'))])
 
 
 def filters(dataset: Literal['cctv', 'cctv_original'] = 'cctv', q: str = Query('', max_length=240, description='Busca por texto en identificadores, nombres, ubicación o modelo.'),
@@ -39,6 +40,33 @@ def cameras(params=Depends(filters), limit: int = Query(50, ge=1, le=500), offse
             description='Calcula totales y métricas sobre el mismo conjunto filtrado que /cameras, sin devolver el detalle completo de cada equipo.')
 def summary(params=Depends(filters)):
     return {'data': inventory.summary(inventory.select(inventory.snapshot(), params))}
+
+
+@reports_router.get('/reports', response_model=Response[ReportPage], summary='Consultar la bitácora IDF',
+            description='Devuelve reportes de todos los IDF o de uno seleccionado. Permite filtrar por estado, severidad y texto; ordenar y paginar los resultados. La consulta es de solo lectura y omite evidencias e identificadores internos de actores.')
+def report_log(idf_id: str | None = Query(None, max_length=240, description='Filtra por identificador de IDF.'),
+               status: Literal['open', 'resolved'] | None = Query(None, description='Filtra por estado de la incidencia.'),
+               severity: Literal['low', 'medium', 'high'] | None = Query(None, description='Filtra por severidad.'),
+               q: str = Query('', max_length=240, description='Busca en el texto público del reporte.'),
+               sort: Literal['date', 'idf_id', 'status', 'severity'] = Query('date', description='Campo de ordenamiento.'),
+               descending: bool = Query(True, description='Invierte el ordenamiento cuando es true.'),
+               limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0)):
+    return {'data': reports.query(idf_id=idf_id, status=status, severity=severity, q=q,
+                                  sort=sort, descending=descending, limit=limit, offset=offset)}
+
+
+@reports_router.get('/reports/{idf_id}', response_model=Response[ReportPage], summary='Consultar la bitácora de un IDF',
+            description='Devuelve una página de reportes del IDF indicado. Admite filtros por estado, severidad y texto, orden y paginación. Es de solo lectura y omite evidencias e identificadores internos de actores.')
+def report_log_for_idf(idf_id: str = Path(..., max_length=240, description='Identificador del IDF, por ejemplo idf-3.'),
+                       status: Literal['open', 'resolved'] | None = Query(None, description='Filtra por estado: open o resolved.'),
+                       severity: Literal['low', 'medium', 'high'] | None = Query(None, description='Filtra por severidad.'),
+                       q: str = Query('', max_length=240, description='Busca texto en los campos públicos del reporte.'),
+                       sort: Literal['date', 'idf_id', 'status', 'severity'] = Query('date', description='Campo usado para ordenar los resultados.'),
+                       descending: bool = Query(True, description='Orden descendente cuando es true.'),
+                       limit: int = Query(50, ge=1, le=500, description='Cantidad máxima de resultados por página.'),
+                       offset: int = Query(0, ge=0, description='Número de resultados que se omiten.')):
+    return {'data': reports.query(idf_id=idf_id, status=status, severity=severity, q=q,
+                                  sort=sort, descending=descending, limit=limit, offset=offset)}
 
 
 @router.get('/export', response_class=HttpResponse, summary='Exportar consulta a CSV',

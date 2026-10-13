@@ -69,3 +69,31 @@ class Catalog(BaseModel):
     sources: list[dict[str, Any]]
     structure: dict[str, Any]
     revision: str
+
+
+class Report(BaseModel):
+    """Sanitized IDF visit or incident from the dashboard report log."""
+
+    model_config = ConfigDict(extra='allow')
+    idf_id: str
+    id: str
+    date: str
+    severity: str
+    device: str = ''
+    temp: float | int | None = None
+    title: str = ''
+    description: str = ''
+    status: str
+    tech: str = ''
+    resolved_at: str | None = None
+    origin_key: str | None = None
+    record_key: str
+
+
+class ReportPage(BaseModel):
+    """Bounded page of sanitized IDF reports."""
+
+    items: list[Report]
+    total: int
+    limit: int
+    offset: int

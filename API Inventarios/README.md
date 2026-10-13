@@ -53,6 +53,7 @@ Una sustitución documental posterior requiere preparar el nuevo JSON con el imp
 ## Rutas principales
 
 - `GET /api/v1/cctv/catalog`, `/cameras`, `/cameras/{id}`, `/summary`, `/export`.
+- `GET /api/v1/cctv/reports` y `/reports/{idf_id}` consultan la bitácora IDF existente con filtros, ordenamiento y paginación; son de solo lectura y no devuelven rutas de evidencia ni identificadores internos de actores.
 - `PATCH /api/v1/cctv/cameras/{id}` para campos físicos/administrativos mediante versión optimista.
 - `/cameras/{id}/observations` y `/changes` para historial.
 - `POST /api/v1/reconciliation/jobs`; consulta el resultado en `GET /api/v1/reconciliation/jobs/{id}`.

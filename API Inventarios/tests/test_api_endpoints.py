@@ -26,10 +26,10 @@ def test_scalar_and_openapi_are_independent(client, monkeypatch):
     assert '/api/v1/cctv/cameras/{asset_id}' in schema['paths']
     assert 'APIKeyHeader' in schema['components']['securitySchemes']
     operations = [operation for path in schema['paths'].values() for operation in path.values() if isinstance(operation, dict)]
-    assert len(schema['paths']) == 19
-    assert len(operations) == 20
+    assert len(schema['paths']) == 21
+    assert len(operations) == 22
     assert all(operation.get('summary') and operation.get('description') for operation in operations)
-    assert {tag['name'] for tag in schema['tags']} == {'Salud', 'Autenticación y 2FA', 'CCTV', 'Catálogos', 'Fuentes documentales', 'Cotejo de red'}
+    assert {tag['name'] for tag in schema['tags']} == {'Salud', 'Autenticación y 2FA', 'CCTV', 'Bitacora', 'Catálogos', 'Fuentes documentales', 'Cotejo de red'}
     assert 'openapi.json' in client.get('/scalar').text
     monkeypatch.setattr(settings, 'ENABLE_DOCS', False)
     assert client.get('/scalar').status_code == 404
@@ -47,6 +47,24 @@ def test_auth_fields_pagination_and_export(client):
     assert client.get('/api/v1/cctv/export', headers=READ).status_code == 403
     assert client.get('/api/v1/cctv/export', headers={'Authorization': 'Bearer export-test'}).status_code == 200
     assert client.get('/api/v1/cctv/cameras?limit=501', headers=READ).status_code == 422
+
+
+def test_idf_reports_are_authenticated_paginated_and_sanitized(client, monkeypatch, tmp_path):
+    from app.services import reports
+    source = tmp_path / 'reports.json'
+    source.write_text(json.dumps({'idf-1': {'incidents': [
+        {'id': 'IDF-1', 'date': '2026-10-01', 'severity': 'medium', 'status': 'open',
+         'title': 'Revisar cámara', 'description': 'Detalle', 'actor_id': 'private',
+         'evidence': 'IDF-private.png'}]}}))
+    monkeypatch.setattr(reports, 'REPORTS_FILE', source)
+    assert client.get('/api/v1/cctv/reports').status_code == 401
+    response = client.get('/api/v1/cctv/reports?idf_id=idf-1&limit=1', headers=READ)
+    assert response.status_code == 200
+    data = response.json()['data']
+    assert data['total'] == 1 and data['items'][0]['idf_id'] == 'idf-1'
+    assert 'actor_id' not in response.text and 'evidence' not in response.text
+    assert client.get('/api/v1/cctv/reports/idf-1', headers=READ).json()['data']['total'] == 1
+    assert client.get('/api/v1/cctv/reports?limit=501', headers=READ).status_code == 422
 
 
 def test_catalog_exposes_documentary_observations(client):
