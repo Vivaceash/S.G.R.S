@@ -64,6 +64,7 @@ try {
       }
     } else if (pages.includes('idf')) {
       await page.getByRole('tab', { name: 'Inventario', exact: true }).waitFor();
+      await page.getByRole('button', { name: /^IDF-03:/ }).click();
       await page.getByRole('tab', { name: 'Bitácora', exact: true }).click();
       await page.getByText('Incidencia pendiente', { exact: true }).waitFor();
       assert.equal(await page.getByRole('button', { name: 'Resolver', exact: true }).count(), 1);
