@@ -385,32 +385,96 @@ export function Requests({ demo, data }) {
   };
 
   const userColumns = [
-    { key: 'username', label: 'Cuenta' },
-    { key: 'fullName', label: 'Nombre' },
+    {
+      key: 'username',
+      label: 'Cuenta',
+      render: row => (
+        <span className="altas-cell-account" title={row.username}>
+          {row.username || '—'}
+        </span>
+      )
+    },
+    {
+      key: 'fullName',
+      label: 'Nombre',
+      render: row => (
+        <span className="altas-cell-name">
+          {row.fullName ? <strong>{row.fullName}</strong> : <span className="altas-empty-dash">—</span>}
+        </span>
+      )
+    },
     {
       key: 'registeredAt',
       label: 'Fecha de alta',
       render: row => row.registeredAt ? (
-        <span style={{ fontSize: '12px' }}>
+        <span className="altas-cell-date">
+          <Calendar size={13} aria-hidden="true" />
           {new Date(Number(row.registeredAt)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
         </span>
-      ) : <span className="text-muted text-xs">—</span>
+      ) : <span className="altas-empty-dash">—</span>
     },
-    { key: 'department', label: 'Departamento' },
-    { key: 'position', label: 'Puesto' },
-    { key: 'description', label: 'Descripción / Motivo' },
-    { key: 'accessRoleProfile', label: 'Perfil de acceso' },
-    { key: 'status', label: 'Estado', render: row => <Badge status={row.status} /> },
+    {
+      key: 'department',
+      label: 'Departamento',
+      render: row => row.department ? (
+        <span className="altas-cell-dept">{row.department}</span>
+      ) : <span className="altas-empty-dash">—</span>
+    },
+    {
+      key: 'position',
+      label: 'Puesto',
+      render: row => row.position ? (
+        <span className="altas-cell-position">{row.position}</span>
+      ) : <span className="altas-empty-dash">—</span>
+    },
+    {
+      key: 'description',
+      label: 'Descripción / Motivo',
+      render: row => row.description ? (
+        <span className="altas-cell-desc" title={row.description}>{row.description}</span>
+      ) : <span className="altas-empty-dash">—</span>
+    },
+    {
+      key: 'accessRoleProfile',
+      label: 'Perfil de acceso',
+      render: row => row.accessRoleProfile ? (
+        <span className="altas-profile-badge" title={row.accessRoleProfile}>
+          <Wifi size={12} aria-hidden="true" />
+          <span>{row.accessRoleProfile}</span>
+        </span>
+      ) : <span className="altas-empty-dash">—</span>
+    },
+    {
+      key: 'status',
+      label: 'Estado',
+      render: row => {
+        const val = row.status;
+        const isActive = val === 1 || val === '1' || val === 'online' || val === 'active' || val === 'normal';
+        return (
+          <span className={`badge ${isActive ? 'badge-success' : 'badge-neutral'}`}>
+            <span className="badge-dot" aria-hidden="true" />
+            {isActive ? 'Activo' : (val === 0 || val === '0' || val === 'offline' || val === 'inactive' ? 'Inactivo' : (statusNames[val] || val || 'Sin verificar'))}
+          </span>
+        );
+      }
+    },
     {
       key: 'devices',
       label: 'Dispositivos',
       sortable: false,
       render: row => (Array.isArray(row.devices) && row.devices.length > 0) ? (
-        <Button variant="secondary" onClick={() => setSelectedUser(row)}>
-          {row.devices.length} {row.devices.length === 1 ? 'equipo' : 'equipos'} · Ver
-        </Button>
+        <button
+          type="button"
+          className="altas-device-btn"
+          onClick={() => setSelectedUser(row)}
+          title={`Ver dispositivos de ${row.username}`}
+        >
+          <Monitor size={14} aria-hidden="true" />
+          <span>{row.devices.length} {row.devices.length === 1 ? 'equipo' : 'equipos'}</span>
+          <ArrowRight size={13} aria-hidden="true" />
+        </button>
       ) : (
-        <span className="text-muted text-xs">Sin equipos</span>
+        <span className="altas-no-devices">Sin equipos</span>
       )
     }
   ];
