@@ -244,10 +244,10 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   const [omniError, setOmniError] = useState('');
   const [omniRevision, setOmniRevision] = useState(0);
   const [omniUpdatedAt, setOmniUpdatedAt] = useState(null);
-  const [selectedAp, setSelectedAp] = useState(null);
   const [mapPositions, setMapPositions] = useState([]);
   const [mapLoading, setMapLoading] = useState(false);
   const [mapError, setMapError] = useState('');
+  const omniState = useListState('omnivista-aps');
   const demoAps = demo ? data?.aps : null;
 
   // Compatibilidad con URLs abiertas antes de retirar el estado Warning.
