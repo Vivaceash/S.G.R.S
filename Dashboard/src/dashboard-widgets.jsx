@@ -1,5 +1,5 @@
 import React, { Children, useEffect, useState } from 'react';
-import { Activity, ArrowDown, ArrowUp, ArrowRight, Building2, Camera, Check, CheckCircle2, Clock3, FileText, Layers3, LayoutDashboard, Monitor, Network, Package, Plus, RefreshCw, RotateCcw, Settings2, ShieldCheck, Trash2, Wifi } from 'lucide-react';
+import { Activity, ArrowDown, ArrowUp, ArrowRight, Building2, Camera, Check, CheckCircle2, CircleAlert, Clock3, FileText, Layers3, LayoutDashboard, Monitor, Network, Package, Plus, RefreshCw, RotateCcw, Settings2, ShieldCheck, Trash2, Wifi } from 'lucide-react';
 import { Button, Empty, IconButton, Loading, Notice, SearchField } from './components.jsx';
 import { dateTime, formatDeviceType, number, reportsFromData, request } from './domain.mjs';
 import { useSession } from './session.jsx';
@@ -10,6 +10,14 @@ const WIDGET_VISUALS = {
   'Registro IDF': [Building2, 'amber'], Bitácora: [FileText, 'purple'], FortiGate: [ShieldCheck, 'teal'],
   'Gestión de altas': [Clock3, 'amber'], 'Access Points': [Wifi, 'blue'], CCTV: [Camera, 'purple'], Soporte: [Package, 'brand'],
 };
+
+function WidgetWarning({ error, onRetry }) {
+  return <div className="widget-warning" role="status">
+    <CircleAlert size={15} aria-hidden="true" />
+    <span title={error}>Actualización pendiente<span className="sr-only">: {error}. Los datos pueden estar desactualizados.</span></span>
+    <button type="button" onClick={onRetry}><RefreshCw size={13} aria-hidden="true" />Reintentar</button>
+  </div>;
+}
 
 function Distribution({ values, label }) {
   const total = values.reduce((sum, item) => sum + item.value, 0);
@@ -192,7 +200,7 @@ function DataWidget({ id, data, loading, errors, demo, navigate, refresh }) {
   const updatedAt = REMOTE[id] ? remote.updatedAt : data.updatedAt;
   return <article className={`dashboard-data-widget widget-tone-${tone}`} data-kind={id} aria-label={definition.title} aria-busy={busy}>
     <header><span className="widget-heading-icon"><WidgetIcon size={21} strokeWidth={1.7} /></span><div><span className="widget-module">{definition.module}</span><h2>{definition.title}</h2></div><IconButton icon={RefreshCw} label={`Actualizar ${definition.title}`} disabled={busy} onClick={REMOTE[id] ? remote.retry : refresh} /></header>
-    <div className="widget-data-body">{busy ? <Loading /> : error ? <Notice tone="warning" title="No se pudo actualizar" action={<Button onClick={REMOTE[id] ? remote.retry : refresh}>Reintentar</Button>}>{error}</Notice> : distribution ? <>{distribution}{id === 'aps' && <Numbers values={[['Clientes conectados', (source?.aps || []).reduce((sum, row) => sum + (Number(row.clients) || 0), 0)]]} />}</> : body}</div>
+    <div className="widget-data-body">{busy ? <Loading /> : error ? <WidgetWarning error={error} onRetry={REMOTE[id] ? remote.retry : refresh} /> : distribution ? <>{distribution}{id === 'aps' && <Numbers values={[['Clientes conectados', (source?.aps || []).reduce((sum, row) => sum + (Number(row.clients) || 0), 0)]]} />}</> : body}</div>
     <footer><small>{demo ? 'Datos de demostración' : updatedAt ? `Actualizado ${dateTime(updatedAt)}` : 'Sin actualización'}</small>{target && (id !== 'forti' || session.can('traffic.read')) && <button type="button" onClick={() => navigate(target)}>Ver detalle <ArrowRight size={14} /></button>}</footer>
   </article>;
 }
@@ -244,7 +252,7 @@ export function DashboardWidgets({ children, data, demo, userId, loading, errors
       const slotError = widget.id === 'metrics' ? (errors.ips || errors.devices || errors.segments) : ['segments', 'network'].includes(widget.id) ? errors.segments : '';
       return <section key={widget.id} className={`dashboard-widget-cell widget-span-${widget.size}`} data-widget={widget.id} style={{ '--widget-span': widget.size }}>
         {editing && <div className="widget-placement"><strong>{definition.title}</strong><div><label><span className="sr-only">Ancho de {definition.title}</span><select aria-label={`Ancho de ${definition.title}`} value={widget.size} onChange={event => setDraft(current => current.map(item => item.id === widget.id ? { ...item, size: Number(event.target.value) } : item))}>{WIDGET_SIZES.filter(size => size.value >= definition.min).map(size => <option key={size.value} value={size.value}>{size.label}</option>)}</select></label><IconButton icon={ArrowUp} label={`Subir ${definition.title}`} disabled={index === 0} onClick={() => move(index, -1)} /><IconButton icon={ArrowDown} label={`Bajar ${definition.title}`} disabled={index === displayed.length - 1} onClick={() => move(index, 1)} /><IconButton icon={Trash2} label={`Quitar ${definition.title}`} onClick={() => setDraft(current => current.filter(item => item.id !== widget.id))} /></div></div>}
-        {slots[widget.id] && slotError && <Notice tone="warning" title="Información incompleta" action={<Button onClick={refresh}>Reintentar</Button>}>{slotError} Los valores de la última consulta pueden estar desactualizados.</Notice>}
+        {slots[widget.id] && slotError && <WidgetWarning error={slotError} onRetry={refresh} />}
         {slots[widget.id] || <DataWidget id={widget.id} data={data} demo={demo} loading={loading} errors={errors} navigate={navigate} refresh={refresh} />}
       </section>;
     })}</div>

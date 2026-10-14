@@ -27,7 +27,10 @@ def database(write=False):
     db = sqlite3.connect(path, timeout=10)
     db.row_factory = sqlite3.Row
     try:
-        db.executescript(SCHEMA)
+        # Schema setup writes even for INSERT OR IGNORE. Do it once rather
+        # than acquiring a write lock for every catalogue/health read.
+        if db.execute('PRAGMA user_version').fetchone()[0] < 1:
+            db.executescript(SCHEMA + '\nPRAGMA user_version=1;')
         if write:
             db.execute('BEGIN IMMEDIATE')
         yield db

@@ -328,10 +328,17 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
     if (route === 'aps' && !apDocumentary && !apMap) { setLoading(false); return; }
     const controller = new AbortController(); let active = true;
     setLoading(true); setError('');
-    const timer = setTimeout(() => controller.abort(), 12000);
+    // Allow the backend's 15-second provider timeout to return its diagnosis.
+    // Settle the UI here as well: abort alone depends on fetch rejecting.
+    const timer = setTimeout(() => {
+      if (!active) return;
+      controller.abort();
+      setError('La consulta al inventario tardó demasiado. Vuelve a intentar; si persiste, revisa la conexión de API Inventarios.');
+      setLoading(false);
+    }, 25000);
     request('/api/inventory/catalog', { signal: controller.signal }).then(result => {
       if (active && !controller.signal.aborted) setCatalog(result);
-    }).catch(e => { if (active) setError(e.name === 'AbortError' ? 'La consulta tardó demasiado. Vuelve a intentar.' : e.message); }).finally(() => { clearTimeout(timer); if (active) setLoading(false); });
+    }).catch(e => { if (active && !controller.signal.aborted) setError(e.message || 'No se pudo consultar API Inventarios.'); }).finally(() => { clearTimeout(timer); if (active) setLoading(false); });
     return () => { active = false; controller.abort(); clearTimeout(timer); };
   }, [demo, revision, route, apDocumentary, apMap]);
   useEffect(() => () => { generation.current++; requestRef.current?.abort(); }, []);

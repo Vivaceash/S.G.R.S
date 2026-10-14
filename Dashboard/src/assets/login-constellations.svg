@@ -1,0 +1,223 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750 900" fill="none">
+  <defs>
+    <!-- Gradiente de enlace troncal (tráfico de datos) -->
+    <linearGradient id="link-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#94a3b8" stop-opacity="0.3"/>
+      <stop offset="50%" stop-color="#cbd5e1" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#94a3b8" stop-opacity="0.3"/>
+    </linearGradient>
+
+    <!-- Resplandor de nodo de red -->
+    <radialGradient id="node-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="35%" stop-color="#e2e8f0" stop-opacity="0.7"/>
+      <stop offset="70%" stop-color="#94a3b8" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#64748b" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Paquete de datos viajando por la fibra/enlace -->
+    <filter id="packet-blur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1.5"/>
+    </filter>
+  </defs>
+
+  <style>
+    /* Líneas de enlace troncal */
+    .net-link {
+      stroke: #94a3b8;
+      stroke-width: 1.1;
+      opacity: 0.38;
+    }
+    .net-link-backbone {
+      stroke: #8fa0b5;
+      stroke-width: 1.4;
+      opacity: 0.48;
+    }
+    .net-link-sub {
+      stroke: #cbd5e1;
+      stroke-width: 0.85;
+      stroke-dasharray: 4 3;
+      opacity: 0.35;
+    }
+
+    /* Pulso de actividad de nodo (Heartbeat NOC) */
+    .node-pulse-1 { animation: net-heartbeat 4.5s ease-in-out infinite; }
+    .node-pulse-2 { animation: net-heartbeat 5.8s ease-in-out -1.5s infinite; }
+    .node-pulse-3 { animation: net-heartbeat 6.2s ease-in-out -3.2s infinite; }
+
+    @keyframes net-heartbeat {
+      0%, 100% { opacity: 0.70; transform: scale(0.92); }
+      50% { opacity: 1.0; transform: scale(1.18); }
+    }
+
+    /* Paquetes de datos que fluyen por las rutas principales */
+    .packet {
+      fill: #ffffff;
+      opacity: 0;
+      animation: packet-flow 8s ease-in-out infinite;
+    }
+    .pkt-delay-1 { animation-delay: 0.8s; }
+    .pkt-delay-2 { animation-delay: 3.4s; }
+    .pkt-delay-3 { animation-delay: 5.6s; }
+
+    @keyframes packet-flow {
+      0% { opacity: 0; offset-distance: 0%; }
+      15% { opacity: 0.95; }
+      85% { opacity: 0.95; }
+      100% { opacity: 0; offset-distance: 100%; }
+    }
+
+    /* Anillos de escaneo de radio / broadcast en el nodo Core */
+    .core-ping {
+      stroke: #94a3b8;
+      stroke-width: 0.9;
+      fill: none;
+      opacity: 0;
+      animation: ping-wave 6s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+      transform-box: fill-box;
+      transform-origin: center;
+    }
+    .ping-delay-1 { animation-delay: 0s; }
+    .ping-delay-2 { animation-delay: 3s; }
+
+    @keyframes ping-wave {
+      0% { r: 5px; opacity: 0.7; }
+      70% { r: 36px; opacity: 0.08; }
+      100% { r: 48px; opacity: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .node-pulse-1, .node-pulse-2, .node-pulse-3, .core-ping, .packet { animation: none; }
+    }
+  </style>
+
+  <!-- ========================================================= -->
+  <!-- TOPOLOGÍA DE RED NOC / MALLA DE TELECOMUNICACIONES        -->
+  <!-- ========================================================= -->
+
+  <!-- ENLACES DE TRÁFICO (Backbone e interconexiones) -->
+  <g id="topology-links">
+    <!-- Troncal Superior -->
+    <path class="net-link-backbone" d="M620 60 L480 110 L380 70 L250 120"/>
+    <path class="net-link" d="M480 110 L520 220 L660 190 L620 60"/>
+    <!-- Troncal Central a Router Core (520, 220) -->
+    <path class="net-link-backbone" d="M520 220 L410 310 L290 260 L250 120"/>
+    <path class="net-link" d="M380 70 L290 260"/>
+    <path class="net-link" d="M410 310 L490 430 L630 380 L660 190"/>
+    <path class="net-link-backbone" d="M520 220 L630 380"/>
+    <!-- Anillo de Distribución e IDF Clusters -->
+    <path class="net-link" d="M490 430 L370 520 L280 440 L410 310"/>
+    <path class="net-link" d="M280 440 L190 530 L260 620 L370 520"/>
+    <path class="net-link-backbone" d="M490 430 L580 560 L680 510 L630 380"/>
+    <path class="net-link" d="M580 560 L490 670 L370 520"/>
+    <!-- Ramales perimetrales / Enlaces de Acceso -->
+    <path class="net-link-sub" d="M620 60 L710 40"/>
+    <path class="net-link-sub" d="M660 190 L730 230"/>
+    <path class="net-link-sub" d="M680 510 L730 560"/>
+    <path class="net-link-sub" d="M490 670 L550 780 L440 820 L360 740 L260 620"/>
+    <path class="net-link-sub" d="M370 520 L360 740"/>
+    <path class="net-link-sub" d="M190 530 L130 610 L190 690 L260 620"/>
+    <path class="net-link-sub" d="M290 260 L180 320 L190 420 L280 440"/>
+    <path class="net-link-sub" d="M250 120 L160 160 L180 320"/>
+  </g>
+
+  <!-- ONDAS DE ESCANEO / BROADCAST (en nodos estratégicos) -->
+  <g id="broadcast-waves">
+    <!-- Router Core Primario (520, 220) -->
+    <circle cx="520" cy="220" class="core-ping ping-delay-1"/>
+    <circle cx="520" cy="220" class="core-ping ping-delay-2"/>
+    <!-- Switch de Distribución (370, 520) -->
+    <circle cx="370" cy="520" class="core-ping ping-delay-2"/>
+  </g>
+
+  <!-- NODOS PRINCIPALES DE RED (Routers, Switches Core, Firewalls) -->
+  <g id="topology-nodes">
+    <!-- Nodo Router de Borde (620, 60) -->
+    <g class="node-pulse-1" style="transform-origin: 620px 60px;">
+      <circle cx="620" cy="60" r="8" fill="url(#node-glow)"/>
+      <circle cx="620" cy="60" r="3.2" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+    </g>
+
+    <!-- Nodo Gateway (480, 110) -->
+    <g class="node-pulse-2" style="transform-origin: 480px 110px;">
+      <circle cx="480" cy="110" r="7" fill="url(#node-glow)"/>
+      <circle cx="480" cy="110" r="2.8" fill="#ffffff" stroke="#94a3b8" stroke-width="1.1"/>
+    </g>
+
+    <!-- Nodo Core NOC Principal (520, 220) -->
+    <g class="node-pulse-1" style="transform-origin: 520px 220px;">
+      <circle cx="520" cy="220" r="11" fill="url(#node-glow)"/>
+      <circle cx="520" cy="220" r="4.2" fill="#ffffff" stroke="#64748b" stroke-width="1.5"/>
+      <circle cx="520" cy="220" r="1.8" fill="#94a3b8"/>
+    </g>
+
+    <!-- Nodo Switch Core Distribución (410, 310) -->
+    <g class="node-pulse-3" style="transform-origin: 410px 310px;">
+      <circle cx="410" cy="310" r="8.5" fill="url(#node-glow)"/>
+      <circle cx="410" cy="310" r="3.4" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+    </g>
+
+    <!-- Nodo Enlace WAN / Red Externa (660, 190) -->
+    <g class="node-pulse-2" style="transform-origin: 660px 190px;">
+      <circle cx="660" cy="190" r="7.5" fill="url(#node-glow)"/>
+      <circle cx="660" cy="190" r="3.0" fill="#ffffff" stroke="#94a3b8" stroke-width="1.1"/>
+    </g>
+
+    <!-- Nodo Firewall Perimetral (630, 380) -->
+    <g class="node-pulse-1" style="transform-origin: 630px 380px;">
+      <circle cx="630" cy="380" r="9" fill="url(#node-glow)"/>
+      <circle cx="630" cy="380" r="3.5" fill="#ffffff" stroke="#64748b" stroke-width="1.3"/>
+    </g>
+
+    <!-- Nodo IDF Centro (490, 430) -->
+    <g class="node-pulse-3" style="transform-origin: 490px 430px;">
+      <circle cx="490" cy="430" r="8" fill="url(#node-glow)"/>
+      <circle cx="490" cy="430" r="3.0" fill="#ffffff" stroke="#94a3b8" stroke-width="1.1"/>
+    </g>
+
+    <!-- Nodo Switch Agregación (370, 520) -->
+    <g class="node-pulse-1" style="transform-origin: 370px 520px;">
+      <circle cx="370" cy="520" r="10" fill="url(#node-glow)"/>
+      <circle cx="370" cy="520" r="3.8" fill="#ffffff" stroke="#64748b" stroke-width="1.4"/>
+      <circle cx="370" cy="520" r="1.6" fill="#94a3b8"/>
+    </g>
+
+    <!-- Nodo IDF Sur (580, 560) -->
+    <g class="node-pulse-2" style="transform-origin: 580px 560px;">
+      <circle cx="580" cy="560" r="8" fill="url(#node-glow)"/>
+      <circle cx="580" cy="560" r="3.0" fill="#ffffff" stroke="#94a3b8" stroke-width="1.1"/>
+    </g>
+
+    <!-- Nodo Borde Secundario (680, 510) -->
+    <circle cx="680" cy="510" r="2.6" fill="#ffffff" stroke="#94a3b8" stroke-width="1"/>
+    <!-- Nodos Periféricos de Acceso / APs -->
+    <circle cx="380" cy="70" r="2.4" fill="#ffffff" stroke="#94a3b8" stroke-width="1"/>
+    <circle cx="250" cy="120" r="2.5" fill="#ffffff" stroke="#94a3b8" stroke-width="1"/>
+    <circle cx="290" cy="260" r="2.7" fill="#ffffff" stroke="#94a3b8" stroke-width="1.1"/>
+    <circle cx="280" cy="440" r="2.5" fill="#ffffff" stroke="#94a3b8" stroke-width="1"/>
+    <circle cx="190" cy="530" r="2.2" fill="#ffffff" stroke="#94a3b8" stroke-width="0.9"/>
+    <circle cx="260" cy="620" r="2.6" fill="#ffffff" stroke="#94a3b8" stroke-width="1"/>
+    <circle cx="490" cy="670" r="2.8" fill="#ffffff" stroke="#94a3b8" stroke-width="1.1"/>
+    <circle cx="360" cy="740" r="2.2" fill="#ffffff" stroke="#94a3b8" stroke-width="0.9"/>
+    <circle cx="440" cy="820" r="2.0" fill="#ffffff" stroke="#94a3b8" stroke-width="0.9"/>
+    <circle cx="550" cy="780" r="2.2" fill="#ffffff" stroke="#94a3b8" stroke-width="0.9"/>
+    <circle cx="180" cy="320" r="1.8" fill="#cbd5e1"/>
+    <circle cx="160" cy="160" r="1.8" fill="#cbd5e1"/>
+    <circle cx="130" cy="610" r="1.8" fill="#cbd5e1"/>
+    <circle cx="190" cy="690" r="1.8" fill="#cbd5e1"/>
+  </g>
+
+  <!-- PUNTOS DISCRETOS DE TELEMETRÍA DE RED (Fondo sutil) -->
+  <g id="telemetry-grid" opacity="0.45">
+    <circle cx="330" cy="170" r="1.2" fill="#94a3b8"/>
+    <circle cx="440" cy="200" r="1.2" fill="#94a3b8"/>
+    <circle cx="570" cy="140" r="1.2" fill="#94a3b8"/>
+    <circle cx="610" cy="280" r="1.2" fill="#94a3b8"/>
+    <circle cx="460" cy="370" r="1.2" fill="#94a3b8"/>
+    <circle cx="340" cy="380" r="1.2" fill="#94a3b8"/>
+    <circle cx="230" cy="370" r="1.2" fill="#94a3b8"/>
+    <circle cx="420" cy="460" r="1.2" fill="#94a3b8"/>
+    <circle cx="540" cy="480" r="1.2" fill="#94a3b8"/>
+    <circle cx="430" cy="590" r="1.2" fill="#94a3b8"/>
+  </g>
+</svg>

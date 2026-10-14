@@ -2164,7 +2164,7 @@ export default function App() {
   });
 
   return (
-    <>
+    <div className="dashboard-shell">
       <a
         className="skip-link"
         href="#main-content"
@@ -2268,7 +2268,8 @@ export default function App() {
           onClick={() => setMenu(true)}
         />
       </header>
-      <aside className="sidebar">
+      <aside id="desktop-sidebar" className="sidebar sidebar-solar">
+        <div className="sidebar-art" aria-hidden="true"><i className="sidebar-stars" /><i className="sidebar-calendar" /></div>
         <a
           href={`#${homeRoute}`}
           className="sidebar-brand"
@@ -2550,10 +2551,6 @@ export default function App() {
               <div className="idf-report-sheet-titles">
                 <span className="idf-report-badge-folio">Folio: {modal.row.id}</span>
                 <h3 className="idf-report-sheet-activity">{modal.row.title || "Visita / Reporte de IDF"}</h3>
-                <p className="idf-report-sheet-subtitle">
-                  Inspección realizada en <strong>{modal.row.idf}</strong>
-                  {modal.row.device ? <> · Equipo: <strong>{modal.row.device}</strong></> : null}
-                </p>
               </div>
               <div className="idf-report-sheet-badges">
                 <span className={`idf-status-pill ${modal.row.status === "resolved" ? "is-resolved" : "is-pending"}`}>
@@ -2569,7 +2566,7 @@ export default function App() {
             </div>
 
             {/* Cuadrícula organizada en secciones claras */}
-            <div className="idf-report-sections">
+            <div className="idf-report-sections idf-report-summary">
               {/* Sección 1: Datos Operativos */}
               <div className="idf-report-card">
                 <h4 className="idf-card-title">Datos Operativos</h4>
@@ -2584,6 +2581,18 @@ export default function App() {
                       <strong className="idf-info-val">{modal.row.device}</strong>
                     </div>
                   )}
+                </div>
+                <div className="idf-report-findings">
+                <h4 className="idf-card-title">Descripción y Hallazgos</h4>
+                <p className="idf-description-text">
+                  {modal.row.description || "Sin descripción proporcionada."}
+                </p>
+                </div>
+              </div>
+              <div className="idf-report-side">
+              <div className="idf-report-card">
+                <h4 className="idf-card-title">Responsable y fecha</h4>
+                <div className="idf-card-grid">
                   <div className="idf-info-item">
                     <span className="idf-info-label">Responsable</span>
                     <strong className="idf-info-val">{modal.row.actor}</strong>
@@ -2622,14 +2631,7 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Sección 3: Descripción detallada */}
-            <div className="idf-report-card full-span">
-              <h4 className="idf-card-title">Descripción y Hallazgos</h4>
-              <p className="idf-description-text">
-                {modal.row.description || "Sin descripción proporcionada."}
-              </p>
+              </div>
             </div>
 
             {/* Sección 4: Evidencia Fotográfica */}
@@ -2792,6 +2794,6 @@ export default function App() {
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }

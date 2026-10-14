@@ -1717,6 +1717,9 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
 
 export function SupportMovements({ demo }) {
   const [rows, setRows] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [photoError, setPhotoError] = useState(false);
+  const showDetail = row => { setPhotoError(false); setSelected(row); };
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const reload = () => {
@@ -1773,6 +1776,7 @@ export function SupportMovements({ demo }) {
             <th>Responsable y fecha</th>
             <th>Evidencia</th>
             <th>Observaciones</th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -1814,27 +1818,27 @@ export function SupportMovements({ demo }) {
               </td>
               <td>
                 {row.evidence ? (
-                  <a
+                  <button
+                    type="button"
                     className="support-evidence-link"
-                    href={`/api/support/movements/evidence/${encodeURIComponent(row.evidence)}?view=1`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    onClick={() => showDetail(row)}
                   >
                     <Camera size={14} aria-hidden="true" />
                     <span>Ver foto</span>
-                  </a>
+                  </button>
                 ) : (
-                  <span className="text-muted text-xs">—</span>
+                  <span className="text-muted text-xs">Sin foto</span>
                 )}
               </td>
               <td>
                 <span className="support-notes-cell">{row.notes || '—'}</span>
               </td>
+              <td><Button icon={Eye} onClick={() => showDetail(row)}>Ver</Button></td>
             </tr>
           ))}
           {!visible.length && (
             <tr>
-              <td colSpan={5} className="support-log-empty">
+              <td colSpan={6} className="support-log-empty">
                 {rows.length ? 'No hay movimientos con esos filtros.' : 'Aún no hay retiros registrados.'}
               </td>
             </tr>
@@ -1851,11 +1855,7 @@ export function SupportMovements({ demo }) {
                 <strong>{row.idf_name}</strong>
                 <span className="support-log-folio-badge">{row.id.slice(0, 8).toUpperCase()}</span>
               </div>
-              {row.evidence && (
-                <a className="support-evidence-link" href={`/api/support/movements/evidence/${encodeURIComponent(row.evidence)}?view=1`} target="_blank" rel="noopener noreferrer">
-                  <Camera size={15} /> Foto
-                </a>
-              )}
+              <Button icon={Eye} onClick={() => showDetail(row)}>Ver</Button>
             </div>
             <div className="support-log-mobile-card-body">
               <div className="support-log-mobile-item">
@@ -1885,6 +1885,52 @@ export function SupportMovements({ demo }) {
         )}
       </div>
     </div>
+    <Dialog open={Boolean(selected)} onClose={() => setSelected(null)} title="Detalle del registro" wide>
+      {selected && <div className="idf-report-sheet">
+        <div className="idf-report-sheet-header">
+          <div className="idf-report-sheet-titles">
+            <span className="idf-report-badge-folio">Folio: {selected.id}</span>
+            <h3 className="idf-report-sheet-activity">Retiro de {selected.element}</h3>
+            <p className="idf-report-sheet-subtitle">Movimiento registrado en <strong>{selected.idf_name}</strong> · Origen: IDF 3</p>
+          </div>
+        </div>
+        <div className="idf-report-sections">
+          <div className="idf-report-card">
+            <h4 className="idf-card-title">Datos operativos</h4>
+            <div className="idf-card-grid">
+              <div className="idf-info-item"><span className="idf-info-label">IDF / Destino</span><strong className="idf-info-val highlight">{selected.idf_name}</strong></div>
+              <div className="idf-info-item"><span className="idf-info-label">Elemento e identificación</span><strong className="idf-info-val">{selected.element} · {selected.identifier || 'Sin identificación'}</strong></div>
+              <div className="idf-info-item"><span className="idf-info-label">Cantidad retirada</span><strong className="idf-info-val">{selected.quantity == null ? 'Sin registro' : `${selected.quantity} ${selected.unit || 'pza'}`}</strong></div>
+            </div>
+          </div>
+          <div className="idf-report-card">
+            <h4 className="idf-card-title">Responsable y fecha</h4>
+            <div className="idf-card-grid">
+              <div className="idf-info-item"><span className="idf-info-label">Responsable</span><strong className="idf-info-val">{selected.actor_name || selected.actor}</strong></div>
+              <div className="idf-info-item"><span className="idf-info-label">Cuenta de soporte</span><strong className="idf-info-val">{selected.actor || 'Sin registro'}</strong></div>
+              <div className="idf-info-item"><span className="idf-info-label">Fecha del movimiento</span><strong className="idf-info-val">{dateTime(selected.date)}</strong></div>
+            </div>
+          </div>
+          <div className="idf-report-card full-span">
+            <h4 className="idf-card-title">Observaciones</h4>
+            <p className="idf-description-text">{selected.notes || 'Sin observaciones.'}</p>
+          </div>
+          <div className="idf-report-card full-span">
+            <div className="idf-card-header-flex">
+              <h4 className="idf-card-title">Evidencia fotográfica</h4>
+              {selected.evidence && !photoError && <a className="button button-secondary idf-btn-download" href={`/api/support/movements/evidence/${encodeURIComponent(selected.evidence)}`} download="evidencia-soporte"><Download size={15} /> Descargar foto original</a>}
+            </div>
+            {selected.evidence && !photoError ? <div className="idf-photo-showcase">
+              <div className="idf-photo-frame"><img className="idf-photo-img" src={`/api/support/movements/evidence/${encodeURIComponent(selected.evidence)}?view=1`} alt={`Evidencia del retiro de ${selected.element}`} onError={() => setPhotoError(true)} /></div>
+              <div className="idf-photo-meta"><Camera size={16} aria-hidden="true" /><span>Fotografía adjunta al movimiento en {selected.idf_name}</span></div>
+            </div> : <div className="idf-no-photo" role={photoError ? 'status' : undefined}>
+              <Camera size={30} strokeWidth={1.5} aria-hidden="true" />
+              <span>{photoError ? 'No se pudo cargar la fotografía adjunta.' : 'Sin evidencia fotográfica adjunta para este movimiento'}</span>
+            </div>}
+          </div>
+        </div>
+      </div>}
+    </Dialog>
   </section>;
 }
 
