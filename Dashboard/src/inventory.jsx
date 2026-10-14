@@ -237,7 +237,6 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   const [mapLoading, setMapLoading] = useState(false);
   const [mapError, setMapError] = useState('');
   const omniState = useListState('omnivista-aps');
-  const omniBusyRef = useRef(false);
 
   // Compatibilidad con URLs abiertas antes de retirar el estado Warning.
   // Sin esta limpieza, un filtro guardado en la URL dejaría la tabla vacía.
@@ -264,16 +263,13 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
     }
 
     let active = true;
-    const fetchOmniAps = async (silent = false) => {
-      if (!active || omniBusyRef.current) return;
-      if (silent && document.hidden) return;
-      omniBusyRef.current = true;
-      if (!silent) {
-        setOmniLoading(true);
-        setOmniError('');
-      }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const fetchOmniAps = async () => {
+      setOmniLoading(true);
+      setOmniError('');
       try {
-        const res = await request('/api/aps/omnivista');
+        const res = await request('/api/aps/omnivista', { signal: controller.signal });
         if (!active) return;
         const aps = res.aps || [];
         setOmniAps(aps);
@@ -286,29 +282,21 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
         setOmniUpdatedAt(new Date().toISOString());
         setOmniError('');
       } catch (err) {
-        if (active && !silent) {
+        if (active) {
           setOmniError(err.name === 'AbortError' ? 'La consulta a OmniVista tardó demasiado.' : err.message);
         }
       } finally {
-        omniBusyRef.current = false;
-        if (active && !silent) setOmniLoading(false);
+        clearTimeout(timeout);
+        if (active) setOmniLoading(false);
       }
     };
 
-    // Consulta inicial explícita
-    fetchOmniAps(false);
-
-    // Auto-refresco en segundo plano cada 15 segundos para detectar caídas de APs al momento
-    const timer = window.setInterval(() => fetchOmniAps(true), 15000);
-    const onVisible = () => {
-      if (!document.hidden && active) fetchOmniAps(true);
-    };
-    window.addEventListener('visibilitychange', onVisible);
+    fetchOmniAps();
 
     return () => {
       active = false;
-      window.clearInterval(timer);
-      window.removeEventListener('visibilitychange', onVisible);
+      clearTimeout(timeout);
+      controller.abort();
     };
   }, [route, demo, data, omniRevision, apLive]);
   useEffect(() => {

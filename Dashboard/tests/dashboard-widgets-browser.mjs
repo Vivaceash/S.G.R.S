@@ -60,7 +60,7 @@ try {
   await expect(grid.locator('[data-widget="device-types"] .widget-bar-rows li').first()).toBeVisible();
   await expect(grid.locator('[data-widget="services"]').getByText('Responde', { exact: true })).toHaveCount(2);
   await expect(grid.locator('[data-widget="devices"] .widget-donut')).toBeVisible();
-  await expect(grid.locator('[data-widget="stock"]').getByText('No se pudo actualizar', { exact: true })).toBeVisible();
+  await expect(grid.locator('[data-widget="stock"] .widget-warning')).toBeVisible();
   failStock = false;
   await page.getByRole('button', { name: 'Actualizar Existencias bajas de soporte', exact: true }).click();
   await expect(grid.getByText('Tóner funcional', { exact: true })).toBeVisible();

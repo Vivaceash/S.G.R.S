@@ -105,10 +105,10 @@ export function downloadExcel(name, sheets) {
   link.href = url; link.download = name.endsWith('.xls') ? name : `${name}.xls`; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export function DataTable({ title, rows, columns, state, noun = 'registros', pageSize = 10, toolbar, exportable = false, loading = false, error, onRetry, emptyText, rowKey = 'id', onRowClick, rowClassName, className = '' }) {
+export function DataTable({ title, rows, columns, state, noun = 'registros', pageSize = 10, paginated = true, toolbar, exportable = false, loading = false, error, onRetry, emptyText, rowKey = 'id', onRowClick, rowClassName, className = '' }) {
   const visible = selectRows(rows, state.query, state.filters, state.sort, state.asc);
-  const page = paginate(visible, state.page, pageSize);
-  useEffect(() => { if (!loading && !error && page.current !== state.page) state.setPage(page.current); }, [page.current, state.page, loading, error]);
+  const page = paginated ? paginate(visible, state.page, pageSize) : { rows: visible, current: 1, total: visible.length };
+  useEffect(() => { if (paginated && !loading && !error && page.current !== state.page) state.setPage(page.current); }, [paginated, page.current, state.page, loading, error]);
   return <section className={`table-panel ${className}`} aria-label={title}>
     {(toolbar || exportable) && <div className="table-panel-heading"><div>{toolbar}</div>{exportable && <Button icon={Download} onClick={() => downloadCsv(title, columns.filter(c => c.key !== 'actions'), visible)} disabled={!visible.length}>Exportar consulta</Button>}</div>}
     <div className="table-scroll" tabIndex={0} role="region" aria-label={`${title}. Desplázate para ver todas las columnas.`}>
@@ -120,10 +120,10 @@ export function DataTable({ title, rows, columns, state, noun = 'registros', pag
       })}</tbody></table>
       {loading ? <Loading /> : error ? <Empty title="No se pudo cargar la información" action={<Button icon={RefreshCw} onClick={onRetry}>Volver a intentar</Button>}>{error}</Empty> : !visible.length && <Empty title={rows.length ? 'No se encontraron resultados' : 'Aún no hay registros'} action={rows.length ? <Button onClick={state.reset}>Limpiar filtros</Button> : null}>{rows.length ? 'Prueba otra búsqueda o elimina los filtros activos.' : emptyText}</Empty>}
     </div>
-    <div className="table-footer"><span role="status">{visible.length ? `Mostrando ${(page.current - 1) * pageSize + 1}–${Math.min(page.current * pageSize, page.total)} de ${number(page.total)} ${noun}` : `0 ${noun}`}</span>
+    {paginated && <div className="table-footer"><span role="status">{visible.length ? `Mostrando ${(page.current - 1) * pageSize + 1}–${Math.min(page.current * pageSize, page.total)} de ${number(page.total)} ${noun}` : `0 ${noun}`}</span>
       <nav className="pagination" aria-label={`Paginación de ${title}`}><IconButton icon={ChevronLeft} label="Página anterior" disabled={page.current <= 1} onClick={() => state.setPage(page.current - 1)} />
         {Array.from({ length: Math.min(5, page.pages) }, (_, i) => Math.min(Math.max(1, page.current - 2), Math.max(1, page.pages - 4)) + i).map(p => <button type="button" key={p} className={p === page.current ? 'current' : ''} aria-label={`Página ${p}`} aria-current={p === page.current ? 'page' : undefined} onClick={() => state.setPage(p)}>{p}</button>)}
         <IconButton icon={ChevronRight} label="Página siguiente" disabled={page.current >= page.pages} onClick={() => state.setPage(page.current + 1)} />
-      </nav></div>
+      </nav></div>}
   </section>;
 }

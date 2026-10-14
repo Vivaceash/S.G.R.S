@@ -191,15 +191,12 @@ export function MobileReport() {
   if (supportUser && idf === 'idf-3') return <SupportMobileMovement context={context} idf={idf} token={token} user={supportUser} csrf={supportCsrf} />;
 
   if (sent) return (
-    <main className="mobile-report-page">
+    <main className="mobile-report-page mobile-report-success-page">
       <section className="mobile-report-card panel mobile-success" role="status" aria-live="polite">
         <CheckCircle2 size={52} />
         <p className="eyebrow">Registro enviado</p>
         <h1>Reporte guardado correctamente</h1>
         <p>La incidencia de <strong>{context.idf.name}</strong> ya aparece en la bitácora para su seguimiento.</p>
-        <div style={{ marginTop: 20 }}>
-          <Button variant="primary" icon={ArrowLeft} onClick={() => { location.hash = '#bitacora'; }}>Ver en Bitácora</Button>
-        </div>
       </section>
     </main>
   );

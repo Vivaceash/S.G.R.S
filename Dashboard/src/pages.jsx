@@ -4,6 +4,8 @@ import { Badge, Button, DataTable, Dialog, Empty, IconButton, Metric, Note, Noti
 import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getOverviewSegmentDevices, isMeztliSegment, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, getSupportSegments, normalizeText } from './domain.mjs';
 import { useSession } from './session.jsx';
 import { DashboardWidgets } from './dashboard-widgets.jsx';
+import { AltasWidgets } from './altas-widgets.jsx';
+import { filterAltasUsers } from './altas-analytics.mjs';
 
 export function PageHeading({ eyebrow, title, description, updatedAt, children, headingId = 'page-title' }) {
   const hasActions = Boolean(children);
@@ -187,14 +189,15 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
     <Note>Consulta el inventario de {number(resources.length)} recursos y registra las visitas a los cuartos de telecomunicaciones. {demo ? 'Todas las cifras de esta vista son de demostración.' : 'La disponibilidad histórica y el estado global de la red aún no se calculan.'}</Note>
   </>;
 }
-export function Requests({ demo }) {
-  const [tab, setTab] = useState('oficios'); // 'oficios' | 'all'
+export function Requests({ demo, data }) {
   const { canViewSubmodule } = useSession();
   const canViewOficios = canViewSubmodule('altas', 'oficios');
   const canViewAll = canViewSubmodule('altas', 'all');
-  const visibleTab = (tab === 'oficios' && canViewOficios) || (tab === 'all' && canViewAll) ? tab : canViewOficios ? 'oficios' : 'all';
   const usersState = useListState('altas-usuarios');
-  const oficiosState = useListState('altas-oficios');
+  const alertsState = useListState('altas-alertas');
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [analyticsFilter, setAnalyticsFilter] = useState(null);
+  const accountsListRef = useRef(null);
   const [snapshot, setSnapshot] = useState({ users: [], sources: {}, loading: !demo, error: '', updatedAt: null });
   const [selectedUser, setSelectedUser] = useState(null);
   const [editingConcessionUser, setEditingConcessionUser] = useState(null);
@@ -331,7 +334,7 @@ export function Requests({ demo }) {
       }
     }).catch(error => { if (alive) setSnapshot(old => ({ ...old, loading: false, error: error.name === 'AbortError' ? 'Consulta cancelada.' : error.message })); });
     return () => { alive = false; controller.abort(); };
-  }, [demo, revision]);
+  }, [demo, revision, data?.updatedAt]);
 
   // Filtrado y cómputo de usuarios cuyo campo 'description' empiece o contenga "Oficio"
   const oficiosUsers = useMemo(() => {
@@ -366,19 +369,7 @@ export function Requests({ demo }) {
       });
   }, [snapshot.users, now]);
 
-  const activeOficios = oficiosUsers.filter(u => !u.isExpired && u.diffMs !== null);
-  const expiredOficios = oficiosUsers.filter(u => u.isExpired);
-  // Se dan de baja hoy: activos a los que les quedan menos de 24 horas (< 86,400,000 ms)
-  const expiringToday24h = oficiosUsers.filter(u => !u.isExpired && u.diffMs !== null && u.diffMs <= 24 * 3600 * 1000);
-  // Cercanos a dar de baja: activos a los que les quedan 7 días o menos (<= 7 * 86,400,000 ms)
-  const expiringSoon7Days = oficiosUsers.filter(u => !u.isExpired && u.diffMs !== null && u.diffMs <= 7 * 86400 * 1000);
-
-  const deviceCount = snapshot.users.reduce((total, user) => total + (Array.isArray(user.devices) ? user.devices.length : 0), 0);
-  const accountsWithDevices = useMemo(
-    () => snapshot.users.filter(user => Array.isArray(user.devices) && user.devices.length > 0).length,
-    [snapshot.users]
-  );
-  const accountsCoverage = snapshot.users.length ? Math.round((accountsWithDevices / snapshot.users.length) * 100) : 0;
+  const activeOficios = oficiosUsers.filter(u => Number.isFinite(u.diffMs) && u.diffMs > 0);
 
   // Función para formatear el tiempo restante de concesión
   const formatCountdown = diffMs => {
@@ -392,125 +383,6 @@ export function Requests({ demo }) {
     if (hours > 0) return `${hours}h ${minutes}m`;
     return `${minutes} min`;
   };
-
-  const oficiosColumns = [
-    {
-      key: 'username',
-      label: 'Usuario',
-      render: row => (
-        <div style={{ lineHeight: 1.25 }}>
-          <span style={{ display: 'block', fontSize: '13px', fontWeight: 500 }}>{row.username}</span>
-          <small className="text-muted" style={{ fontSize: '11px', display: 'block', maxWidth: '190px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.fullName}>
-            {row.fullName || '—'}
-          </small>
-        </div>
-      )
-    },
-    {
-      key: 'timeRemaining',
-      label: 'Concesión restante',
-      sortable: false,
-      render: row => {
-        if (row.diffMs === null) return <span className="text-muted text-xs">Indefinido</span>;
-        if (row.isExpired) {
-          return (
-            <span className="badge badge-danger concession-countdown">
-              <Clock3 size={16} /> Expirado
-            </span>
-          );
-        }
-        const hours = row.diffMs / (3600 * 1000);
-        const tone = hours < 3 ? 'danger' : hours < 12 ? 'warning' : 'info';
-        return (
-          <div className="concession-time">
-            <span className={`badge badge-${tone} concession-countdown`}>
-              <Clock size={16} /> {formatCountdown(row.diffMs)}
-            </span>
-            <small className="concession-expiry">
-              Vence {new Date(row.effectiveTime).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-            </small>
-          </div>
-        );
-      }
-    },
-    {
-      key: 'devices',
-      label: 'Dispositivos',
-      sortable: false,
-      render: row => {
-        const devs = Array.isArray(row.devices) ? row.devices : [];
-        if (!devs.length) return <span className="text-muted text-xs">0 equipos</span>;
-        return (
-          <Button variant="secondary" style={{ padding: '4px 9px', fontSize: '11.5px', minHeight: '30px' }} onClick={() => setSelectedUser(row)}>
-            <Smartphone size={13} /> {devs.length} {devs.length === 1 ? 'eq.' : 'eqs.'} · Ver
-          </Button>
-        );
-      }
-    },
-    {
-      key: 'description',
-      label: 'Motivo',
-      render: row => {
-        const text = String(row.description || 'Oficio').trim();
-        return (
-          <span
-            className="oficio-badge"
-            title={text}
-          >
-            {text.length > 22 ? `${text.slice(0, 20)}…` : text}
-          </span>
-        );
-      }
-    },
-    {
-      key: 'registeredAt',
-      label: 'Fecha de alta',
-      render: row => {
-        const val = row.registeredAt;
-        if (!val) return <span className="text-muted text-xs">—</span>;
-        const d = new Date(Number(val));
-        return (
-          <div style={{ lineHeight: 1.25 }}>
-            <span style={{ fontSize: '11.5px', fontWeight: 600, color: '#334155', display: 'block' }}>
-              {d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
-            </span>
-            <small style={{ fontSize: '10px', color: '#64748b' }}>
-              {d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
-            </small>
-          </div>
-        );
-      }
-    },
-    {
-      key: 'department',
-      label: 'Área',
-      render: row => (
-        <span style={{ fontSize: '12px', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', whiteSpace: 'nowrap' }} title={row.department}>
-          {row.department || '—'}
-        </span>
-      )
-    },
-    {
-      key: 'status',
-      label: 'Estado',
-      render: row => <Badge status={row.isExpired ? 'offline' : 'online'}>{row.isExpired ? 'Vencida' : 'Activo'}</Badge>
-    },
-    {
-      key: 'actions',
-      label: 'Acciones',
-      sortable: false,
-      render: row => (
-        <Button
-          variant="secondary"
-          style={{ padding: '3px 8px', fontSize: '11px', minHeight: '28px', whiteSpace: 'nowrap' }}
-          onClick={() => openConcessionModal(row)}
-          title="Modificar tiempo de concesión"
-        >
-          <Calendar size={13} /> Modificar
-        </Button>
-      )
-    }
-  ];
 
   const userColumns = [
     { key: 'username', label: 'Cuenta' },
@@ -552,112 +424,73 @@ export function Requests({ demo }) {
         updatedAt={snapshot.updatedAt}
       />
 
-      <div className="altas-banner-strip">
-        <div className="altas-badge-readonly">
-          <Info size={14} aria-hidden="true" />
-          <span>Cotejo de Cuentas y Concesiones · OmniVista</span>
-        </div>
-        <p className="altas-readonly-desc">
-          Supervisión de usuarios temporales por oficio y cómputo de tiempo de concesión restante para baja en red.
-        </p>
-        {snapshot.updatedAt && (
-          <span className="altas-sync-time">
-            Actualizado: {dateTime(snapshot.updatedAt)}
-          </span>
-        )}
-      </div>
-
       {demo && <Notice title="Vista de demostración">Para consultar OmniVista cambia a datos del sistema e inicia sesión con una cuenta autorizada.</Notice>}
       {snapshot.error && <Notice title="No se pudo consultar OmniVista" tone="danger" action={<Button onClick={() => setRevision(value => value + 1)}>Reintentar</Button>}>{snapshot.error}</Notice>}
 
-      <div className="metric-grid">
-        <Metric
-          icon={AlertCircle}
-          tone="danger"
-          label="Se dan de baja hoy"
-          value={snapshot.loading ? '—' : number(expiringToday24h.length)}
-          caption={`${number(expiredOficios.length)} concesiones ya vencidas`}
-        />
-        <Metric
-          icon={Clock}
-          tone="warning"
-          label="Cercanos a dar de baja"
-          value={snapshot.loading ? '—' : number(expiringSoon7Days.length)}
-          caption="Vencen en los próximos 7 días"
-        />
-        <Metric
-          icon={Users}
-          label="Total por Oficio"
-          value={snapshot.loading ? '—' : number(oficiosUsers.length)}
-          caption="Cuentas activas con Oficio"
-        />
-        <Metric
-          icon={Monitor}
-          tone="success"
-          label="Dispositivos asociados"
-          value={snapshot.loading ? '—' : number(deviceCount)}
-          caption={snapshot.sources.company_properties?.complete ? `${number(snapshot.sources.company_properties?.unassociated || 0)} sin cuenta coincidente` : 'Cotejo con FortiGate'}
-        />
+      <AltasWidgets onRefresh={() => setRevision(value => value + 1)} updatedAt={snapshot.updatedAt} users={canViewAll ? snapshot.users : oficiosUsers} sources={snapshot.sources} now={now} demo={demo} loading={snapshot.loading} error={snapshot.error} canViewAll={canViewAll} canViewOficios={canViewOficios} onFilter={canViewAll ? filter => { setAnalyticsFilter(filter); usersState.setPage(1); requestAnimationFrame(() => accountsListRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' })); } : undefined} />
+
+      {canViewOficios && !canViewAll && <div className="altas-alert-toggle-row">
+        <Button variant="secondary" icon={Clock} aria-expanded={alertsOpen} aria-controls="altas-alert-sidebar" onClick={() => setAlertsOpen(value => !value)}>
+          Usuarios próximos a dar de baja ({activeOficios.length})
+        </Button>
+      </div>}
+
+      <div className={`altas-accounts-layout ${canViewAll && canViewOficios && alertsOpen ? 'has-alerts' : ''}`}>
+        {canViewAll && <div className="altas-accounts-list" ref={accountsListRef}>
+          <header className="altas-accounts-heading">
+            <Users size={19} aria-hidden="true" />
+            <h2>Todas las cuentas</h2>
+            <span className="altas-alerts-count">{filterAltasUsers(snapshot.users, analyticsFilter, now).length}</span>
+            {canViewOficios && <Button className="altas-heading-alert-toggle" variant="secondary" icon={Clock} aria-expanded={alertsOpen} aria-controls="altas-alert-sidebar" onClick={() => setAlertsOpen(value => !value)}>
+              Usuarios próximos a dar de baja ({activeOficios.length})
+            </Button>}
+          </header>
+          {analyticsFilter && <div className="altas-active-filter" role="status"><span>Filtro: <strong>{analyticsFilter.label}</strong></span><Button variant="ghost" icon={X} onClick={() => { setAnalyticsFilter(null); usersState.setPage(1); }}>Quitar filtro</Button></div>}
+          <DataTable
+            title="Todas las cuentas de usuarios OmniVista"
+            className="altas-accounts-table"
+            paginated={false}
+            rows={filterAltasUsers(snapshot.users, analyticsFilter, now)}
+            columns={userColumns}
+            state={usersState}
+            noun="cuentas"
+            loading={snapshot.loading}
+            error={snapshot.error}
+            onRetry={() => setRevision(value => value + 1)}
+            exportable={!demo}
+            emptyText={analyticsFilter ? 'No hay cuentas que coincidan con el indicador seleccionado.' : 'OmniVista no devolvió cuentas en esta consulta.'}
+            toolbar={
+              <SearchField value={usersState.query} onChange={usersState.setQuery} placeholder="Buscar cuenta, nombre o departamento…" />
+            }
+          />
+        </div>}
+        {canViewOficios && alertsOpen && <aside id="altas-alert-sidebar" className="altas-concession-alerts" aria-labelledby="altas-alerts-title">
+          <header className="altas-alerts-heading">
+            <Clock size={19} aria-hidden="true" />
+            <h2 id="altas-alerts-title">Próximos a dar de baja</h2>
+            <span className="altas-alerts-count">{activeOficios.length}</span>
+            <IconButton icon={X} label="Cerrar alertas" onClick={() => setAlertsOpen(false)} />
+          </header>
+          <DataTable
+            title="Alertas de concesiones próximas a vencer"
+            className="altas-alerts-table"
+            rows={activeOficios}
+            rowKey="username"
+            columns={[
+              { key: 'username', label: 'Cuenta', render: user => <div className="altas-alert-account"><strong>{user.username}</strong><small>{user.fullName || user.department || 'Oficio'}</small></div> },
+              { key: 'effectiveTime', label: 'Concesión', render: user => <div className={`altas-alert-concession ${user.diffMs <= 24 * 3600 * 1000 ? 'is-urgent' : ''}`}><strong>{formatCountdown(user.diffMs)}</strong><small>Vence <time dateTime={new Date(user.effectiveTime).toISOString()}>{dateTime(user.effectiveTime)}</time></small></div> },
+              { key: 'actions', label: 'Acciones', sortable: false, render: user => <div className="altas-alert-row-actions"><IconButton icon={Calendar} label={`Modificar concesión de ${user.username}`} onClick={() => openConcessionModal(user)} />{user.devices?.length > 0 && <IconButton icon={Monitor} label={`Ver equipos de ${user.username}`} onClick={() => setSelectedUser(user)} />}</div> },
+            ]}
+            state={alertsState}
+            noun="alertas"
+            loading={snapshot.loading}
+            error={snapshot.error}
+            onRetry={() => setRevision(value => value + 1)}
+            emptyText="No hay cuentas por oficio con una concesión vigente pendiente de vencer."
+            toolbar={<SearchField label="Buscar alertas" value={alertsState.query} onChange={alertsState.setQuery} placeholder="Buscar cuenta o nombre…" />}
+          />
+        </aside>}
       </div>
-
-      {/* Pestañas de Navegación de Altas */}
-      <nav className="inventory-tabs" role="tablist" aria-label="Secciones de altas" style={{ marginTop: '18px' }}>
-        {canViewOficios && <button
-          type="button"
-          role="tab"
-          id="altas-tab-oficios"
-          className={visibleTab === 'oficios' ? 'active' : ''}
-          aria-selected={visibleTab === 'oficios'}
-          onClick={() => setTab('oficios')}
-        >
-          <Clock size={16} /> Usuarios próximos a dar de baja ({activeOficios.length})
-        </button>}
-        {canViewAll && <button
-          type="button"
-          role="tab"
-          id="altas-tab-all"
-          className={visibleTab === 'all' ? 'active' : ''}
-          aria-selected={visibleTab === 'all'}
-          onClick={() => setTab('all')}
-        >
-          <Users size={16} /> Todas las cuentas ({snapshot.users.length})
-        </button>}
-      </nav>
-
-      {visibleTab === 'oficios' ? (
-        <DataTable
-          title="Usuarios con concesión temporal por Oficio (Próximos a dar de baja)"
-          className="oficios-table"
-          rows={oficiosUsers}
-          columns={oficiosColumns}
-          state={oficiosState}
-          noun="usuarios por oficio"
-          loading={snapshot.loading}
-          error={snapshot.error}
-          onRetry={() => setRevision(value => value + 1)}
-          exportable={!demo}
-          emptyText="No se encontraron cuentas con descripción de Oficio en OmniVista."
-          toolbar={
-            <SearchField value={oficiosState.query} onChange={oficiosState.setQuery} placeholder="Buscar usuario, oficio, nombre o departamento…" />
-          }
-        />
-      ) : (
-        <DataTable
-          title="Todas las cuentas de usuarios OmniVista"
-          rows={snapshot.users}
-          columns={userColumns}
-          state={usersState}
-          noun="cuentas"
-          loading={snapshot.loading}
-          error={snapshot.error}
-          onRetry={() => setRevision(value => value + 1)}
-          exportable={!demo}
-          emptyText="OmniVista no devolvió cuentas en esta consulta."
-          toolbar={
-            <SearchField value={usersState.query} onChange={usersState.setQuery} placeholder="Buscar cuenta, nombre o departamento…" />
-          }
-        />
-      )}
 
       <Dialog open={Boolean(selectedUser)} title={`Dispositivos de ${selectedUser?.username || 'la cuenta'}`} onClose={() => setSelectedUser(null)} wide>
         <div style={{ marginBottom: '14px' }}>
@@ -790,7 +623,7 @@ export function Requests({ demo }) {
         </div>
       </Dialog>
 
-      <Note title="Alcance de la consulta">La pestaña de usuarios próximos a dar de baja filtra automáticamente las cuentas cuya descripción inicia o contiene "Oficio", calculando el tiempo restante de concesión y priorizando a los que están más próximos a vencer.</Note>
+      <Note title="Alcance de la consulta">Las alertas muestran cuentas con descripción de "Oficio" y concesión vigente, ordenadas por vencimiento. El listado principal incluye todas las cuentas autorizadas de OmniVista.</Note>
     </>
   );
 }

@@ -807,17 +807,10 @@ function IdfHub({
   refresh,
 }) {
   const viewStorageKey = `${IDF_VIEW_SESSION_PREFIX}${userId || "anonymous"}`;
-  const [viewState, setViewState] = useState(() => {
-    try {
-      const saved = JSON.parse(sessionStorage.getItem(viewStorageKey) || "null");
-      return {
-        selectedId: typeof saved?.selectedId === "string" ? saved.selectedId : "",
-        tab: typeof saved?.tab === "string" ? saved.tab : canViewActivity ? "activity" : canViewInventory ? "inventory" : "qr",
-      };
-    } catch {
-      return { selectedId: "", tab: canViewActivity ? "activity" : canViewInventory ? "inventory" : "qr" };
-    }
-  });
+  const [viewState, setViewState] = useState(() => ({
+    selectedId: "",
+    tab: canViewActivity ? "activity" : canViewInventory ? "inventory" : "qr",
+  }));
   const selectedId = canOpenIdfs ? viewState.selectedId : "";
   const tab = viewState.tab;
   const idfs = useMemo(
@@ -1294,6 +1287,7 @@ export default function App() {
   });
 
   const [loading, setLoading] = useState(!demo);
+  const [idfEntry, setIdfEntry] = useState(0);
   const [errors, setErrors] = useState({});
   const [menu, setMenu] = useState(false);
   const [modal, setModal] = useState(null);
@@ -1325,9 +1319,6 @@ export default function App() {
   const generation = useRef(0);
   const loadController = useRef(null);
   const mutationLock = useRef(false);
-  const reportSyncBusy = useRef(false);
-  const meztliSyncBusy = useRef(false);
-  const devicesSyncBusy = useRef(false);
   const toastTimer = useRef(null);
   const currentRoute = useRef(route);
   currentRoute.current = route;
@@ -1426,124 +1417,11 @@ export default function App() {
       loadController.current?.abort();
     };
   }, [demo, refresh]);
-  useEffect(() => {
-    if (demo || !reportsPath) return undefined;
-    let active = true;
-    const syncReports = async () => {
-      if (!active || document.hidden || reportSyncBusy.current) return;
-      reportSyncBusy.current = true;
-      try {
-        const reports = await request(reportsPath);
-        if (!active) return;
-        setData((old) =>
-          JSON.stringify(old.reports) === JSON.stringify(reports)
-            ? old
-            : { ...old, reports, updatedAt: new Date().toISOString() },
-        );
-      } catch {
-        // The full refresh owns visible errors; background synchronization stays silent.
-      } finally {
-        reportSyncBusy.current = false;
-      }
-    };
-    const onVisible = () => {
-      if (!document.hidden) syncReports();
-    };
-    const timer = window.setInterval(syncReports, 4000);
-    window.addEventListener("visibilitychange", onVisible);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-      window.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [demo, reportsPath]);
-  // Uptime de soporte depende de pulsos de /api/devices. Mantener sólo la
-  // carga inicial deja el contador congelado y puede conservar una fotografía
-  // antigua mientras el usuario sigue en la vista.
-  useEffect(() => {
-    if (demo || route.path !== "soporte" || loading) return undefined;
-    let active = true;
-    const syncDevices = async () => {
-      if (!active || document.hidden || devicesSyncBusy.current) return;
-      devicesSyncBusy.current = true;
-      try {
-        const devices = await request("/api/devices");
-        if (!active || !Array.isArray(devices)) return;
-        setData((old) =>
-          JSON.stringify(old.devices) === JSON.stringify(devices)
-            ? old
-            : { ...old, devices, updatedAt: new Date().toISOString() },
-        );
-        setErrors((old) => {
-          if (!old.devices) return old;
-          const { devices: _devices, ...rest } = old;
-          return rest;
-        });
-      } catch {
-        // Conservamos la última respuesta válida; el siguiente pulso reintenta.
-      } finally {
-        devicesSyncBusy.current = false;
-      }
-    };
-    syncDevices();
-    const onVisible = () => {
-      if (!document.hidden) syncDevices();
-    };
-    const timer = window.setInterval(syncDevices, 60000);
-    window.addEventListener("visibilitychange", onVisible);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-      window.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [demo, route.path, loading]);
-  // La tabla de Meztli representa concesiones DHCP activas, no un catálogo
-  // estático. Antes sólo se consultaba al abrir la aplicación, por lo que la
-  // vista conservaba una fotografía inicial aunque FortiGate ya tuviera altas
-  // o bajas nuevas.
-  useEffect(() => {
-    if (demo || route.path !== "gestion-meztli") return undefined;
-    let active = true;
-    const syncMeztli = async () => {
-      if (!active || document.hidden || meztliSyncBusy.current) return;
-      meztliSyncBusy.current = true;
-      try {
-        const result = await request("/api/forti/network/dhcp-leases");
-        const leases = result?.data;
-        if (!active || !Array.isArray(leases)) return;
-        setData((old) =>
-          JSON.stringify(old.meztliLeases) === JSON.stringify(leases)
-            ? old
-            : { ...old, meztliLeases: leases, updatedAt: new Date().toISOString() },
-        );
-        setErrors((old) => {
-          if (!old.meztliLeases) return old;
-          const { meztliLeases, ...rest } = old;
-          return rest;
-        });
-      } catch {
-        // Conservamos la última respuesta válida: una falla transitoria no
-        // debe vaciar la tabla que el operador está consultando.
-      } finally {
-        meztliSyncBusy.current = false;
-      }
-    };
-    syncMeztli();
-    const onVisible = () => {
-      if (!document.hidden) syncMeztli();
-    };
-    const timer = window.setInterval(syncMeztli, 15000);
-    window.addEventListener("visibilitychange", onVisible);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-      window.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [demo, route.path]);
   const go = (path) => {
     setMenu(false);
     setDirty(false);
     setPendingNavigation(null);
+    if (["idf", "inventario"].includes(path.split("?")[0])) setIdfEntry(value => value + 1);
     location.hash = path;
     setRoute(readRoute());
   };
@@ -1959,6 +1837,7 @@ export default function App() {
   } else if (route.path === "inventario") {
     page = (
       <IdfHub
+        key={`${route.path}-${idfEntry}`}
         data={data}
         records={records}
         demo={demo}
@@ -2000,6 +1879,7 @@ export default function App() {
   } else if (route.path === "idf") {
     page = (
       <IdfHub
+        key={`${route.path}-${idfEntry}`}
         data={data}
         records={records}
         demo={demo}
@@ -2228,7 +2108,7 @@ export default function App() {
             </div>
           )}
         </div>
-        <RefreshControl loading={loading} onRefresh={refresh} demo={demo} />
+        <RefreshControl loading={loading} onRefresh={refresh} />
         <div className="header-bell-wrapper">
           <IconButton
             icon={Bell}

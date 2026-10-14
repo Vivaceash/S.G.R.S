@@ -25,11 +25,11 @@ export const WIDGET_CATALOG = [
 ];
 export const DEFAULT_WIDGET_LAYOUT = ['metrics', 'segments', 'network'].map(id => ({ id, size: 12 }));
 
-export function sanitizeWidgetLayout(value) {
+export function sanitizeWidgetLayout(value, catalog = WIDGET_CATALOG) {
   if (!Array.isArray(value)) return null;
   const seen = new Set();
   return value.flatMap(item => {
-    const definition = WIDGET_CATALOG.find(widget => widget.id === item?.id);
+    const definition = catalog.find(widget => widget.id === item?.id);
     if (!definition || seen.has(item.id)) return [];
     seen.add(item.id);
     const size = WIDGET_SIZES.some(option => option.value === item.size && item.size >= definition.min) ? item.size : definition.size;
