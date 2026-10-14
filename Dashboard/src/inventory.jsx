@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, Save, Server, Camera, Wifi, TriangleAlert, Users, MapPin, Trash2, Power, Download } from 'lucide-react';
 import { Badge, Button, DataTable, Dialog, Field, Loading, Metric, Notice, SearchField, Select, downloadCsv, useListState } from './components.jsx';
 import { PageHeading } from './pages.jsx';
 import { useForm } from './forms.jsx';
 import { dateTime, number, request, selectRows } from './domain.mjs';
 import { useSession } from './session.jsx';
+import { normalizeInventoryCatalog } from './inventory-data.mjs';
 import plantaBaja from './assets/visuals/PLANTA_BAJA_FINAL.png';
 import piso1 from './assets/visuals/PISO1_FINAL.png';
 import piso2 from './assets/visuals/PISO2_FINAL.png';
@@ -37,7 +38,15 @@ function PhysicalApMap({ aps, positions, setPositions, canWrite, demo, notify })
   const fittedImage = floor.ratio >= 1.3
     ? { left: (100 - (floor.ratio / 1.3) * 100) / 2, top: 0, width: (floor.ratio / 1.3) * 100, height: 100 }
     : { left: 0, top: (100 - (1.3 / floor.ratio) * 100) / 2, width: 100, height: (1.3 / floor.ratio) * 100 };
-  const apForPosition = position => aps.find(ap => ap.id === position.ap_id || (position.ap_mac && normalizeApIdentity(ap.mac) === position.ap_mac) || (position.ap_serial && normalizeApIdentity(ap.serial) === position.ap_serial));
+  const apIndex = useMemo(() => {
+    const result = new Map();
+    for (const ap of aps) {
+      if (!result.has(ap.id)) result.set(ap.id, ap);
+      for (const key of [normalizeApIdentity(ap.mac), normalizeApIdentity(ap.serial)]) if (key && !result.has(key)) result.set(key, ap);
+    }
+    return result;
+  }, [aps]);
+  const apForPosition = position => apIndex.get(position.ap_id) || apIndex.get(position.ap_mac) || apIndex.get(position.ap_serial);
   const positionedIds = new Set(positions.map(position => position.ap_id));
   const availableAps = aps.filter(ap => !positionedIds.has(ap.id));
   const idfOptions = [...new Set(aps.map(ap => ap.idf_tag || ap.location?.split('->')[0]?.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es-MX', { numeric: true }));
@@ -217,6 +226,9 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
   const requestRef = useRef(null);
+  const catalogController = useRef(null);
+  const cameraWriteLock = useRef(false);
+  const [pendingCamera, setPendingCamera] = useState(null);
   const generation = useRef(0);
   const state = useListState(`documentos-${route}`);
   const defaultDataset = route === 'cctv' ? 'cctv' : route === 'aps' ? 'ap' : 'idf';
@@ -238,6 +250,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   const [mapError, setMapError] = useState('');
   const omniState = useListState('omnivista-aps');
   const omniBusyRef = useRef(false);
+  const demoAps = demo ? data?.aps : null;
 
   // Compatibilidad con URLs abiertas antes de retirar el estado Warning.
   // Sin esta limpieza, un filtro guardado en la URL dejaría la tabla vacía.
@@ -310,7 +323,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
       window.clearInterval(timer);
       window.removeEventListener('visibilitychange', onVisible);
     };
-  }, [route, demo, data, omniRevision, apLive]);
+  }, [route, demo, demoAps, omniRevision, apLive]);
   useEffect(() => {
     if (route !== 'aps' || visibleActiveTab !== 'map') return;
     if (demo) { setMapLoading(false); setMapError(''); return; }
@@ -325,8 +338,9 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   useEffect(() => {
     setNetwork(null); setNetworkError('');
     if (demo) { setCatalog(demoCatalog()); setError(''); setLoading(false); return; }
-    if (route === 'aps' && !apDocumentary && !apMap) { setLoading(false); return; }
+    if (route === 'aps' && visibleActiveTab !== 'documentary') { setLoading(false); return; }
     const controller = new AbortController(); let active = true;
+    catalogController.current = controller;
     setLoading(true); setError('');
     // Allow the backend's 15-second provider timeout to return its diagnosis.
     // Settle the UI here as well: abort alone depends on fetch rejecting.
@@ -337,10 +351,10 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
       setLoading(false);
     }, 25000);
     request('/api/inventory/catalog', { signal: controller.signal }).then(result => {
-      if (active && !controller.signal.aborted) setCatalog(result);
+      if (active && !controller.signal.aborted) setCatalog(normalizeInventoryCatalog(result));
     }).catch(e => { if (active && !controller.signal.aborted) setError(e.message || 'No se pudo consultar API Inventarios.'); }).finally(() => { clearTimeout(timer); if (active) setLoading(false); });
     return () => { active = false; controller.abort(); clearTimeout(timer); };
-  }, [demo, revision, route, apDocumentary, apMap]);
+  }, [demo, revision, route, visibleActiveTab]);
   useEffect(() => () => { generation.current++; requestRef.current?.abort(); }, []);
   const markDirty = value => { setDirty(value); onDirty(value); };
   const close = () => { if (busy) return; if (dirty) setDiscard(true); else setModal(null); };
@@ -360,38 +374,47 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
     } catch (e) { if (version === generation.current) setNetworkError(e.name === 'AbortError' ? 'El cotejo tardó demasiado. Puedes volver a intentar.' : e.message); }
     finally { clearTimeout(timer); if (version === generation.current) setChecking(false); }
   };
-  const rows = catalog.assets.filter(a => a.dataset === dataset).map(a => ({ ...a,
-    idf: catalog.cabinets.find(c => c.id === a.idf_id)?.name || 'Sin asignar',
+  const cabinetNames = useMemo(() => new Map(catalog.cabinets.map(c => [c.id, c.name])), [catalog.cabinets]);
+  const rows = useMemo(() => catalog.assets.filter(a => a.dataset === dataset).map(a => ({ ...a,
+    idf: cabinetNames.get(a.idf_id) || 'Sin asignar',
     kindLabel: a.kind === 'rack' ? 'Rack / Contenedor' : 'Equipo / Componente',
     comparison: comparisonLabels[network?.assets[a.id]?.comparison || 'pending'],
     current_ip: network?.assets[a.id]?.ip || '', status: network?.assets[a.id]?.status || 'unknown',
     relocation: a.destination && !a.relocated ? 'Por confirmar' : a.relocated ? 'Reubicada' : 'Sin reubicación',
     lifecycle: a.decommissioned ? 'Retirada / desactivada' : 'Activa',
     issuesText: (a.issues || []).join(' · '), sourceText: sourceLabel(a.source),
-  }));
+  })), [catalog.assets, dataset, cabinetNames, network]);
   const toggleCamera = async asset => {
+    if (cameraWriteLock.current) return;
+    cameraWriteLock.current = true;
+    setPendingCamera(asset.id);
+    catalogController.current?.abort();
     const next = !asset.decommissioned;
     generation.current++; requestRef.current?.abort(); setChecking(false);
     try {
       const result = demo
         ? { asset: { ...asset, decommissioned: next, documented: asset.documented || asset, corrected_at: new Date().toISOString() } }
         : await mutate('/api/inventory/asset', { id: asset.id, version: asset.version, fields: { decommissioned: next } });
+      if (result.asset?.id !== asset.id || (!demo && typeof result.asset.version !== 'string')) throw new Error('No se pudo confirmar la cámara actualizada. Recarga el catálogo.');
+      normalizeInventoryCatalog({ ...catalog, assets: [result.asset] });
       setCatalog(old => ({ ...old, assets: old.assets.map(a => a.id === asset.id ? result.asset : a) }));
+      setModal(current => current?.type === 'detail' && current.asset.id === asset.id ? { ...current, asset: { ...current.asset, ...result.asset, lifecycle: next ? 'Retirada / desactivada' : 'Activa' } } : current);
       setNetwork(null);
       notify(next ? 'Cámara marcada como retirada / desactivada.' : 'Cámara marcada como activa en inventario.');
     } catch (err) { notify(err.message || 'No se pudo actualizar el estado de la cámara.'); }
+    finally { cameraWriteLock.current = false; setPendingCamera(null); }
   };
   const allColumns = [{ key: 'name', label: 'Recurso' }, { key: 'idf', label: route === 'cctv' ? 'Ubicación del IDF' : 'Gabinete' },
     { key: 'location', label: 'Ubicación' }, { key: 'model', label: 'Modelo' },
     { key: 'documented_ip', label: 'IP documentada' }, { key: 'current_ip', label: 'IP observada en API' },
     { key: 'comparison', label: 'Cotejo' }, { key: 'status', label: 'Estado API', render: a => <Badge status={a.status} /> },
     ...(route === 'cctv' ? [{ key: 'lifecycle', label: 'Inventario', render: a => <span className={a.decommissioned ? 'camera-state is-decommissioned' : 'camera-state'}><i />{a.lifecycle}</span> }] : []),
-    { key: 'actions', label: 'Acciones', sortable: false, render: a => <div className="camera-actions"><Button onClick={() => setModal({ type: 'detail', asset: a })}>Ver ficha</Button>{route === 'cctv' && canWrite && a.dataset !== 'cctv_original' && <button type="button" className={`camera-power ${a.decommissioned ? 'is-on' : ''}`} onClick={() => toggleCamera(a)} aria-label={a.decommissioned ? `Activar ${a.name}` : `Marcar ${a.name} como retirada`} title={a.decommissioned ? 'Reactivar en inventario' : 'Marcar como retirada / desactivada'}><Power size={15} /></button>}</div> }];
+    { key: 'actions', label: 'Acciones', sortable: false, render: a => <div className="camera-actions"><Button onClick={() => setModal({ type: 'detail', asset: a })}>Ver ficha</Button>{route === 'cctv' && canWrite && a.dataset !== 'cctv_original' && <button type="button" disabled={Boolean(pendingCamera)} className={`camera-power ${a.decommissioned ? 'is-on' : ''}`} onClick={() => toggleCamera(a)} aria-label={a.decommissioned ? `Activar ${a.name}` : `Marcar ${a.name} como retirada`} title={a.decommissioned ? 'Reactivar en inventario' : 'Marcar como retirada / desactivada'}><Power size={15} /></button>}</div> }];
   const columns = route === 'cctv'
     ? allColumns.filter(column => ['name', 'idf', 'location', 'model', 'documented_ip', 'lifecycle', 'actions'].includes(column.key))
     : allColumns;
-  const tableFilters = { ...state.filters, ...(dataset === 'cctv_original' ? { relocation: '', decommissioned: '' } : {}) };
-  const exportRows = selectRows(rows, state.query, tableFilters, state.sort, state.asc);
+  const tableFilters = useMemo(() => ({ ...state.filters, dataset, ...(dataset === 'cctv_original' ? { relocation: '', decommissioned: '' } : {}) }), [state.filters, dataset]);
+  const exportRows = useMemo(() => selectRows(rows, state.query, tableFilters, state.sort, state.asc), [rows, state.query, tableFilters, state.sort, state.asc]);
 
   const idfOptions = Array.from(new Set(omniAps.map(a => a.idf_tag).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const modelOptions = Array.from(new Set(omniAps.map(a => a.model).filter(Boolean))).sort();
@@ -408,8 +431,11 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   ];
   const save = async fields => {
     const asset = modal.asset;
+    catalogController.current?.abort();
     generation.current++; requestRef.current?.abort(); setChecking(false);
     const result = demo ? { asset: { ...asset, ...fields, documented: asset.documented || asset, corrected_at: new Date().toISOString() } } : await mutate('/api/inventory/asset', { id: asset.id, version: asset.version, fields });
+    if (result.asset?.id !== asset.id || (!demo && typeof result.asset.version !== 'string')) throw new Error('No se pudo confirmar la cámara actualizada. Recarga el catálogo.');
+    normalizeInventoryCatalog({ ...catalog, assets: [result.asset] });
     setCatalog(old => ({ ...old, assets: old.assets.map(a => a.id === asset.id ? result.asset : a) }));
     setNetwork(null); markDirty(false); setModal(null);
     notify(demo ? 'Corrección de ejemplo guardada en esta sesión.' : 'Corrección física guardada. La fuente original se conserva.');
@@ -476,7 +502,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
             OmniVista reporta equipos sin enlace activo o desconectados. Puedes filtrar por estado &quot;Fuera de servicio (Down)&quot; para identificar su ubicación física y puerto de switch/IDF.
           </Notice>
         )}
-        <section className="metric-grid">
+        <section className="metric-grid module-summary-cards">
           <Metric icon={Wifi} label="Access Points monitoreados" value={omniLoading && !omniAps.length ? '…' : number(omniSummary.total)} caption="detectados en OmniVista" />
           <Metric icon={Wifi} tone="success" label="En servicio (Up)" value={omniLoading && !omniAps.length ? '…' : number(omniSummary.online)} caption="transmitiendo en la red" />
           <Metric icon={TriangleAlert} tone={omniSummary.offline > 0 ? 'danger' : 'neutral'} label="Fuera de servicio (Down)" value={omniLoading && !omniAps.length ? '…' : number(omniSummary.offline)} caption={omniSummary.offline > 0 ? 'requiere revisión física' : 'sin caídas reportadas'} />
@@ -506,7 +532,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
                 {modelOptions.map(m => <option key={m} value={m}>{m}</option>)}
               </Select>
             )}
-            <SearchField value={omniState.query} onChange={omniState.setQuery} placeholder="Buscar AP, IP, MAC, serie o ubicación…" />
+            <SearchField defer value={omniState.query} onChange={omniState.setQuery} placeholder="Buscar AP, IP, MAC, serie o ubicación…" />
           </div>}
           loading={omniLoading}
           error={omniError}
@@ -560,12 +586,12 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
       <>
         <PageHeading eyebrow={route === 'cctv' ? 'Inventario físico y cámaras' : 'Inventario físico y cotejo de red'} title={title} description={route === 'cctv' ? 'Datos documentados, estado operativo y correcciones físicas del sistema de videovigilancia' : 'Datos documentados, correcciones físicas y observaciones actuales de las APIs'} updatedAt={catalog.imported_at} />
         {route !== 'cctv' && <Notice title="La documentación no acredita el estado actual">La IP y el estado observados se muestran solo cuando existe una coincidencia de identidad con las APIs. Un equipo sin coincidencia no se considera dado de baja.</Notice>}
-        {route === 'cctv' ? <section className="metric-grid"><Metric icon={Camera} label="Cámaras documentadas" value={number(rows.length)} caption={dataset === 'cctv_original' ? 'catálogo histórico' : 'catálogo seleccionado'} /><Metric icon={Camera} tone="success" label="Cámaras activas" value={number(rows.filter(row => !row.decommissioned).length)} caption="disponibles en inventario" /><Metric icon={Power} tone={rows.some(row => row.decommissioned) ? 'danger' : 'neutral'} label="Retiradas / desactivadas" value={number(rows.filter(row => row.decommissioned).length)} caption="fuera de operación" /><Metric icon={MapPin} tone="info" label="Cámaras reubicadas" value={number(rows.filter(row => row.relocated).length)} caption="con destino documentado" /></section> : <section className="metric-grid"><Metric icon={route === 'aps' ? Wifi : Server} label="Registros documentados" value={number(rows.length)} caption="catálogo seleccionado" /><Metric icon={Server} label="Racks / Contenedores" value={number(rows.filter(r => r.kind === 'rack').length)} caption="separados de los equipos" /><Metric icon={TriangleAlert} label="Con observaciones de datos" value={number(rows.filter(r => r.issues?.length).length)} caption="revisar en la ficha" /><Metric icon={RefreshCw} label="Identidades cotejadas" value={number(rows.filter(r => ['matched', 'changed'].includes(network?.assets[r.id]?.comparison)).length)} caption="en la consulta de APIs" /></section>}
+        {route === 'cctv' ? <section className="metric-grid module-summary-cards"><Metric icon={Camera} label="Cámaras documentadas" value={loading || error ? '—' : number(rows.length)} caption={dataset === 'cctv_original' ? 'catálogo histórico' : 'catálogo seleccionado'} /><Metric icon={Camera} tone="success" label="Cámaras activas" value={loading || error ? '—' : number(rows.filter(row => !row.decommissioned).length)} caption="disponibles en inventario" /><Metric icon={Power} tone={rows.some(row => row.decommissioned) ? 'danger' : 'neutral'} label="Retiradas / desactivadas" value={loading || error ? '—' : number(rows.filter(row => row.decommissioned).length)} caption="fuera de operación" /><Metric icon={MapPin} tone="info" label="Cámaras reubicadas" value={loading || error ? '—' : number(rows.filter(row => row.relocated).length)} caption="con destino documentado" /></section> : <section className={`metric-grid ${route === 'aps' ? 'module-summary-cards' : ''}`}><Metric icon={route === 'aps' ? Wifi : Server} label="Registros documentados" value={number(rows.length)} caption="catálogo seleccionado" /><Metric icon={Server} label="Racks / Contenedores" value={number(rows.filter(r => r.kind === 'rack').length)} caption="separados de los equipos" /><Metric icon={TriangleAlert} tone={route === 'aps' ? 'warning' : 'brand'} label="Con observaciones de datos" value={number(rows.filter(r => r.issues?.length).length)} caption="revisar en la ficha" /><Metric icon={RefreshCw} tone={route === 'aps' ? 'success' : 'brand'} label="Identidades cotejadas" value={number(rows.filter(r => ['matched', 'changed'].includes(network?.assets[r.id]?.comparison)).length)} caption="en la consulta de APIs" /></section>}
         <div className="toolbar">
           <Select label="Gabinete documental" value={state.filters.idf_id || ''} onChange={e => state.setFilter('idf_id', e.target.value)}><option value="">Todos los gabinetes</option>{catalog.cabinets.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select>
           {route === 'cctv' && dataset === 'cctv' && <Select label="Reubicación" value={state.filters.relocation || ''} onChange={e => state.setFilter('relocation', e.target.value)}><option value="">Todas</option><option>Reubicada</option><option>Por confirmar</option><option>Sin reubicación</option></Select>}
           {route === 'cctv' && dataset === 'cctv' && <button type="button" className={`camera-retired-filter ${state.filters.decommissioned === 'true' ? 'is-active' : ''}`} aria-pressed={state.filters.decommissioned === 'true'} onClick={() => state.setFilter('decommissioned', state.filters.decommissioned === 'true' ? '' : 'true')}><Power size={15} />Retiradas <b>{rows.filter(row => row.decommissioned).length}</b></button>}
-          <SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar descripción, serie, MAC o ubicación…" />
+          <SearchField defer value={state.query} onChange={state.setQuery} placeholder="Buscar descripción, serie, MAC o ubicación…" />
           {route === 'cctv' ? <Button icon={Download} disabled={!canExport || loading || Boolean(error) || !exportRows.length} onClick={() => downloadCsv(title, columns.filter(column => column.key !== 'actions'), exportRows)}>Exportar consulta</Button> : <Button variant="primary" busy={checking} disabled={demo || loading || Boolean(error) || !catalog.assets.length} onClick={check}>Cotejar APIs</Button>}
         </div>
         {networkError && <Notice title="No se pudo completar el cotejo" tone="warning">{networkError}</Notice>}
@@ -609,7 +635,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
             {catalog.observations.filter(o => o.idf_id === selected.idf_id).length > 0 && <div className="detail-history-box"><h3>Observaciones históricas del gabinete</h3><ul>{catalog.observations.filter(o => o.idf_id === selected.idf_id).map((o, i) => <li key={i}>{o.text}</li>)}</ul></div>}
             <div className="form-actions" style={{ marginTop: '8px' }}>
               {canViewActivity && data.idfs.some(c => c.id === selected.idf_id) && <Button onClick={() => { setModal(null); openEditor('qr', data.idfs.find(c => c.id === selected.idf_id)); }}>Código QR del gabinete</Button>}
-              {canWrite && selected.dataset === 'cctv' && <Button icon={Power} variant={selected.decommissioned ? 'primary' : 'danger'} onClick={() => toggleCamera(selected)}>{selected.decommissioned ? 'Activar en inventario' : 'Marcar como retirada'}</Button>}
+              {canWrite && selected.dataset === 'cctv' && <Button icon={Power} busy={pendingCamera === selected.id} disabled={Boolean(pendingCamera)} variant={selected.decommissioned ? 'primary' : 'danger'} onClick={() => toggleCamera(selected)}>{selected.decommissioned ? 'Activar en inventario' : 'Marcar como retirada'}</Button>}
               {canWrite && selected.dataset !== 'cctv_original' && <Button variant="primary" onClick={() => setModal({ type: 'edit', asset: selected })}>Corregir datos físicos</Button>}
             </div>
           </div>}
@@ -655,5 +681,5 @@ function Sources({ catalog, canExport }) {
 
 function Unlinked({ rows, canExport }) {
   const state = useListState('api-sin-vinculo');
-  return <DataTable title="Registros de API sin vínculo confirmado" rows={rows} state={state} columns={[{ key: 'provider', label: 'API' }, { key: 'name', label: 'Equipo' }, { key: 'ip', label: 'IP observada' }, { key: 'mac', label: 'MAC' }, { key: 'model', label: 'Modelo' }]} toolbar={<SearchField value={state.query} onChange={state.setQuery} />} exportable={canExport} />;
+  return <DataTable title="Registros de API sin vínculo confirmado" rows={rows} state={state} columns={[{ key: 'provider', label: 'API' }, { key: 'name', label: 'Equipo' }, { key: 'ip', label: 'IP observada' }, { key: 'mac', label: 'MAC' }, { key: 'model', label: 'Modelo' }]} toolbar={<SearchField defer value={state.query} onChange={state.setQuery} />} exportable={canExport} />;
 }

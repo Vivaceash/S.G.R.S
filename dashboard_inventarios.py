@@ -47,6 +47,22 @@ def request(path, method='GET', body=None, actor=None, binary=False):
 
 def catalog():
     value = request('/cctv/catalog')
+    if (not isinstance(value, dict) or not isinstance(value.get('assets'), list)
+            or not isinstance(value.get('cabinets'), list)
+            or not isinstance(value.get('revision'), str) or not value['revision'].strip()):
+        raise access.AccessError(503, 'API Inventarios devolvió un catálogo incompleto. Vuelve a intentar.')
+    identifiers = set()
+    for asset in value['assets']:
+        if (not isinstance(asset, dict) or not isinstance(asset.get('id'), str) or not asset['id']
+                or asset['id'] in identifiers or asset.get('dataset') not in ('cctv', 'cctv_original')
+                or any(key in asset and not isinstance(asset[key], bool) for key in ('decommissioned', 'relocated'))):
+            raise access.AccessError(503, 'API Inventarios devolvió cámaras con formato no válido. Vuelve a intentar.')
+        identifiers.add(asset['id'])
+    if any(not isinstance(c, dict) or not isinstance(c.get('id'), str) or not isinstance(c.get('name'), str)
+           for c in value['cabinets']):
+        raise access.AccessError(503, 'API Inventarios devolvió gabinetes con formato no válido. Vuelve a intentar.')
+    if not isinstance(value.get('observations', []), list):
+        raise access.AccessError(503, 'API Inventarios devolvió observaciones con formato no válido. Vuelve a intentar.')
     return {**value, 'observations': value.get('observations', [])}
 
 

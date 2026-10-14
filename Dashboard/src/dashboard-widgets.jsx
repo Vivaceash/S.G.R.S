@@ -50,6 +50,7 @@ const demoResponse = (id, data) => ({
 
 function useWidgetQuery(id, demo, data) {
   const path = REMOTE[id];
+  const demoAps = demo ? data.aps : null;
   const [revision, setRevision] = useState(0);
   const [snapshot, setSnapshot] = useState({ value: null, loading: Boolean(path), error: '', updatedAt: null });
   useEffect(() => {
@@ -79,7 +80,7 @@ function useWidgetQuery(id, demo, data) {
     const onVisible = () => { if (!document.hidden) load(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => { alive = false; clearInterval(timer); controller?.abort(); document.removeEventListener('visibilitychange', onVisible); };
-  }, [id, path, demo, revision, data.updatedAt]);
+  }, [id, path, demo, revision, demoAps]);
   return { ...snapshot, retry: () => setRevision(value => value + 1) };
 }
 
@@ -238,7 +239,7 @@ export function DashboardWidgets({ children, data, demo, userId, loading, errors
     {message && <p className="widget-save-message" role="status"><Check size={16} />{message}</p>}
     {editing && <section className="widget-editor" aria-label="Personalizar widgets">
       <div className="widget-editor-heading"><div><h2>Agregar widgets</h2><p>Elige información de tus módulos. El diseño se guarda solo en este navegador.</p></div><Button icon={RotateCcw} onClick={() => { setDraft(DEFAULT_WIDGET_LAYOUT.filter(widget => allowed.has(widget.id))); setSaveError(''); }}>Restablecer diseño</Button></div>
-      <SearchField value={query} onChange={setQuery} label="Buscar widgets" placeholder="Buscar por widget o módulo…" />
+      <SearchField defer value={query} onChange={setQuery} label="Buscar widgets" placeholder="Buscar por widget o módulo…" />
       <div className="widget-catalog">{catalog.filter(widget => `${widget.title} ${widget.module}`.toLocaleLowerCase('es').includes(query.toLocaleLowerCase('es'))).map(widget => {
         const added = draft.some(item => item.id === widget.id);
         const [CatalogIcon, tone] = WIDGET_VISUALS[widget.module] || [LayoutDashboard, 'brand'];

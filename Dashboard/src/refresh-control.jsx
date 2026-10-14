@@ -28,7 +28,7 @@ export function RefreshControl({ loading, onRefresh, demo = false }) {
         if (!demo) refreshRef.current();
       }
     };
-    const timer = setInterval(tick, 250);
+    const timer = setInterval(tick, 1000);
     document.addEventListener('visibilitychange', tick);
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', tick); };
   }, [loading, demo]);

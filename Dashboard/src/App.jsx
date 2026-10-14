@@ -142,13 +142,9 @@ function buildQrValue(row, demo) {
 }
 
 function updateWithViewTransition(update) {
-  const reducedMotion = typeof matchMedia === "function" &&
-    matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (!reducedMotion && typeof document.startViewTransition === "function") {
-    document.startViewTransition(update);
-  } else {
-    update();
-  }
+  // Panels already have a short CSS entry effect. Avoid taking full-page
+  // snapshots and blocking successive selections for the same transition.
+  update();
 }
 
 const emptyData = () => ({
@@ -884,10 +880,12 @@ function IdfHub({
   const firstTab = canViewActivity ? 'activity' : canViewInventory ? 'inventory' : 'qr';
   const selected = idfs.find((idf) => idf.id === selectedId) || null;
   const availableTab = (tab === 'activity' && canViewActivity) || (tab === 'inventory' && canViewInventory) || (tab === 'qr' && canViewQr) ? tab : firstTab;
-  const unresolved = (idf) =>
-    records.filter(
-      (record) => record.idfId === idf.id && record.status !== "resolved",
-    ).length;
+  const unresolvedByIdf = useMemo(() => {
+    const counts = new Map();
+    for (const record of records) if (record.status !== "resolved") counts.set(record.idfId, (counts.get(record.idfId) || 0) + 1);
+    return counts;
+  }, [records]);
+  const unresolved = idf => unresolvedByIdf.get(idf.id) || 0;
   const updateViewState = (next) => {
     setViewState((current) => ({ ...current, ...next }));
   };
@@ -1324,6 +1322,7 @@ export default function App() {
   const [logoutBusy, setLogoutBusy] = useState(false);
   const generation = useRef(0);
   const loadController = useRef(null);
+  const loadedResources = useRef(new Set());
   const mutationLock = useRef(false);
   const reportSyncBusy = useRef(false);
   const meztliSyncBusy = useRef(false);
@@ -1369,54 +1368,37 @@ export default function App() {
       segments: "/api/forti/network/dhcp-pools",
       ...(canReadAudit ? { audit: "/api/audit" } : {}),
     };
-    const results = await Promise.allSettled(
-      Object.values(endpoints).map((path) =>
-        request(path, { signal: controller.signal }),
-      ),
-    );
+    setData(old => ({ ...old,
+      ...(idfDataView === null ? { idfs: [], resources: [] } : {}),
+      ...(!reportsPath ? { reports: {} } : {}),
+      ...(!canReadAudit ? { audit: [] } : {}),
+    }));
+    // Publish each source as soon as it arrives: a slow, unrelated provider
+    // must not keep every page behind its loading placeholder.
+    await Promise.allSettled(Object.entries(endpoints).map(async ([key, path]) => {
+      try {
+        const response = await request(path, { signal: controller.signal });
+        if (version !== generation.current) return;
+        const value = key === "audit" ? (response.events || response)
+          : key === "segments" ? response.data?.pools
+          : key === "meztliLeases" ? response.data : response;
+        if (["idfs", "ips", "devices", "meztliLeases", "segments"].includes(key) && !Array.isArray(value)) {
+          throw new Error("El servicio devolvió un formato no reconocido.");
+        }
+        loadedResources.current.add(key);
+        setData(old => ({ ...old, [key]: value,
+          ...(key === "idfs" ? { resources: inventoryFromIdfs(value) } : {}),
+          updatedAt: new Date().toISOString() }));
+        setErrors(old => { const next = { ...old }; delete next[key]; return next; });
+      } catch (error) {
+        if (version !== generation.current) return;
+        loadedResources.current.add(key);
+        setErrors(old => ({ ...old, [key]: error.name === "AbortError"
+          ? "Se agotó el tiempo de consulta. Vuelve a intentar." : error.message }));
+      }
+    }));
     clearTimeout(timer);
     if (version !== generation.current) return;
-    const next = {},
-      failures = {};
-    Object.keys(endpoints).forEach((key, index) => {
-      const result = results[index];
-      if (result.status === "fulfilled") {
-        const value =
-          key === "audit"
-            ? (result.value.events || result.value)
-            : key === "segments"
-              ? result.value.data?.pools
-              : key === "meztliLeases"
-                ? result.value.data
-                : result.value;
-        if (
-          ["idfs", "ips", "devices", "meztliLeases", "segments"].includes(
-            key,
-          ) &&
-          !Array.isArray(value)
-        )
-          failures[key] = "El servicio devolvió un formato no reconocido.";
-        else next[key] = value;
-      } else
-        failures[key] =
-          result.reason.name === "AbortError"
-            ? "Se agotó el tiempo de consulta. Vuelve a intentar."
-            : result.reason.message;
-    });
-    setData((old) => {
-      const merged = {
-        ...old,
-        idfs: idfDataView === null ? [] : old.idfs,
-        reports: reportsPath ? old.reports : {},
-        audit: canReadAudit ? old.audit : [],
-        ...next,
-        updatedAt: Object.keys(next).length
-          ? new Date().toISOString()
-          : old.updatedAt,
-      };
-      return { ...merged, resources: inventoryFromIdfs(merged.idfs) };
-    });
-    setErrors(failures);
     setLoading(false);
   }, [demo, notify, idfDataView, reportsPath, canReadAudit]);
   useEffect(() => {
@@ -1892,13 +1874,20 @@ export default function App() {
       notify(error.message || "No se pudo resolver la incidencia.");
     }
   };
-  const records = reportsFromData(data.reports, data.idfs);
+  const records = useMemo(() => reportsFromData(data.reports, data.idfs), [data.reports, data.idfs]);
+  const pageResources = {
+    resumen: ['ips', 'devices', 'segments'], dispositivos: ['devices', ...(route.params.get('segmento') ? ['segments'] : [])],
+    disponibilidad: ['ips'], 'gestion-meztli': ['meztliLeases', 'devices'], bitacora: ['audit'],
+    idf: ['idfs', ...(reportsPath ? ['reports'] : [])], inventario: ['idfs'],
+    'bitacora-idf': ['idfs', ...(reportsPath ? ['reports'] : [])], soporte: ['devices', 'segments'],
+  }[route.path] || [];
+  const pageLoading = loading && pageResources.some(key => !loadedResources.current.has(key));
   const shared = {
     data,
     demo,
     navigate,
     openEditor,
-    loading,
+    loading: pageLoading,
     errors,
     refresh,
     canWrite: can("inventory.write"),
@@ -1974,7 +1963,7 @@ export default function App() {
         canOpenIdfs={canOpenIdfs}
         notify={notify}
         onResolve={resolveDirect}
-        loading={loading}
+        loading={pageLoading}
         errors={errors}
         refresh={refresh}
       />
@@ -2015,7 +2004,7 @@ export default function App() {
         canOpenIdfs={canOpenIdfs}
         notify={notify}
         onResolve={resolveDirect}
-        loading={loading}
+        loading={pageLoading}
         errors={errors}
         refresh={refresh}
       />
@@ -2044,7 +2033,7 @@ export default function App() {
       <MeztliManagement
         data={data}
         openEditor={openEditor}
-        loading={loading}
+        loading={pageLoading}
         errors={errors}
         refresh={refresh}
         canExport={can("inventory.export")}
@@ -2192,7 +2181,7 @@ export default function App() {
         </div>
         <div className="header-search">
           <div className="header-search-wrapper">
-            <SearchField
+            <SearchField defer
               value={globalQuery}
               onChange={setGlobalQuery}
               label="Buscar una sección"
@@ -2236,7 +2225,7 @@ export default function App() {
             onClick={() => openEditor("services")}
             className="header-bell-btn"
           />
-          <span className="header-bell-badge" aria-label="Todos los servicios operativos" title="Servicios en línea" />
+          <span className="header-bell-badge" aria-hidden="true" title="Servicios en línea" />
         </div>
         <button
           className="account-button"

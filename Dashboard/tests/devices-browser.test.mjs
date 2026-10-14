@@ -33,12 +33,16 @@ try {
 
   // Click on the first row to test opening device detail
   console.log('Clicking first device row to verify modal...');
-  await page.locator('table tbody tr').first().click();
+  assert.equal(await page.getByRole('columnheader', { name: 'Ubicación', exact: true }).count(), 0);
+  assert.equal(await page.getByText('Selecciona cualquier fila para abrir el detalle técnico').count(), 0);
+  await page.locator('table tbody tr').first().locator('td').first().click();
+  assert.equal(await page.locator('dialog[open]').count(), 0, 'Rows no longer open device details');
+  await page.locator('table tbody tr').first().getByRole('button', { name: 'Ver', exact: true }).click();
   await page.waitForTimeout(500);
 
   const modalOpen = await page.locator('dialog[open]').isVisible();
   console.log('Detail modal open:', modalOpen);
-  assert.equal(modalOpen, true, 'Device detail modal must open on row click');
+  assert.equal(modalOpen, true, 'Device detail modal must open with Ver');
 
   assert.equal(errors.length, 0, `Browser errors detected: ${errors.join(', ')}`);
   console.log('ALL DEVICES PAGE TESTS PASSED!');

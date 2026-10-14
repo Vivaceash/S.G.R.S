@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { LogIn, ShieldCheck } from 'lucide-react';
 import { Button, Field, Loading, Notice, SecretInput } from './components.jsx';
 import { useForm } from './forms.jsx';
+import { LoginWaves } from './login-waves.jsx';
 import { request, setCsrfToken, ROLE_PAGE_DEFAULTS, roleLabel, BASE_ROLE_CATALOG, getEffectiveRoles, canViewPageId, canViewSubmoduleId, defaultSubmodules, clearIdfViewSession } from './domain.mjs';
 
 const SessionContext = createContext(null);
@@ -38,7 +39,7 @@ function Login({ onLogin, onBootstrap, setup, setupAllowed, error, retry, expire
     return errors;
   }, onBootstrap, null, true);
   useEffect(() => { document.title = 'Iniciar sesión · Centro Operativo SGRS'; }, []);
-  return <main className="login-page"><section className="login-intro" aria-label="Sistema de Gestión en Redes y Seguridad"><p className="eyebrow">Infraestructura NOC</p><h1>Sistema de Gestión<br />en Redes y Seguridad</h1><p>Consulta, documenta y da seguimiento a la infraestructura institucional desde un solo lugar.</p><div className="login-intro-points"><span><i /> Inventario y disponibilidad IP</span><span><i /> Reportes de IDF en tiempo real</span><span><i /> Monitoreo de red centralizado</span></div></section><section className="login-panel panel"><div className="brand-image" role="img" aria-label="ISSSTE" /><p className="eyebrow">Centro Operativo · Redes e Infraestructura</p>{expired && <h1>Vuelve a iniciar sesión</h1>}<p className="muted">Acceso con tu cuenta personal. Tus permisos dependen del rol asignado.</p>
+  return <main className="login-page"><LoginWaves /><section className="login-intro" aria-label="Sistema de Gestión en Redes y Seguridad"><p className="eyebrow">Infraestructura NOC</p><h1>Sistema de Gestión<br />en Redes y Seguridad</h1><p>Consulta, documenta y da seguimiento a la infraestructura institucional desde un solo lugar.</p><div className="login-intro-points"><span><i /> Inventario y disponibilidad IP</span><span><i /> Reportes de IDF en tiempo real</span><span><i /> Monitoreo de red centralizado</span></div></section><section className="login-panel panel"><div className="brand-image" role="img" aria-label="ISSSTE" /><p className="eyebrow">Centro Operativo · Redes e Infraestructura</p>{expired && <h1>Vuelve a iniciar sesión</h1>}<p className="muted">Acceso con tu cuenta personal. Tus permisos dependen del rol asignado.</p>
     {setup && <Notice title="Configuración inicial pendiente">{setupAllowed ? 'Crea la primera cuenta local para habilitar el dashboard.' : 'La primera cuenta debe crearse desde la consola del servidor.'}<Button onClick={retry}>Comprobar disponibilidad</Button></Notice>}
     {error && <Notice title="No se pudo consultar el acceso" tone="warning" action={<Button onClick={retry}>Reintentar</Button>}>{error}</Notice>}
     {expired && <Notice title="Sesión no válida">Vuelve a iniciar sesión. Los datos de la sesión anterior se han retirado de la pantalla.</Notice>}
@@ -81,6 +82,15 @@ function PasswordChange({ onChanged }) {
 }
 
 export function SessionProvider({ children }) {
+  useEffect(() => {
+    const syncVisibility = () => document.documentElement.toggleAttribute('data-ui-hidden', document.hidden);
+    syncVisibility();
+    document.addEventListener('visibilitychange', syncVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', syncVisibility);
+      document.documentElement.removeAttribute('data-ui-hidden');
+    };
+  }, []);
   const [demo, setDemoState] = useState(() => new URLSearchParams(location.search).get('demo') === '1');
   const [identity, setIdentity] = useState(null);
   const [ready, setReady] = useState(demo);

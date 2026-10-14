@@ -162,7 +162,7 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
         <dl className="segment-details segment-secondary"><div><dt><Monitor size={16} />{isMeztliSegment(segment) ? 'Concesiones DHCP' : 'Dispositivos en línea'}</dt><dd className="text-success"><strong>{isMeztliSegment(segment) ? number(segment.active_leases) : number(getOverviewSegmentDevices(devices, segment).filter(device => device.status === 'online').length)}</strong></dd></div><div><dt><Clock3 size={16} />{demo ? 'Promedio diario' : 'Duración de concesión'}</dt><dd>{demo ? number(segment.average) : segment.lease_time_seconds ? `${number(segment.lease_time_seconds)} s` : 'No informada'}</dd></div></dl>
         <div className={`capacity-meter capacity-meter-${meterTone}`} style={{ '--meter-fill': meterColor }}><meter min="0" max="100" value={segment.utilization_percent || 0} className={`meter-${meterTone}`} style={{ '--meter-fill': meterColor }} aria-label={`Utilización de ${segment.interface}`} /><small><span className={`meter-bullet meter-bullet-${meterTone}`} style={{ background: meterColor }} aria-hidden="true" />{number(segment.utilization_percent)}% utilizado</small></div>
         <div className="segment-description"><Building2 size={21} aria-hidden="true" /><p>{segment.description || `Pool de direcciones de la interfaz ${segment.interface}. Consulta los equipos asociados a este segmento.`}</p></div>
-        <Button variant={isSelected ? 'secondary' : 'primary'} className={`w-full ${isSelected ? 'is-selected' : ''}`} icon={Server} aria-expanded={isSelected} onClick={() => { const key = segmentKey(segment); if (activeSegmentKey === key) { setActiveSegmentKey(null); } else { setActiveSegmentKey(key); setTimeout(() => { devicesPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 60); } }}>{isSelected ? 'Ocultar dispositivos' : 'Ver dispositivos'} {isSelected ? <ChevronDown size={17} /> : <ArrowRight size={17} />}</Button>
+        <Button variant={isSelected ? 'secondary' : 'primary'} className={`w-full ${isSelected ? 'is-selected' : ''}`} icon={Server} aria-expanded={isSelected} onClick={() => { const key = segmentKey(segment); if (activeSegmentKey === key) { setActiveSegmentKey(null); } else { setActiveSegmentKey(key); setTimeout(() => { devicesPanelRef.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' }); }, 60); } }}>{isSelected ? 'Ocultar dispositivos' : 'Ver dispositivos'} {isSelected ? <ChevronDown size={17} /> : <ArrowRight size={17} />}</Button>
       </article>; })}</div>{!visibleSegments.length && <Empty title="Sin segmentos principales" action={<Button icon={Plus} onClick={editSegments}>Elegir principales</Button>}>Agrega los segmentos que quieres ver en tu dashboard.</Empty>}</> : <div className="panel"><Empty title={loading ? 'Consultando segmentos de red' : 'Sin segmentos disponibles'}>{loading ? 'Espera mientras se consulta la capacidad DHCP.' : 'La conexión con el servicio DHCP no devolvió segmentos. Puedes revisar el inventario IP o actualizar la consulta.'}</Empty></div>}
     </section>
     <section data-widget-id="network" className="network-usage panel" aria-labelledby="network-usage-title">
@@ -570,7 +570,7 @@ export function Requests({ demo }) {
       {demo && <Notice title="Vista de demostración">Para consultar OmniVista cambia a datos del sistema e inicia sesión con una cuenta autorizada.</Notice>}
       {snapshot.error && <Notice title="No se pudo consultar OmniVista" tone="danger" action={<Button onClick={() => setRevision(value => value + 1)}>Reintentar</Button>}>{snapshot.error}</Notice>}
 
-      <div className="metric-grid">
+      <div className="metric-grid module-summary-cards">
         <Metric
           icon={AlertCircle}
           tone="danger"
@@ -638,7 +638,7 @@ export function Requests({ demo }) {
           exportable={!demo}
           emptyText="No se encontraron cuentas con descripción de Oficio en OmniVista."
           toolbar={
-            <SearchField value={oficiosState.query} onChange={oficiosState.setQuery} placeholder="Buscar usuario, oficio, nombre o departamento…" />
+            <SearchField defer value={oficiosState.query} onChange={oficiosState.setQuery} placeholder="Buscar usuario, oficio, nombre o departamento…" />
           }
         />
       ) : (
@@ -654,7 +654,7 @@ export function Requests({ demo }) {
           exportable={!demo}
           emptyText="OmniVista no devolvió cuentas en esta consulta."
           toolbar={
-            <SearchField value={usersState.query} onChange={usersState.setQuery} placeholder="Buscar cuenta, nombre o departamento…" />
+            <SearchField defer value={usersState.query} onChange={usersState.setQuery} placeholder="Buscar cuenta, nombre o departamento…" />
           }
         />
       )}
@@ -808,7 +808,7 @@ export function Inventory({ data, demo, navigate, openEditor, errors, loading, r
     { key: 'actions', label: 'Acciones', sortable: false, render: r => <Button disabled={!canWrite} onClick={() => openEditor(demo ? 'stock' : 'resource', r)}>Actualizar</Button> },
   ];
   return <><PageHeading eyebrow="Inventario de infraestructura" title="Recursos Disponibles" description="Consulta y gestión del inventario por IDF y segmento de red" updatedAt={data.updatedAt} />
-    <div className="toolbar"><Select label="IDF / MDF" value={state.filters.idf || ''} onChange={e => state.setFilter('idf', e.target.value)}><option value="">Todos los IDFs</option>{options(data.resources.map(r => r.idf))}</Select><Select label="Categoría" value={state.filters.category || ''} onChange={e => state.setFilter('category', e.target.value)}><option value="">Todas las categorías</option>{options(data.resources.map(r => r.category))}</Select><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar recurso, categoría o descripción…" /><Button icon={Plus} variant="primary" onClick={() => openEditor(demo ? 'stock' : 'resource')} disabled={!data.idfs.length || !canWrite}>Agregar recurso</Button></div>
+    <div className="toolbar"><Select label="IDF / MDF" value={state.filters.idf || ''} onChange={e => state.setFilter('idf', e.target.value)}><option value="">Todos los IDFs</option>{options(data.resources.map(r => r.idf))}</Select><Select label="Categoría" value={state.filters.category || ''} onChange={e => state.setFilter('category', e.target.value)}><option value="">Todas las categorías</option>{options(data.resources.map(r => r.category))}</Select><SearchField defer value={state.query} onChange={state.setQuery} placeholder="Buscar recurso, categoría o descripción…" /><Button icon={Plus} variant="primary" onClick={() => openEditor(demo ? 'stock' : 'resource')} disabled={!data.idfs.length || !canWrite}>Agregar recurso</Button></div>
     <section className="metric-grid"><Metric icon={Layers3} label="Total de recursos" value={number(resources.length)} caption={demo ? 'tipos de recursos' : 'equipos registrados'} /><Metric icon={Package} tone="gold" label={demo ? 'Existencia total' : 'Gabinetes'} value={number(demo ? count('quantity') : new Set(resources.map(r => r.idf)).size)} caption={demo ? 'unidades en inventario' : 'con equipos registrados'} /><Metric icon={CheckCircle2} tone="success" label={demo ? 'Disponibles' : 'En servicio'} value={number(demo ? count('available') : resources.filter(r => r.status === 'online').length)} caption={demo ? 'unidades disponibles' : 'según el inventario'} /><Metric icon={TriangleAlert} tone="danger" label={demo ? 'Stock crítico' : 'Fuera de servicio'} value={number(resources.filter(r => demo ? r.status === 'critical' : r.status === 'offline').length)} caption="requieren atención" /></section>
     <DataTable title="Listado de recursos" rows={data.resources} columns={columns} state={state} noun="recursos" exportable={canExport} loading={loading} error={errors.idfs} onRetry={refresh} toolbar={<div className="section-heading compact"><Server size={28} className="section-icon" /><div><h2>Listado de recursos {state.filters.idf ? `en ${state.filters.idf}` : 'de infraestructura'}</h2><p>{demo ? 'Administra la existencia de los recursos de infraestructura.' : 'Inventario físico de equipos. Las existencias por unidades se incorporarán en una etapa posterior.'}</p></div></div>} />
     <Note>Verifica el IDF, la identificación del equipo y su estado antes de guardar. Solo los perfiles operativos pueden modificar el inventario.</Note></>;
@@ -818,11 +818,12 @@ export function Addresses({ data, navigate, openEditor, loading, errors, refresh
   const { canViewSubmodule } = useSession();
   const canViewList = canViewSubmodule('disponibilidad', 'list');
   const canViewMatrix = canViewSubmodule('disponibilidad', 'matrix');
-  const rows = data.ips.map(r => ({ ...r, id: r.ip }));
+  const rows = useMemo(() => data.ips.map(r => ({ ...r, id: r.ip })), [data.ips]);
   const [view, setView] = useState('matrix');
+  const [matrixLimits, setMatrixLimits] = useState({});
   const visibleView = (view === 'matrix' && canViewMatrix) || (view === 'list' && canViewList) ? view : canViewMatrix ? 'matrix' : 'list';
   const columns = [{ key: 'ip', label: 'Dirección IP', render: r => <strong className="ip-address" title={r.ip}>{displayIp(r.ip)}</strong> }, { key: 'vlan', label: 'VLAN / Segmento' }, { key: 'location', label: 'Ubicación' }, { key: 'type', label: 'Tipo de uso' }, { key: 'status', label: 'Estado', render: r => <Badge status={r.status} /> }, { key: 'hostname', label: 'Equipo asignado' }, { key: 'actions', label: 'Acciones', sortable: false, render: r => <Button disabled={!canWrite} onClick={() => openEditor('ip', r)}>{r.status === 'available' ? 'Asignar' : 'Administrar'}</Button> }];
-  const filtered = selectRows(rows, state.query, state.filters, state.sort, state.asc);
+  const filtered = useMemo(() => selectRows(rows, state.query, state.filters, state.sort, state.asc), [rows, state.query, state.filters, state.sort, state.asc]);
   const segmentRows = state.filters.vlan ? rows.filter(row => row.vlan === state.filters.vlan) : rows;
   const counts = ['all', 'available', 'occupied', 'reserved'].reduce((result, status) => ({ ...result, [status]: status === 'all' ? segmentRows.length : segmentRows.filter(row => row.status === status).length }), {});
   const filteredBySegment = filtered.reduce((groups, row) => { const key = row.vlan || 'Sin segmento'; (groups[key] ||= []).push(row); return groups; }, {});
@@ -830,10 +831,27 @@ export function Addresses({ data, navigate, openEditor, loading, errors, refresh
   const labelForStatus = status => ({ available: 'Libre', occupied: 'Ocupada', reserved: 'Reservada' }[status] || 'Sin estado');
   return <><PageHeading eyebrow="Inventario de infraestructura" title="Direcciones IP" description="Consulta de direcciones disponibles y asignadas por segmento de red" updatedAt={data.updatedAt} />
     <section className="ip-kpi-grid" aria-label="Resumen de direcciones IP">{[
-      ['all', 'Total direcciones', counts.all, 'Todos los segmentos'], ['available', 'Libres disponibles', counts.available, 'Listas para asignación'], ['occupied', 'IPs ocupadas', counts.occupied, 'Asignadas en producción'], ['reserved', 'Reservadas / gateways', counts.reserved, 'Gateways y VIPs de enlace'],
-    ].map(([status, label, value, caption]) => <button key={status} type="button" className={`ip-kpi ip-kpi-${status} ${(!state.filters.status && status === 'all') || state.filters.status === status ? 'is-active' : ''}`} onClick={() => chooseStatus(status)}><span>{label}</span><strong>{number(value)}</strong><i style={{ width: `${counts.all ? Math.round(value / counts.all * 100) : 0}%` }} /><small>{caption}</small></button>)}</section>
-    <div className="toolbar ip-toolbar"><Select label="VLAN / Segmento" value={state.filters.vlan || ''} onChange={e => state.setFilter('vlan', e.target.value)}><option value="">Todos los segmentos</option>{options(rows.map(r => r.vlan))}</Select><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar IP, host, MAC o ubicación…" /><div className="ip-status-filters" aria-label="Filtrar por estado">{[['all', 'Todas'], ['available', 'Libres'], ['occupied', 'Ocupadas'], ['reserved', 'Reservadas']].map(([status, label]) => <button type="button" key={status} aria-pressed={(!state.filters.status && status === 'all') || state.filters.status === status} onClick={() => chooseStatus(status)}>{label} <b>{number(counts[status])}</b></button>)}</div><div className="ip-view-toggle" aria-label="Vista de direcciones">{canViewList && <button type="button" aria-pressed={visibleView === 'list'} onClick={() => setView('list')}>☷ Lista</button>}{canViewMatrix && <button type="button" aria-pressed={visibleView === 'matrix'} onClick={() => setView('matrix')}>▦ Matriz</button>}</div></div>
-    {visibleView === 'matrix' ? <section className="ip-matrix" aria-label="Matriz de direcciones IP">{loading ? <div className="loading-state">Cargando direcciones IP…</div> : errors.ips ? <Notice title="No se pudieron cargar las direcciones" tone="warning" action={<Button onClick={refresh}>Reintentar</Button>}>{errors.ips}</Notice> : Object.entries(filteredBySegment).map(([segment, ips]) => <section key={segment} className="ip-segment"><div><h2>{segment}</h2><span>{ips.length} IPs</span></div><article>{ips.map(ip => <button key={ip.ip} type="button" className={`ip-cell ip-cell-${ip.status}`} onClick={() => openEditor('ip', ip)} title={`${ip.ip} · ${labelForStatus(ip.status)}${ip.hostname ? ` · ${ip.hostname}` : ''}`}><strong>{displayIp(ip.ip)}</strong><small><i />{labelForStatus(ip.status)}</small></button>)}</article></section>)}{!loading && !errors.ips && !filtered.length && <Empty title="Sin direcciones coincidentes">Modifica los filtros o busca otra dirección.</Empty>}</section> : <DataTable title="Direcciones IP" rows={rows} columns={columns} state={state} noun="direcciones" loading={loading} error={errors.ips} onRetry={refresh} />}
+      ['all', 'Total direcciones', counts.all, 'Todos los segmentos', Network, '100%'],
+      ['available', 'Libres disponibles', counts.available, 'Listas para asignación', CheckCircle2, counts.all ? `${Math.round(counts.available / counts.all * 100)}%` : '0%'],
+      ['occupied', 'IPs ocupadas', counts.occupied, 'Asignadas en producción', Monitor, counts.all ? `${Math.round(counts.occupied / counts.all * 100)}%` : '0%'],
+      ['reserved', 'Reservadas / gateways', counts.reserved, 'Gateways y VIPs de enlace', ShieldCheck, counts.all ? `${Math.round(counts.reserved / counts.all * 100)}%` : '0%'],
+    ].map(([status, label, value, caption, Icon, pct]) => <button key={status} type="button" className={`ip-kpi ip-kpi-${status} ${(!state.filters.status && status === 'all') || state.filters.status === status ? 'is-active' : ''}`} onClick={() => chooseStatus(status)}>
+      <div className="ip-kpi-header">
+        <span className="ip-kpi-icon-wrap"><Icon size={18} strokeWidth={2.2} aria-hidden="true" /></span>
+        <span className="ip-kpi-title">{label}</span>
+        <span className="ip-kpi-pct-badge">{pct}</span>
+      </div>
+      <div className="ip-kpi-body">
+        <strong>{number(value)}</strong>
+        <span className="ip-kpi-unit">direcciones</span>
+      </div>
+      <div className="ip-kpi-meter-track">
+        <i style={{ width: `${counts.all ? Math.max(3, Math.round(value / counts.all * 100)) : 0}%` }} />
+      </div>
+      <small className="ip-kpi-foot">{caption}</small>
+    </button>)}</section>
+    <div className="toolbar ip-toolbar"><Select label="VLAN / Segmento" value={state.filters.vlan || ''} onChange={e => state.setFilter('vlan', e.target.value)}><option value="">Todos los segmentos</option>{options(rows.map(r => r.vlan))}</Select><SearchField defer value={state.query} onChange={state.setQuery} placeholder="Buscar IP, host, MAC o ubicación…" /><div className="ip-status-filters" aria-label="Filtrar por estado">{[['all', 'Todas'], ['available', 'Libres'], ['occupied', 'Ocupadas'], ['reserved', 'Reservadas']].map(([status, label]) => <button type="button" key={status} aria-pressed={(!state.filters.status && status === 'all') || state.filters.status === status} onClick={() => chooseStatus(status)}>{label} <b>{number(counts[status])}</b></button>)}</div><div className="ip-view-toggle" aria-label="Vista de direcciones">{canViewList && <button type="button" aria-pressed={visibleView === 'list'} onClick={() => setView('list')}>☷ Lista</button>}{canViewMatrix && <button type="button" aria-pressed={visibleView === 'matrix'} onClick={() => setView('matrix')}>▦ Matriz</button>}</div></div>
+    {visibleView === 'matrix' ? <section className="ip-matrix" aria-label="Matriz de direcciones IP">{loading ? <div className="loading-state">Cargando direcciones IP…</div> : errors.ips ? <Notice title="No se pudieron cargar las direcciones" tone="warning" action={<Button onClick={refresh}>Reintentar</Button>}>{errors.ips}</Notice> : Object.entries(filteredBySegment).map(([segment, ips]) => <section key={segment} className="ip-segment"><div><h2>{segment}</h2><span>{ips.length} IPs</span></div><article>{ips.slice(0, matrixLimits[segment] || 200).map(ip => <button key={ip.ip} type="button" className={`ip-cell ip-cell-${ip.status}`} onClick={() => openEditor('ip', ip)} title={`${ip.ip} · ${labelForStatus(ip.status)}${ip.hostname ? ` · ${ip.hostname}` : ''}`}><strong>{displayIp(ip.ip)}</strong><small><i />{labelForStatus(ip.status)}</small></button>)}</article>{ips.length > (matrixLimits[segment] || 200) && <Button onClick={() => setMatrixLimits(current => ({ ...current, [segment]: (current[segment] || 200) + 200 }))}>Mostrar más direcciones ({ips.length - (matrixLimits[segment] || 200)} pendientes)</Button>}</section>)}{!loading && !errors.ips && !filtered.length && <Empty title="Sin direcciones coincidentes">Modifica los filtros o busca otra dirección.</Empty>}</section> : <DataTable title="Direcciones IP" rows={rows} columns={columns} state={state} noun="direcciones" loading={loading} error={errors.ips} onRetry={refresh} />}
     <Note>Las asignaciones modifican el inventario local. No cambian reservas DHCP ni aplican configuraciones al firewall.</Note></>;
 }
 export function CopyButton({ text, title = 'Copiar', className = '' }) {
@@ -909,12 +927,11 @@ export function DeviceTypeBadge({ type }) {
 
 export function Devices({ data, navigate, openEditor, loading, errors, refresh, canExport, selectedSegment }) {
   const state = useListState('equipos');
-  const segment = data.segments.find(item => segmentKey(item) === selectedSegment);
-  const eligible = data.devices.filter(device => device.status === 'online' || device.is_reserved === true);
-  const devices = selectedSegment ? eligible.filter(device => deviceInSegment(device, segment)) : eligible;
-  const omniMatchedCount = devices.filter(d => d.omnivista?.matched).length;
-  const typeOptions = Array.from(new Set(devices.map(d => formatDeviceType(d.type, d.os || d.omnivista?.os || d.raw?.os_name, d.omnivista?.device_name || d.name, d.vendor)).filter(Boolean))).sort((a, b) => a.localeCompare(b, "es"));
-  const vendorOptions = Array.from(new Set(devices.map(d => d.vendor).filter(Boolean))).sort((a, b) => a.localeCompare(b, "es"));
+  const segment = useMemo(() => data.segments.find(item => segmentKey(item) === selectedSegment), [data.segments, selectedSegment]);
+  const eligible = useMemo(() => data.devices.filter(device => device.status === 'online' || device.is_reserved === true), [data.devices]);
+  const devices = useMemo(() => selectedSegment ? eligible.filter(device => deviceInSegment(device, segment)) : eligible, [eligible, selectedSegment, segment]);
+  const typeOptions = useMemo(() => Array.from(new Set(devices.map(d => formatDeviceType(d.type, d.os || d.omnivista?.os || d.raw?.os_name, d.omnivista?.device_name || d.name, d.vendor)).filter(Boolean))).sort((a, b) => a.localeCompare(b, "es")), [devices]);
+  const vendorOptions = useMemo(() => Array.from(new Set(devices.map(d => d.vendor).filter(Boolean))).sort((a, b) => a.localeCompare(b, "es")), [devices]);
   const sizeChoice = ['25', '50', '100', 'all'].includes(state.pageSize) ? state.pageSize : '25';
   const pageSize = sizeChoice === 'all' ? Math.max(1, devices.length) : Number(sizeChoice);
 
@@ -977,23 +994,6 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
       render: r => <DeviceTypeBadge type={formatDeviceType(r.type, r.os || r.omnivista?.os || r.raw?.os_name, r.omnivista?.device_name || r.name, r.vendor)} />
     },
     {
-      key: 'location',
-      label: 'Ubicación',
-      value: r => r.omnivista?.location || formatLocation(r.location, r.vendor, segment?.name || r.interface),
-      render: r => {
-        if (r.omnivista?.location) {
-          return (
-            <div className="cell-detail">
-              <strong className="text-location">{r.omnivista.location}</strong>
-              {r.omnivista.ap_name && <small className="text-muted">AP: {r.omnivista.ap_name}</small>}
-            </div>
-          );
-        }
-        const loc = formatLocation(r.location, r.vendor, segment?.name || r.interface);
-        return (!loc || loc === '—') ? <span className="location-empty">Sin ubicación</span> : <span className="location-text">{loc}</span>;
-      }
-    },
-    {
       key: 'status',
       label: 'Estado reportado',
       value: r => statusNames[r.status] || r.status,
@@ -1004,10 +1004,11 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
       label: 'Última actividad',
       value: r => r.activity || r.last_seen || 'Reciente',
       render: r => <span className="text-muted text-xs">{r.activity || r.last_seen || 'Reciente'}</span>
-    }
+    },
+    { key: 'actions', label: 'Acciones', sortable: false, render: r => <Button icon={Eye} onClick={() => openEditor('device-detail', r)} title="Ver ficha técnica">Ver</Button> }
   ];
 
-  const rows = devices.map((d, i) => {
+  const rows = useMemo(() => devices.map((d, i) => {
     const computedType = formatDeviceType(d.type, d.os || d.omnivista?.os || d.raw?.os_name, d.omnivista?.device_name || d.name, d.vendor) || '';
     return {
       ...d,
@@ -1021,7 +1022,7 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
       _search_ap: d.omnivista?.ap_name || '',
       _search_mac: d.mac || '',
     };
-  });
+  }), [devices, segment]);
 
   return (
     <>
@@ -1038,7 +1039,7 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
 
       <div className="toolbar devices-toolbar">
         <div className="devices-toolbar-main">
-          <SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar por equipo, IP, MAC o fabricante…" />
+          <SearchField defer value={state.query} onChange={state.setQuery} placeholder="Buscar por equipo, IP, MAC o fabricante…" />
           <div className="devices-filters-group">
             <Select label="Tipo de dispositivo" value={state.filters.type || ''} onChange={e => state.setFilter('type', e.target.value)} className="devices-filter-select">
               <option value="">Todos los tipos</option>
@@ -1064,20 +1065,14 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
             <Button
               icon={Download}
               disabled={!devices.length}
-              onClick={() => downloadCsv('Dispositivos-de-Red', columns, rows)}
+              onClick={() => downloadCsv('Dispositivos-de-Red', columns.filter(column => column.key !== 'actions'), rows)}
               className="devices-export-btn"
             >
               Exportar
             </Button>
           )}
         </div>
-        <div className="devices-toolbar-right">
-          {omniMatchedCount > 0 && <span className="network-tag omni-badge">{number(omniMatchedCount)} cotejados en OmniVista</span>}
-          <div className="segment-devices-hint">
-            <Info size={16} aria-hidden="true" />
-            <span>Selecciona cualquier fila para abrir el detalle técnico</span>
-          </div>
-        </div>
+
       </div>
 
       <DataTable
@@ -1091,8 +1086,7 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
         loading={loading}
         error={errors.devices || (selectedSegment && errors.segments)}
         onRetry={refresh}
-        onRowClick={r => openEditor('device-detail', r)}
-        rowClassName={r => r.status === 'offline' ? 'segment-device-row device-row-offline' : 'segment-device-row'}
+        rowClassName={r => r.status === 'offline' ? 'device-row-offline' : ''}
       />
 
       <Note>
@@ -1113,11 +1107,11 @@ export function MeztliManagement({ data, openEditor, loading, errors, refresh, c
   const meztliSegment = data.segments.find(segment => normalizeText(`${segment.name || ''} ${segment.interface || ''} ${segment.vlan || ''}`).includes('meztli') || /\b94\b/.test(String(segment.vlan || '')));
   const looksLikeMeztli = device => normalizeText([device.interface, device.vlan, device.ssid, device.network, device.omnivista?.ssid, device.omnivista?.profile].filter(Boolean).join(' ')).includes('meztli') || /\b94\b/.test(String(device.vlan || ''));
   const belongsToMeztli = device => (meztliSegment && deviceInSegment(device, meztliSegment)) || looksLikeMeztli(device);
-  const meztliDevices = data.devices.filter(belongsToMeztli);
-  const directMeztliLeases = directLeases.filter(lease => normalizeText(lease.interface).includes('meztli'));
+  const meztliDevices = useMemo(() => data.devices.filter(belongsToMeztli), [data.devices, data.segments]);
+  const directMeztliLeases = useMemo(() => directLeases.filter(lease => normalizeText(lease.interface).includes('meztli')), [data.meztliLeases]);
   // DHCP leases are the source of truth when available; device inventory is only
   // retained as a visual fallback for demo/offline integrations.
-  const connected = directMeztliLeases.length ? directMeztliLeases.map(lease => ({ ...lease, name: lease.device_name || lease.hostname || lease.mac || 'Sin identificar', status: lease.is_online === false ? 'offline' : 'online', activity: lease.is_online === false ? 'Sin conexión' : 'En línea' })) : meztliDevices.filter(device => device.status === 'online' || device.is_online === true);
+  const connected = useMemo(() => directMeztliLeases.length ? directMeztliLeases.map(lease => ({ ...lease, name: lease.device_name || lease.hostname || lease.mac || 'Sin identificar', status: lease.is_online === false ? 'offline' : 'online', activity: lease.is_online === false ? 'Sin conexión' : 'En línea' })) : meztliDevices.filter(device => device.status === 'online' || device.is_online === true), [directMeztliLeases, meztliDevices]);
   const reserved = connected.filter(device => device.is_reserved === true);
   const unmanaged = connected.filter(device => device.is_reserved !== true);
   const getDeviceType = device => {
@@ -1127,13 +1121,13 @@ export function MeztliManagement({ data, openEditor, loading, errors, refresh, c
     if (/poco|laptop|notebook|macbook|windows|desktop|workstation/.test(identity)) return 'Equipo de usuario';
     return device.type || device.detected_device || formatDeviceType(device.type, device.os, device.name || device.hostname, device.vendor) || 'No identificado';
   };
-  const allRows = connected.map((device, index) => ({
+  const allRows = useMemo(() => connected.map((device, index) => ({
     ...device,
     id: device.id || `${device.interface || 'meztli'}:${device.mac || device.ip || index}`,
     admission: device.is_reserved === true ? 'admitted' : 'not-admitted',
     deviceType: getDeviceType(device),
-  }));
-  const rows = allRows.filter(device => (admissionFilter === 'all' || device.admission === admissionFilter) && (!deviceTypeFilter || device.deviceType === deviceTypeFilter));
+  })), [connected]);
+  const rows = useMemo(() => allRows.filter(device => (admissionFilter === 'all' || device.admission === admissionFilter) && (!deviceTypeFilter || device.deviceType === deviceTypeFilter)), [allRows, admissionFilter, deviceTypeFilter]);
   const elapsedSinceLease = timestamp => {
     const seconds = Math.max(0, Math.floor(Date.now() / 1000 - Number(timestamp)));
     if (!timestamp || !Number.isFinite(seconds)) return 'No disponible';
@@ -1152,8 +1146,8 @@ export function MeztliManagement({ data, openEditor, loading, errors, refresh, c
   return <>
     <PageHeading eyebrow="Supervisión de red inalámbrica" title="Gestión Meztli" description="Dispositivos conectados a Meztli sin reserva DHCP" updatedAt={data.updatedAt} />
     {unmanaged.length > 0 && <Notice title="Aviso: conexiones no admitidas detectadas">Hay <strong>{number(unmanaged.length)} dispositivo{unmanaged.length === 1 ? '' : 's'}</strong> conectado{unmanaged.length === 1 ? '' : 's'} a <strong>SSID-Meztli</strong> sin reserva DHCP. Revísalos antes de realizar una acción en la red.</Notice>}
-    <section className="metric-grid meztli-metrics"><Metric icon={Wifi} label="Conectados a Meztli" value={number(connected.length)} caption="actividad detectada en este momento" /><Metric icon={ShieldCheck} tone="success" label="Con reserva DHCP" value={number(reserved.length)} caption="autorizados para permanecer conectados" ><span className="meztli-reservation-mark"><ShieldCheck size={12} /> Reserva activa</span></Metric><Metric icon={TriangleAlert} tone="danger" label="No deberían estar conectados" value={number(unmanaged.length)} caption="sin reserva DHCP · requieren revisión" /></section>
-    <DataTable title="Conexiones de SSID-Meztli" rows={rows} columns={columns} state={state} pageSize={25} noun={admissionFilter === 'not-admitted' ? 'dispositivos por revisar' : 'dispositivos'} toolbar={<div className="toolbar meztli-table-toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar dispositivo, IP o MAC…" /><Select label="Admisión" value={admissionFilter} onChange={event => setAdmissionFilter(event.target.value)}><option value="not-admitted">No admitidos</option><option value="admitted">Admitidos (reserva DHCP)</option><option value="all">Todos</option></Select><Select label="Tipo de dispositivo" value={deviceTypeFilter} onChange={event => setDeviceTypeFilter(event.target.value)}><option value="">Todos los tipos</option>{options(allRows.map(row => row.deviceType))}</Select></div>} exportable={canExport} loading={loading} error={errors.meztliLeases || errors.devices} onRetry={refresh} onRowClick={row => openEditor('device-detail', row)} emptyText={connected.length ? admissionFilter === 'not-admitted' ? 'Todos los dispositivos conectados a Meztli tienen una reserva DHCP.' : 'No hay dispositivos que coincidan con los filtros seleccionados.' : 'FortiGate no devolvió concesiones DHCP activas para SSID-Meztli.'} />
+    <section className="metric-grid meztli-metrics module-summary-cards"><Metric icon={Wifi} label="Conectados a Meztli" value={number(connected.length)} caption="actividad detectada en este momento" /><Metric icon={ShieldCheck} tone="success" label="Con reserva DHCP" value={number(reserved.length)} caption="autorizados para permanecer conectados" ><span className="meztli-reservation-mark"><ShieldCheck size={12} /> Reserva activa</span></Metric><Metric icon={TriangleAlert} tone="danger" label="No deberían estar conectados" value={number(unmanaged.length)} caption="sin reserva DHCP · requieren revisión" /></section>
+    <DataTable title="Conexiones de SSID-Meztli" rows={rows} columns={columns} state={state} pageSize={25} noun={admissionFilter === 'not-admitted' ? 'dispositivos por revisar' : 'dispositivos'} toolbar={<div className="toolbar meztli-table-toolbar"><SearchField defer value={state.query} onChange={state.setQuery} placeholder="Buscar dispositivo, IP o MAC…" /><Select label="Admisión" value={admissionFilter} onChange={event => setAdmissionFilter(event.target.value)}><option value="not-admitted">No admitidos</option><option value="admitted">Admitidos (reserva DHCP)</option><option value="all">Todos</option></Select><Select label="Tipo de dispositivo" value={deviceTypeFilter} onChange={event => setDeviceTypeFilter(event.target.value)}><option value="">Todos los tipos</option>{options(allRows.map(row => row.deviceType))}</Select></div>} exportable={canExport} loading={loading} error={errors.meztliLeases || errors.devices} onRetry={refresh} onRowClick={row => openEditor('device-detail', row)} emptyText={connected.length ? admissionFilter === 'not-admitted' ? 'Todos los dispositivos conectados a Meztli tienen una reserva DHCP.' : 'No hay dispositivos que coincidan con los filtros seleccionados.' : 'FortiGate no devolvió concesiones DHCP activas para SSID-Meztli.'} />
     <Note title="Alcance de Gestión Meztli">La vista es de supervisión: no modifica reservas DHCP ni desconecta equipos. Abre un registro para revisar sus datos técnicos antes de realizar cualquier acción en la red.</Note>
   </>;
 }
@@ -1499,7 +1493,7 @@ export function AuditLog({
         onRetry={refresh}
         toolbar={
           <div className="audit-toolbar">
-            <SearchField
+            <SearchField defer
               value={state.query}
               onChange={state.setQuery}
               placeholder="Buscar folio, responsable, IDF, equipo o nota…"
@@ -1570,7 +1564,7 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
   const typeOptions = Array.from(new Set(segmentDevices.map(d => formatDeviceType(d.type, d.os || d.omnivista?.os || d.raw?.os_name, d.omnivista?.device_name || d.name, d.vendor)).filter(Boolean))).sort((a, b) => a.localeCompare(b, "es"));
   const vendorOptions = Array.from(new Set(segmentDevices.map(d => d.vendor).filter(Boolean))).sort((a, b) => a.localeCompare(b, "es"));
 
-  const filtered = segmentDevices.filter(d => {
+  const filtered = useMemo(() => segmentDevices.filter(d => {
     const computedType = formatDeviceType(d.type, d.os || d.omnivista?.os || d.raw?.os_name, d.omnivista?.device_name || d.name, d.vendor);
     if (statusFilter && d.status !== statusFilter) return false;
     if (typeFilter && computedType !== typeFilter) return false;
@@ -1594,7 +1588,7 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
       devType.includes(q) ||
       devLoc.includes(q)
     );
-  });
+  }), [segmentDevices, query, statusFilter, typeFilter, vendorFilter, segment]);
 
   const pageSize = pageSizeChoice === 'all' ? Math.max(1, filtered.length) : Number(pageSizeChoice);
   const pageData = paginate(filtered, currentPage, pageSize);
@@ -1627,7 +1621,7 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
     </div>
     <div className="segment-devices-toolbar">
       <div className="devices-toolbar-main">
-        <SearchField value={query} onChange={handleQuery} placeholder="Buscar por equipo, IP, MAC o fabricante…" />
+        <SearchField defer value={query} onChange={handleQuery} placeholder="Buscar por equipo, IP, MAC o fabricante…" />
         <div className="devices-filters-group">
           <Select label="Tipo de dispositivo" value={typeFilter} onChange={e => { setTypeFilter(e.target.value); setCurrentPage(1); }} className="devices-filter-select">
             <option value="">Todos los tipos</option>
@@ -1722,6 +1716,8 @@ export function SupportMovements({ demo }) {
   const showDetail = row => { setPhotoError(false); setSelected(row); };
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
+  const [limit, setLimit] = useState(25);
+  useEffect(() => setLimit(25), [query]);
   const reload = () => {
     if (demo) return;
     request('/api/support/movements').then(result => { setRows(result.movements || []); setError(''); })
@@ -1746,7 +1742,7 @@ export function SupportMovements({ demo }) {
 
     <div className="support-log-toolbar">
       <div className="support-log-search">
-        <SearchField
+        <SearchField defer
           value={query}
           onChange={setQuery}
           label="Buscar movimientos de soporte"
@@ -1780,7 +1776,7 @@ export function SupportMovements({ demo }) {
           </tr>
         </thead>
         <tbody>
-          {visible.map(row => (
+          {visible.slice(0, limit).map(row => (
             <tr key={row.id}>
               <td>
                 <div className="support-cell-idf">
@@ -1848,7 +1844,7 @@ export function SupportMovements({ demo }) {
 
       {/* Vista adaptativa en tarjetas para pantallas móviles */}
       <div className="support-log-mobile-list" aria-label="Lista de movimientos para pantallas pequeñas">
-        {visible.map(row => (
+        {visible.slice(0, limit).map(row => (
           <article key={row.id} className="support-log-mobile-card">
             <div className="support-log-mobile-card-header">
               <div>
@@ -1885,6 +1881,7 @@ export function SupportMovements({ demo }) {
         )}
       </div>
     </div>
+    {visible.length > limit && <div className="table-progressive"><Button onClick={() => setLimit(value => value + 25)}>Mostrar más movimientos ({visible.length - limit} pendientes)</Button></div>}
     <Dialog open={Boolean(selected)} onClose={() => setSelected(null)} title="Detalle del registro" wide>
       {selected && <div className="idf-report-sheet">
         <div className="idf-report-sheet-header">
@@ -2125,6 +2122,10 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
   const [computerQuery, setComputerQuery] = useState('');
   const [printerQuery, setPrinterQuery] = useState('');
   const [computerSort, setComputerSort] = useState('uptime');
+  const [computerLimit, setComputerLimit] = useState(25);
+  const [printerLimit, setPrinterLimit] = useState(25);
+  useEffect(() => setComputerLimit(25), [computerQuery, computerSort]);
+  useEffect(() => setPrinterLimit(25), [printerQuery]);
 
   const [exportOpen, setExportOpen] = useState(false);
   const [exportComputers, setExportComputers] = useState(true);
@@ -2135,7 +2136,7 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
   const supportSegments = useMemo(() => getSupportSegments(segments), [segments]);
 
   // Balance y resumen de saturación para Columna 1
-  const saturationSummary = supportSegments.reduce((acc, s) => {
+  const saturationSummary = useMemo(() => supportSegments.reduce((acc, s) => {
     const status = getSaturationStatus(s);
     if (status === 'critical') acc.critical++;
     else if (status === 'warning') acc.warning++;
@@ -2151,10 +2152,10 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
     acc.occupiedIps += occ;
     acc.availableIps += free;
     return acc;
-  }, { critical: 0, warning: 0, normal: 0, totalIps: 0, occupiedIps: 0, availableIps: 0 });
+  }, { critical: 0, warning: 0, normal: 0, totalIps: 0, occupiedIps: 0, availableIps: 0 }), [supportSegments]);
 
   // 1. Redes y estados
-  const filteredSegments = supportSegments.filter(s => {
+  const filteredSegments = useMemo(() => supportSegments.filter(s => {
     if (!networkQuery.trim()) return true;
     const q = normalizeText(networkQuery);
     return (
@@ -2165,7 +2166,7 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
       (s.vlan && normalizeText(s.vlan).includes(q)) ||
       (s.description && normalizeText(s.description).includes(q))
     );
-  });
+  }), [supportSegments, networkQuery]);
 
   // 2. Computadoras conectadas (online y tipo Computadora)
   const isComputer = d => {
@@ -2175,8 +2176,8 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
     const type = formatDeviceType(d.type, os, name, d.vendor);
     return type === 'Computadora';
   };
-  const computers = devices.filter(isComputer);
-  const filteredComputers = computers.filter(c => {
+  const computers = useMemo(() => devices.filter(isComputer), [devices]);
+  const filteredComputers = useMemo(() => computers.filter(c => {
     if (!computerQuery.trim()) return true;
     const q = normalizeText(computerQuery);
     const ovName = normalizeText(c.omnivista?.device_name || '');
@@ -2190,16 +2191,16 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
       ovName.includes(q) ||
       ovLoc.includes(q)
     );
-  });
+  }), [computers, computerQuery]);
 
-  const sortedComputers = [...filteredComputers].sort((a, b) => {
+  const sortedComputers = useMemo(() => [...filteredComputers].sort((a, b) => {
     if (computerSort === 'uptime') {
       const aUptime = Number(a.uptime_seconds) || 0;
       const bUptime = Number(b.uptime_seconds) || 0;
       return bUptime - aUptime;
     }
     return 0;
-  });
+  }), [filteredComputers, computerSort]);
 
   // 3. Impresoras conectadas (online y tipo Impresora)
   const isPrinter = d => {
@@ -2209,8 +2210,8 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
     const type = formatDeviceType(d.type, os, name, d.vendor);
     return type === 'Impresora';
   };
-  const printers = devices.filter(isPrinter);
-  const filteredPrinters = printers.filter(p => {
+  const printers = useMemo(() => devices.filter(isPrinter), [devices]);
+  const filteredPrinters = useMemo(() => printers.filter(p => {
     if (!printerQuery.trim()) return true;
     const q = normalizeText(printerQuery);
     const ovName = normalizeText(p.omnivista?.device_name || '');
@@ -2224,7 +2225,7 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
       ovName.includes(q) ||
       ovLoc.includes(q)
     );
-  });
+  }), [printers, printerQuery]);
 
   const handleExportExcel = () => {
     if (!exportComputers && !exportPrinters) return;
@@ -2346,7 +2347,7 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
           </div>
 
           <div className="support-column-search">
-            <SearchField
+            <SearchField defer
               value={networkQuery}
               onChange={setNetworkQuery}
               placeholder="Buscar red, VLAN o gateway…"
@@ -2420,7 +2421,7 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
             <span className="support-column-badge badge-success">{number(filteredComputers.length)}</span>
           </div>
           <div className="support-column-search">
-            <SearchField
+            <SearchField defer
               value={computerQuery}
               onChange={setComputerQuery}
               placeholder="Buscar computadora, IP, usuario…"
@@ -2442,7 +2443,7 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
           </div>
           <div className="support-column-body" tabIndex={0} aria-label="Lista de computadoras conectadas">
             {sortedComputers.length ? (
-              sortedComputers.map((pc, idx) => {
+              sortedComputers.slice(0, computerLimit).map((pc, idx) => {
                 const displayName = pc.omnivista?.device_name || pc.name || 'Computadora';
                 const loc = pc.omnivista?.location || formatLocation(pc.location, pc.vendor);
                 return (
@@ -2494,6 +2495,7 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
                 <p>No se encontraron computadoras en línea coincidentes.</p>
               </div>
             )}
+            {sortedComputers.length > computerLimit && <Button onClick={() => setComputerLimit(value => value + 25)}>Mostrar más computadoras ({sortedComputers.length - computerLimit} pendientes)</Button>}
           </div>
         </div>
 
@@ -2507,7 +2509,7 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
             <span className="support-column-badge badge-info">{number(filteredPrinters.length)}</span>
           </div>
           <div className="support-column-search">
-            <SearchField
+            <SearchField defer
               value={printerQuery}
               onChange={setPrinterQuery}
               placeholder="Buscar impresora, IP, modelo…"
@@ -2515,7 +2517,7 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
           </div>
           <div className="support-column-body" tabIndex={0} aria-label="Lista de impresoras conectadas">
             {filteredPrinters.length ? (
-              filteredPrinters.map((printer, idx) => {
+              filteredPrinters.slice(0, printerLimit).map((printer, idx) => {
                 const displayName = printer.omnivista?.device_name || printer.name || 'Impresora';
                 const loc = printer.omnivista?.location || formatLocation(printer.location, printer.vendor);
                 return (
@@ -2559,6 +2561,7 @@ export function SupportDashboard({ data, navigate, openEditor, loading, errors, 
                 <p>No se encontraron impresoras en línea coincidentes.</p>
               </div>
             )}
+            {filteredPrinters.length > printerLimit && <Button onClick={() => setPrinterLimit(value => value + 25)}>Mostrar más impresoras ({filteredPrinters.length - printerLimit} pendientes)</Button>}
           </div>
         </div>
       </section>
@@ -3025,7 +3028,7 @@ export function ProjectAuditLog({
         onRetry={refresh}
         toolbar={
           <div className="audit-toolbar">
-            <SearchField
+            <SearchField defer
               value={state.query}
               onChange={state.setQuery}
               placeholder="Buscar responsable, acción, objetivo o detalle…"

@@ -63,6 +63,19 @@ def test_catalog_preserves_observations_from_inventory_api(monkeypatch):
     assert boundary.catalog()['observations'] == expected
 
 
+@pytest.mark.parametrize('payload', [None, [], {},
+    {'revision': 'r', 'assets': None, 'cabinets': []},
+    {'revision': 'r', 'assets': [], 'cabinets': None},
+    {'revision': 'r', 'assets': [{'id': 'cam-1', 'dataset': 'cctv', 'decommissioned': 'false'}], 'cabinets': []},
+    {'revision': 'r', 'assets': [{'id': 'cam-1', 'dataset': 'cctv'}] * 2, 'cabinets': []},
+])
+def test_invalid_provider_catalog_returns_controlled_service_error(monkeypatch, payload):
+    monkeypatch.setattr(boundary, 'request', lambda *args, **kwargs: payload)
+    with pytest.raises(access.AccessError) as error:
+        boundary.catalog()
+    assert error.value.status == 503
+
+
 def test_reconcile_starts_and_polls_persisted_job(monkeypatch):
     result = {'revision': 'revision-1', 'assets': {'cam-1': {'comparison': 'matched'}}, 'only_api': []}
     calls = []

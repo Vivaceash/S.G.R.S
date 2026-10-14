@@ -604,7 +604,9 @@ export async function request(path, { signal, body } = {}) {
     if (response.status === 401 && !path.startsWith('/api/auth/')) window.dispatchEvent(new Event('sgrs-session-expired'));
     const local = path.startsWith('/api/admin/') || path.startsWith('/api/auth/') || path.startsWith('/api/dashboard/') || path.startsWith('/api/inventory/') || path.startsWith('/api/support/') || path.startsWith('/api/reports') || path.startsWith('/api/altas/');
     const payload = await response.json().catch(() => ({}));
-    throw new ApiError(response.status, local && response.status < 500 && typeof payload.error === 'string' ? payload.error : undefined);
+    const inventoryDiagnosis = path.startsWith('/api/inventory/') && [502, 503].includes(response.status)
+      && typeof payload.error === 'string' && /^(API Inventarios |Configura la credencial de API Inventarios\.|La credencial no permite esta operación\.)/.test(payload.error);
+    throw new ApiError(response.status, (local && response.status < 500 || inventoryDiagnosis) && typeof payload.error === 'string' ? payload.error : undefined);
   }
   const json = await response.json();
   if (json.success === false || json.error) throw new ApiError(502);

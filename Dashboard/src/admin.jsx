@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { UserPlus, ShieldCheck, Settings2, PlugZap, Save, LockKeyhole, Server, Trash2 } from 'lucide-react';
 import { Badge, Button, DataTable, Dialog, Field, Loading, Notice, SearchField, SecretInput, Select, useListState } from './components.jsx';
 import { PageHeading } from './pages.jsx';
@@ -183,14 +183,14 @@ export function UsersPage({ demoUsers, setDemoUsers, notify }) {
     } finally { busy.current = false; }
   };
   const rawUsers = list.value?.users || [];
-  const visibleUsers = demo
+  const visibleUsers = useMemo(() => demo
     ? usersForDemo(rawUsers, user?.role)
-    : (isSuperAdmin ? rawUsers : projectUsersForActor(rawUsers, user?.role));
-  const rows = visibleUsers.map(u => ({ ...u, state: u.active ? 'active' : 'inactive', visibility: u.is_hidden ? 'hidden' : 'visible' }));
+    : (isSuperAdmin ? rawUsers : projectUsersForActor(rawUsers, user?.role)), [demo, rawUsers, user?.role, isSuperAdmin]);
+  const rows = useMemo(() => visibleUsers.map(u => ({ ...u, state: u.active ? 'active' : 'inactive', visibility: u.is_hidden ? 'hidden' : 'visible' })), [visibleUsers]);
   return <><PageHeading eyebrow="Administración del sistema" title="Usuarios y privilegios" description="Cuentas personales y permisos de acceso al Centro Operativo">{canCreateUsers && <Button icon={UserPlus} variant="primary" disabled={list.loading || Boolean(list.error)} onClick={() => { setDirty(false); setDiscard(false); setEditor({ row: null }); }}>Crear usuario</Button>}</PageHeading>
     <div className="role-cards">{cardRoles.map(({ id, description }) => <article className="role-card panel" key={id}><ShieldCheck size={24} /><h2>{roleLabel(id)}</h2><p>{description}</p><span>{countUsersForRoleCard(rows, id, user?.role)} cuentas</span></article>)}</div>
     {isSuperAdmin && <Select label="Visibilidad" value={state.filters.visibility || ''} onChange={e => state.setFilter('visibility', e.target.value)}><option value="">Todas las cuentas</option><option value="visible">Visibles</option><option value="hidden">Ocultas</option></Select>}
-    <div className="toolbar"><SearchField value={state.query} onChange={state.setQuery} placeholder="Buscar por nombre o usuario…" /><Select label="Rol" value={state.filters.role || ''} onChange={e => state.setFilter('role', e.target.value)}><option value="">Todos los roles</option>{filterRoles.map(r => <option key={r.id} value={r.id}>{roleLabel(r.id)}</option>)}</Select><Select label="Estado" value={state.filters.state || ''} onChange={e => state.setFilter('state', e.target.value)}><option value="">Todas las cuentas</option><option value="active">Activas</option><option value="inactive">Suspendidas</option></Select></div>
+    <div className="toolbar"><SearchField defer value={state.query} onChange={state.setQuery} placeholder="Buscar por nombre o usuario…" /><Select label="Rol" value={state.filters.role || ''} onChange={e => state.setFilter('role', e.target.value)}><option value="">Todos los roles</option>{filterRoles.map(r => <option key={r.id} value={r.id}>{roleLabel(r.id)}</option>)}</Select><Select label="Estado" value={state.filters.state || ''} onChange={e => state.setFilter('state', e.target.value)}><option value="">Todas las cuentas</option><option value="active">Activas</option><option value="inactive">Suspendidas</option></Select></div>
     <DataTable title="Usuarios del sistema" rows={rows} state={state} noun="usuarios" loading={list.loading} error={list.error} onRetry={list.refresh} columns={[
       { key: 'name', label: 'Nombre', render: r => <div className="cell-detail"><strong>{r.name}</strong><small>{r.id === user.id ? 'Tu cuenta' : 'Cuenta personal'}{isSuperAdmin && r.is_hidden ? ' · Oculto' : ''}</small></div> },
       { key: 'username', label: 'Usuario' }, { key: 'role', label: 'Rol', render: r => <span className="network-tag">{roleLabel(r.role)}</span> },

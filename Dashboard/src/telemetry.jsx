@@ -55,14 +55,14 @@ function ResourceTable({ resource }) {
       if (alive) setResult({ rows, loading: false, error: '', updatedAt: new Date().toISOString() });
     }).catch(error => { if (alive) setResult(old => ({ ...old, loading: false, error: error.message })); });
     return () => { alive = false; controller.abort(); };
-  }, [resource, revision]);
+  }, [resource.path, resource.collection, revision]);
   const fields = resource.columns.length ? resource.columns : result.rows.some(row => !('field' in row)) ? [{ key: '_key', label: 'Registro' }] : [{ key: 'field', label: 'Campo' }, { key: 'value', label: 'Información' }];
   const columns = fields.map(column => ({ ...column, value: row => display(row[column.key]), render: row => <span className="telemetry-value">{display(row[column.key])}</span> }));
   columns.push({ key: 'actions', label: 'Detalle', sortable: false, render: row => <Button onClick={() => setSelected(row)}>Ver campos</Button> });
   return <>
-    <PageHeading eyebrow="Consulta de solo lectura" title={resource.title} description={resource.note} updatedAt={result.updatedAt} />
+    <PageHeading eyebrow="Consulta de solo lectura" title={resource.title} description={resource.note} updatedAt={result.updatedAt}><Button icon={RefreshCw} busy={result.loading} onClick={() => setRevision(value => value + 1)}>Actualizar consulta</Button></PageHeading>
     <Notice title="Alcance de la información">Origen: {resource.path.startsWith('/api/admin/') ? 'Histórico local de métricas agregadas' : resource.path.startsWith('/api/forti/') ? 'FortiGate' : 'OmniVista'}. La búsqueda, ordenación y exportación abarcan únicamente los registros recibidos. No se realizan cambios en los equipos.</Notice>
-    <DataTable title={resource.title} rows={result.rows} columns={columns} state={state} rowKey="_key" loading={result.loading} error={result.error} onRetry={() => setRevision(value => value + 1)} exportable={!result.loading && !result.error} toolbar={<SearchField value={state.query} onChange={state.setQuery} label="Buscar en registros recibidos" placeholder="Buscar en esta consulta…" />} emptyText="El proveedor devolvió una colección vacía para esta consulta." />
+    <DataTable title={resource.title} rows={result.rows} columns={columns} state={state} rowKey="_key" loading={result.loading} error={result.error} onRetry={() => setRevision(value => value + 1)} exportable={!result.loading && !result.error} toolbar={<SearchField defer value={state.query} onChange={state.setQuery} label="Buscar en registros recibidos" placeholder="Buscar en esta consulta…" />} emptyText="El proveedor devolvió una colección vacía para esta consulta." />
     <Dialog open={Boolean(selected)} title={`Detalle · ${resource.title}`} onClose={() => setSelected(null)} wide><dl className="detail-grid">{selected && Object.entries(selected).filter(([key]) => key !== '_key').map(([key, value]) => <div key={key}><dt>{resource.columns.find(column => column.key === key)?.label || key}</dt><dd className="telemetry-detail-value">{display(value)}</dd></div>)}</dl></Dialog>
   </>;
 }

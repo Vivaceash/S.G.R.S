@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { startTransition, useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Search, X, ChevronLeft, ChevronRight, ArrowDownUp, Download, Info, RefreshCw, LoaderCircle, Eye, EyeOff } from 'lucide-react';
 import { EXCEL_MIME_TYPE, makeCsv, makeExcelWorkbook, number, paginate, selectRows, statusNames, statusTone } from './domain.mjs';
 
@@ -13,14 +13,15 @@ export function IconButton({ icon: Icon, label, onClick, ...props }) {
 export function Badge({ status, children }) {
   return <span className={`badge badge-${statusTone(status)}`}><span className="badge-dot" aria-hidden="true" />{children || statusNames[status] || status || 'Sin verificar'}</span>;
 }
-export function SearchField({ value, onChange, placeholder = 'Buscar…', label = 'Buscar registros' }) {
+export function SearchField({ value, onChange, placeholder = 'Buscar…', label = 'Buscar registros', defer = false }) {
   const ref = useRef(null);
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
+  const emit = value => defer ? startTransition(() => onChange(value)) : onChange(value);
   return <div className="search-field"><Search size={19} aria-hidden="true" />
     <input ref={ref} type="search" value={draft} aria-label={label} placeholder={placeholder}
-      onChange={e => { setDraft(e.target.value); if (!e.nativeEvent.isComposing) onChange(e.target.value); }}
-      onCompositionEnd={e => onChange(e.currentTarget.value)} />
+      onChange={e => { const value = e.target.value; setDraft(value); if (!e.nativeEvent.isComposing) emit(value); }}
+      onCompositionEnd={e => emit(e.currentTarget.value)} />
     {draft && <IconButton icon={X} label="Limpiar búsqueda" onClick={() => { setDraft(''); onChange(''); ref.current?.focus(); }} />}
   </div>;
 }
@@ -80,17 +81,19 @@ export function useListState(id) {
   const [state, setState] = useState(read);
   const [query, setQuery] = useState('');
   useEffect(() => { const restore = () => setState(read()); window.addEventListener('popstate', restore); return () => window.removeEventListener('popstate', restore); }, [id]);
-  const update = patch => setState(prev => {
-    const next = { ...prev, ...patch };
+  const update = useCallback(patch => setState(prev => {
+    return { ...prev, ...patch };
+  }), []);
+  useEffect(() => {
+    const next = state;
     const url = new URL(location.href);
     for (const k of [...url.searchParams.keys()]) if (k.startsWith(`${id}.`)) url.searchParams.delete(k);
     if (next.page > 1) url.searchParams.set(`${id}.page`, next.page);
     if (next.pageSize) url.searchParams.set(`${id}.size`, next.pageSize);
     if (next.sort) { url.searchParams.set(`${id}.sort`, next.sort); url.searchParams.set(`${id}.order`, next.asc ? 'asc' : 'desc'); }
     for (const [k, v] of Object.entries(next.filters)) if (v) url.searchParams.set(`${id}.filter.${k}`, v);
-    history.replaceState(null, '', url);
-    return next;
-  });
+    if (url.href !== location.href) history.replaceState(null, '', url);
+  }, [state, id]);
   return { ...state, query, setQuery: q => { setQuery(q); update({ page: 1 }); }, setPage: page => update({ page }), setPageSize: pageSize => update({ pageSize, page: 1 }), setFilter: (key, value) => update({ page: 1, filters: { ...state.filters, [key]: value } }), setSort: sort => update({ sort, asc: sort === state.sort ? !state.asc : true }), reset: () => { setQuery(''); update({ page: 1, filters: {} }); } };
 }
 export function downloadCsv(name, columns, rows) {
@@ -106,21 +109,26 @@ export function downloadExcel(name, sheets) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 export function DataTable({ title, rows, columns, state, noun = 'registros', pageSize = 10, toolbar, exportable = false, loading = false, error, onRetry, emptyText, rowKey = 'id', onRowClick, rowClassName, className = '' }) {
-  const visible = selectRows(rows, state.query, state.filters, state.sort, state.asc);
+  const query = useDeferredValue(state.query);
+  const visible = useMemo(() => selectRows(rows, query, state.filters, state.sort, state.asc), [rows, query, state.filters, state.sort, state.asc]);
   const page = paginate(visible, state.page, pageSize);
+  const [renderLimit, setRenderLimit] = useState(100);
+  useEffect(() => setRenderLimit(100), [query, state.filters, state.sort, state.asc, page.current, pageSize]);
+  const renderedRows = page.rows.slice(0, renderLimit);
   useEffect(() => { if (!loading && !error && page.current !== state.page) state.setPage(page.current); }, [page.current, state.page, loading, error]);
   return <section className={`table-panel ${className}`} aria-label={title}>
     {(toolbar || exportable) && <div className="table-panel-heading"><div>{toolbar}</div>{exportable && <Button icon={Download} onClick={() => downloadCsv(title, columns.filter(c => c.key !== 'actions'), visible)} disabled={!visible.length}>Exportar consulta</Button>}</div>}
     <div className="table-scroll" tabIndex={0} role="region" aria-label={`${title}. Desplázate para ver todas las columnas.`}>
       <table><caption className="sr-only">{title}</caption><thead><tr>{columns.map(column => <th key={column.key} scope="col" aria-sort={state.sort === column.key ? state.asc ? 'ascending' : 'descending' : undefined}>
         {column.sortable === false ? column.label : <button type="button" className="sort-button" onClick={() => state.setSort(column.key)}>{column.label}<ArrowDownUp size={13} aria-hidden="true" /></button>}
-      </th>)}</tr></thead><tbody>{!loading && !error && page.rows.map((row, index) => {
+      </th>)}</tr></thead><tbody>{!loading && !error && renderedRows.map((row, index) => {
         const cls = typeof rowClassName === 'function' ? rowClassName(row) : rowClassName;
         return <tr key={row[rowKey] || index} className={cls} tabIndex={onRowClick ? 0 : undefined} onClick={onRowClick ? () => onRowClick(row) : undefined} onKeyDown={onRowClick ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(row); } } : undefined} title={onRowClick ? 'Haz clic para ver el detalle técnico' : undefined}>{columns.map(column => <td key={column.key}>{column.render ? column.render(row) : String(row[column.key] ?? '—')}</td>)}</tr>;
       })}</tbody></table>
       {loading ? <Loading /> : error ? <Empty title="No se pudo cargar la información" action={<Button icon={RefreshCw} onClick={onRetry}>Volver a intentar</Button>}>{error}</Empty> : !visible.length && <Empty title={rows.length ? 'No se encontraron resultados' : 'Aún no hay registros'} action={rows.length ? <Button onClick={state.reset}>Limpiar filtros</Button> : null}>{rows.length ? 'Prueba otra búsqueda o elimina los filtros activos.' : emptyText}</Empty>}
     </div>
-    <div className="table-footer"><span role="status">{visible.length ? `Mostrando ${(page.current - 1) * pageSize + 1}–${Math.min(page.current * pageSize, page.total)} de ${number(page.total)} ${noun}` : `0 ${noun}`}</span>
+    {!loading && !error && page.rows.length > renderLimit && <div className="table-progressive"><Button onClick={() => setRenderLimit(value => value + 100)}>Mostrar más filas ({page.rows.length - renderLimit} pendientes)</Button></div>}
+    <div className="table-footer"><span role="status">{visible.length ? `Mostrando ${(page.current - 1) * pageSize + 1}–${Math.min((page.current - 1) * pageSize + renderedRows.length, page.total)} de ${number(page.total)} ${noun}` : `0 ${noun}`}</span>
       <nav className="pagination" aria-label={`Paginación de ${title}`}><IconButton icon={ChevronLeft} label="Página anterior" disabled={page.current <= 1} onClick={() => state.setPage(page.current - 1)} />
         {Array.from({ length: Math.min(5, page.pages) }, (_, i) => Math.min(Math.max(1, page.current - 2), Math.max(1, page.pages - 4)) + i).map(p => <button type="button" key={p} className={p === page.current ? 'current' : ''} aria-label={`Página ${p}`} aria-current={p === page.current ? 'page' : undefined} onClick={() => state.setPage(p)}>{p}</button>)}
         <IconButton icon={ChevronRight} label="Página siguiente" disabled={page.current >= page.pages} onClick={() => state.setPage(page.current + 1)} />

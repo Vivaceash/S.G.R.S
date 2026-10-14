@@ -4,9 +4,9 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createDemo } from '../src/demo.mjs';
 
-const modules = JSON.parse(execFileSync('.venv/bin/python', ['-c', 'import json; from dashboard_catalog import CATALOG; print(json.dumps(CATALOG))'], { cwd: '..' , encoding: 'utf8' }));
-const base = process.env.SGRS_TEST_URL || 'http://127.0.0.1:5173';
-const browser = await chromium.launch({ executablePath: '/opt/brave-bin/brave', headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+const modules = JSON.parse(execFileSync(process.platform === 'win32' ? '.venv\\Scripts\\python.exe' : '.venv/bin/python', ['-c', 'import json; from dashboard_catalog import CATALOG; print(json.dumps(CATALOG))'], { cwd: '..' , encoding: 'utf8' }));
+const base = process.env.SGRS_TEST_URL || 'http://localhost:3000';
+const browser = await chromium.launch({ ...(process.env.SGRS_BROWSER ? { executablePath: process.env.SGRS_BROWSER } : {}), headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'es-MX' });
   const page = await context.newPage();
@@ -41,6 +41,7 @@ try {
       count++;
     }
     const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+    if (axe.violations.length) console.log(JSON.stringify(axe.violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => ({ target: n.target, summary: n.failureSummary })) }))));
     assert.deepEqual(axe.violations.map(value => value.id), [], module.title);
   }
   await page.getByRole('searchbox', { name: 'Buscar en registros recibidos' }).fill('zz-no-results');
