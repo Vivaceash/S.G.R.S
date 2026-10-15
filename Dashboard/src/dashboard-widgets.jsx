@@ -209,7 +209,7 @@ function DataWidget({ id, data, loading, errors, demo, navigate, refresh }) {
   </WidgetCard>;
 }
 
-export function DashboardWidgets({ children, data, demo, userId, loading, errors = {}, navigate, refresh, catalog: customCatalog, defaultLayout = DEFAULT_WIDGET_LAYOUT, storagePrefix = 'sgrs:dashboard-widgets:v1', title = 'Tu dashboard', personalizeLabel = 'Personalizar dashboard', quickHide = false, groupBy }) {
+export function DashboardWidgets({ children, data, demo, userId, loading, errors = {}, navigate, refresh, catalog: customCatalog, catalogTone, defaultLayout = DEFAULT_WIDGET_LAYOUT, storagePrefix = 'sgrs:dashboard-widgets:v1', title = 'Tu dashboard', personalizeLabel = 'Personalizar dashboard', quickHide = false, groupBy }) {
   const session = useSession();
   const key = `${storagePrefix}:${demo ? 'demo:' : ''}${userId}`;
   const catalog = customCatalog || WIDGET_CATALOG.filter(widget => widgetAllowed(widget.id, session));
@@ -256,8 +256,9 @@ export function DashboardWidgets({ children, data, demo, userId, loading, errors
       <SearchField defer value={query} onChange={setQuery} label="Buscar widgets" placeholder="Buscar por widget o módulo…" />
       <div className="widget-catalog">{catalog.filter(widget => `${widget.title} ${widget.module}`.toLocaleLowerCase('es').includes(query.toLocaleLowerCase('es'))).map(widget => {
         const added = draft.some(item => item.id === widget.id);
-        const [CatalogIcon, tone] = WIDGET_VISUALS[widget.module] || [LayoutDashboard, 'brand'];
-        return <article key={widget.id} className={`widget-tone-${tone} ${added ? 'is-added' : ''}`}><div className="widget-catalog-label"><span className="widget-heading-icon"><CatalogIcon size={20} /></span><span className="widget-module">{widget.module}</span></div><h3>{widget.title}</h3><p>{widget.description}</p><Button icon={added ? Trash2 : Plus} aria-label={`${added ? 'Quitar del diseño' : 'Agregar'} ${widget.title}`} onClick={() => setDraft(current => added ? current.filter(item => item.id !== widget.id) : [...current, { id: widget.id, size: widget.size }])}>{added ? 'Quitar widget' : 'Agregar widget'}</Button></article>;
+        const [CatalogIcon, moduleTone] = WIDGET_VISUALS[widget.module] || [LayoutDashboard, 'brand'];
+        const tone = catalogTone?.(widget) || moduleTone;
+        return <article key={widget.id} data-widget-id={widget.id} className={`widget-tone-${tone} ${added ? 'is-added' : ''}`}><div className="widget-catalog-label"><span className="widget-heading-icon"><CatalogIcon size={20} /></span><span className="widget-module">{widget.module}</span></div><h3>{widget.title}</h3><p>{widget.description}</p><Button icon={added ? Trash2 : Plus} aria-label={`${added ? 'Quitar del diseño' : 'Agregar'} ${widget.title}`} onClick={() => setDraft(current => added ? current.filter(item => item.id !== widget.id) : [...current, { id: widget.id, size: widget.size }])}>{added ? 'Quitar widget' : 'Agregar widget'}</Button></article>;
       })}</div>
       {saveError && <Notice tone="danger" title="Diseño sin guardar">{saveError}</Notice>}
       <div className="widget-editor-actions"><span>{draft.length} widgets · Vista previa debajo</span><Button onClick={() => { setEditing(false); setSaveError(''); }}>Cancelar</Button><Button variant="primary" onClick={save}>Guardar diseño</Button></div>

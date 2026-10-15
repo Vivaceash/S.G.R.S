@@ -189,6 +189,27 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
     <Note>Consulta el inventario de {number(resources.length)} recursos y registra las visitas a los cuartos de telecomunicaciones. {demo ? 'Todas las cifras de esta vista son de demostración.' : 'La disponibilidad histórica y el estado global de la red aún no se calculan.'}</Note>
   </>;
 }
+function parseOficioDescription(description, legacyEffectiveDate) {
+  const parts = String(description || '').split('-').map(part => part.trim());
+  if (parts.length === 1 && parts[0].toLocaleLowerCase('es-MX') === 'oficio') {
+    const sourceDate = Number(legacyEffectiveDate);
+    if (!Number.isFinite(sourceDate) || sourceDate <= 0) return null;
+    const date = new Date(sourceDate);
+    const deadline = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+    return { effectiveTime: deadline.getTime(), engineer: '' };
+  }
+  if (parts.length !== 3 || parts[0].toLocaleLowerCase('es-MX') !== 'oficio' || !parts[2]) return null;
+  const dateParts = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(parts[1]);
+  if (!dateParts) return null;
+  const day = Number(dateParts[1]);
+  const month = Number(dateParts[2]);
+  const yearPart = Number(dateParts[3]);
+  const year = dateParts[3].length === 2 ? 2000 + yearPart : yearPart;
+  const deadline = new Date(year, month - 1, day, 23, 59, 59, 999);
+  if (deadline.getFullYear() !== year || deadline.getMonth() !== month - 1 || deadline.getDate() !== day) return null;
+  return { effectiveTime: deadline.getTime(), engineer: parts[2] };
+}
+
 export function Requests({ demo, data }) {
   const { canViewSubmodule } = useSession();
   const canViewOficios = canViewSubmodule('altas', 'oficios');
@@ -211,7 +232,7 @@ export function Requests({ demo, data }) {
   const openConcessionModal = user => {
     setConcessionError('');
     setEditingConcessionUser(user);
-    const ts = user.dateOfEffective ? Number(user.dateOfEffective) : (Date.now() + 7 * 86400000);
+    const ts = user.effectiveTime || (user.dateOfEffective ? Number(user.dateOfEffective) : (Date.now() + 7 * 86400000));
     const d = new Date(ts);
     const pad = n => String(n).padStart(2, '0');
     const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -278,6 +299,12 @@ export function Requests({ demo, data }) {
   }, []);
 
   useEffect(() => {
+    const refreshAccounts = () => setRevision(value => value + 1);
+    window.addEventListener('sgrs:refresh-current-module', refreshAccounts);
+    return () => window.removeEventListener('sgrs:refresh-current-module', refreshAccounts);
+  }, []);
+
+  useEffect(() => {
     if (demo) {
       // Demo mock con datos de ejemplo para oficios
       const sampleTime = Date.now() + 8 * 3600 * 1000;
@@ -334,25 +361,26 @@ export function Requests({ demo, data }) {
       }
     }).catch(error => { if (alive) setSnapshot(old => ({ ...old, loading: false, error: error.name === 'AbortError' ? 'Consulta cancelada.' : error.message })); });
     return () => { alive = false; controller.abort(); };
-  }, [demo, revision, data?.updatedAt]);
+  }, [demo, revision]);
 
-  // Filtrado y cómputo de usuarios cuyo campo 'description' empiece o contenga "Oficio"
+  // Las alertas requieren el formato exacto: Oficio - fecha límite - ingeniero.
   const oficiosUsers = useMemo(() => {
     return snapshot.users
-      .filter(user => {
-        const desc = String(user.description || '').trim().toLowerCase();
-        return desc.startsWith('oficio') || desc.includes('oficio');
-      })
       .map(user => {
-        const effectiveTime = user.dateOfEffective ? Number(user.dateOfEffective) : null;
+        const parsed = parseOficioDescription(user.description, user.dateOfEffective);
+        if (!parsed) return null;
+        const customDeadline = user.customConcession && user.dateOfEffective ? Number(user.dateOfEffective) : null;
+        const effectiveTime = customDeadline || parsed.effectiveTime;
         const diffMs = effectiveTime ? effectiveTime - now : null;
         return {
           ...user,
+          concessionEngineer: parsed.engineer,
           effectiveTime,
           diffMs,
           isExpired: diffMs !== null && diffMs <= 0,
         };
       })
+      .filter(Boolean)
       .sort((a, b) => {
         // Ordenar primero los que van a expirar más pronto (menor diffMs positivo primero)
         if (a.diffMs === null && b.diffMs === null) return 0;
@@ -404,14 +432,17 @@ export function Requests({ demo, data }) {
       )
     },
     {
-      key: 'registeredAt',
+      key: 'omnivistaEffectiveDate',
       label: 'Fecha de alta',
-      render: row => row.registeredAt ? (
-        <span className="altas-cell-date">
-          <Calendar size={13} aria-hidden="true" />
-          {new Date(Number(row.registeredAt)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
-        </span>
-      ) : <span className="altas-empty-dash">—</span>
+      render: row => {
+        const altaDate = row.omnivistaEffectiveDate ?? (row.customConcession ? null : row.dateOfEffective);
+        return altaDate ? (
+          <span className="altas-cell-date is-highlighted">
+            <Calendar size={13} aria-hidden="true" />
+            {new Date(Number(altaDate)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+          </span>
+        ) : <span className="altas-empty-dash">—</span>;
+      }
     },
     {
       key: 'department',
@@ -440,7 +471,7 @@ export function Requests({ demo, data }) {
       render: row => row.accessRoleProfile ? (
         <span className="altas-profile-badge" title={row.accessRoleProfile}>
           <Wifi size={12} aria-hidden="true" />
-          <span>{row.accessRoleProfile}</span>
+          <span>{String(row.accessRoleProfile).replace(/^__SSID[-_ ]?/i, '')}</span>
         </span>
       ) : <span className="altas-empty-dash">—</span>
     },
@@ -542,7 +573,7 @@ export function Requests({ demo, data }) {
             rowKey="username"
             columns={[
               { key: 'username', label: 'Cuenta', render: user => <div className="altas-alert-account"><strong>{user.username}</strong><small>{user.fullName || user.department || 'Oficio'}</small></div> },
-              { key: 'effectiveTime', label: 'Concesión', render: user => <div className={`altas-alert-concession ${user.diffMs <= 24 * 3600 * 1000 ? 'is-urgent' : ''}`}><strong>{formatCountdown(user.diffMs)}</strong><small>Vence <time dateTime={new Date(user.effectiveTime).toISOString()}>{dateTime(user.effectiveTime)}</time></small></div> },
+              { key: 'effectiveTime', label: 'Concesión', render: user => <div className={`altas-alert-concession ${user.diffMs <= 24 * 3600 * 1000 ? 'is-urgent' : ''}`}><strong>{formatCountdown(user.diffMs)}</strong><small>Vence <time dateTime={new Date(user.effectiveTime).toISOString()}>{dateTime(user.effectiveTime)}</time>{user.concessionEngineer && <span className="altas-alert-engineer">Alta: {user.concessionEngineer}</span>}</small></div> },
               { key: 'actions', label: 'Acciones', sortable: false, render: user => <div className="altas-alert-row-actions"><IconButton icon={Calendar} label={`Modificar concesión de ${user.username}`} onClick={() => openConcessionModal(user)} />{user.devices?.length > 0 && <IconButton icon={Monitor} label={`Ver equipos de ${user.username}`} onClick={() => setSelectedUser(user)} />}</div> },
             ]}
             state={alertsState}
@@ -561,9 +592,9 @@ export function Requests({ demo, data }) {
           {selectedUser?.description && (
             <div style={{ marginTop: '8px', padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}>
               <strong>Motivo de alta / Oficio:</strong> {selectedUser.description}
-              {selectedUser.dateOfEffective && (
+              {(selectedUser.effectiveTime || selectedUser.dateOfEffective) && (
                 <span style={{ display: 'block', marginTop: '3px', color: '#64748b' }}>
-                  Límite de concesión: {new Date(Number(selectedUser.dateOfEffective)).toLocaleString('es-MX')}
+                  Límite de concesión: {new Date(Number(selectedUser.effectiveTime || selectedUser.dateOfEffective)).toLocaleString('es-MX')}
                 </span>
               )}
             </div>
@@ -716,7 +747,6 @@ export function Addresses({ data, navigate, openEditor, loading, errors, refresh
   const canViewMatrix = canViewSubmodule('disponibilidad', 'matrix');
   const rows = useMemo(() => data.ips.map(r => ({ ...r, id: r.ip })), [data.ips]);
   const [view, setView] = useState('matrix');
-  const [matrixLimits, setMatrixLimits] = useState({});
   const visibleView = (view === 'matrix' && canViewMatrix) || (view === 'list' && canViewList) ? view : canViewMatrix ? 'matrix' : 'list';
   const columns = [{ key: 'ip', label: 'Dirección IP', render: r => <strong className="ip-address" title={r.ip}>{displayIp(r.ip)}</strong> }, { key: 'vlan', label: 'VLAN / Segmento' }, { key: 'location', label: 'Ubicación' }, { key: 'type', label: 'Tipo de uso' }, { key: 'status', label: 'Estado', render: r => <Badge status={r.status} /> }, { key: 'hostname', label: 'Equipo asignado' }, { key: 'actions', label: 'Acciones', sortable: false, render: r => <Button disabled={!canWrite} onClick={() => openEditor('ip', r)}>{r.status === 'available' ? 'Asignar' : 'Administrar'}</Button> }];
   const filtered = useMemo(() => selectRows(rows, state.query, state.filters, state.sort, state.asc), [rows, state.query, state.filters, state.sort, state.asc]);
@@ -747,7 +777,7 @@ export function Addresses({ data, navigate, openEditor, loading, errors, refresh
       <small className="ip-kpi-foot">{caption}</small>
     </button>)}</section>
     <div className="toolbar ip-toolbar"><Select label="VLAN / Segmento" value={state.filters.vlan || ''} onChange={e => state.setFilter('vlan', e.target.value)}><option value="">Todos los segmentos</option>{options(rows.map(r => r.vlan))}</Select><SearchField defer value={state.query} onChange={state.setQuery} placeholder="Buscar IP, host, MAC o ubicación…" /><div className="ip-status-filters" aria-label="Filtrar por estado">{[['all', 'Todas'], ['available', 'Libres'], ['occupied', 'Ocupadas'], ['reserved', 'Reservadas']].map(([status, label]) => <button type="button" key={status} aria-pressed={(!state.filters.status && status === 'all') || state.filters.status === status} onClick={() => chooseStatus(status)}>{label} <b>{number(counts[status])}</b></button>)}</div><div className="ip-view-toggle" aria-label="Vista de direcciones">{canViewList && <button type="button" aria-pressed={visibleView === 'list'} onClick={() => setView('list')}>☷ Lista</button>}{canViewMatrix && <button type="button" aria-pressed={visibleView === 'matrix'} onClick={() => setView('matrix')}>▦ Matriz</button>}</div></div>
-    {visibleView === 'matrix' ? <section className="ip-matrix" aria-label="Matriz de direcciones IP">{loading ? <div className="loading-state">Cargando direcciones IP…</div> : errors.ips ? <Notice title="No se pudieron cargar las direcciones" tone="warning" action={<Button onClick={refresh}>Reintentar</Button>}>{errors.ips}</Notice> : Object.entries(filteredBySegment).map(([segment, ips]) => <section key={segment} className="ip-segment"><div><h2>{segment}</h2><span>{ips.length} IPs</span></div><article>{ips.slice(0, matrixLimits[segment] || 200).map(ip => <button key={ip.ip} type="button" className={`ip-cell ip-cell-${ip.status}`} onClick={() => openEditor('ip', ip)} title={`${ip.ip} · ${labelForStatus(ip.status)}${ip.hostname ? ` · ${ip.hostname}` : ''}`}><strong>{displayIp(ip.ip)}</strong><small><i />{labelForStatus(ip.status)}</small></button>)}</article>{ips.length > (matrixLimits[segment] || 200) && <Button onClick={() => setMatrixLimits(current => ({ ...current, [segment]: (current[segment] || 200) + 200 }))}>Mostrar más direcciones ({ips.length - (matrixLimits[segment] || 200)} pendientes)</Button>}</section>)}{!loading && !errors.ips && !filtered.length && <Empty title="Sin direcciones coincidentes">Modifica los filtros o busca otra dirección.</Empty>}</section> : <DataTable title="Direcciones IP" rows={rows} columns={columns} state={state} noun="direcciones" loading={loading} error={errors.ips} onRetry={refresh} />}
+    {visibleView === 'matrix' ? <section className="ip-matrix" aria-label="Matriz de direcciones IP">{loading ? <div className="loading-state">Cargando direcciones IP…</div> : errors.ips ? <Notice title="No se pudieron cargar las direcciones" tone="warning" action={<Button onClick={refresh}>Reintentar</Button>}>{errors.ips}</Notice> : Object.entries(filteredBySegment).map(([segment, ips]) => <section key={segment} className="ip-segment"><div><h2>{segment}</h2><span>{ips.length} IPs</span></div><article>{ips.map(ip => <button key={ip.ip} type="button" className={`ip-cell ip-cell-${ip.status}`} onClick={() => openEditor('ip', ip)} title={`${ip.ip} · ${labelForStatus(ip.status)}${ip.hostname ? ` · ${ip.hostname}` : ''}`}><strong>{displayIp(ip.ip)}</strong><small><i />{labelForStatus(ip.status)}</small></button>)}</article></section>)}{!loading && !errors.ips && !filtered.length && <Empty title="Sin direcciones coincidentes">Modifica los filtros o busca otra dirección.</Empty>}</section> : <DataTable title="Direcciones IP" rows={rows} columns={columns} state={state} noun="direcciones" loading={loading} error={errors.ips} onRetry={refresh} />}
     <Note>Las asignaciones modifican el inventario local. No cambian reservas DHCP ni aplican configuraciones al firewall.</Note></>;
 }
 export function CopyButton({ text, title = 'Copiar', className = '' }) {

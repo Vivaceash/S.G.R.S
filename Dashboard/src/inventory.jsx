@@ -248,6 +248,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   const [mapPositions, setMapPositions] = useState([]);
   const [mapLoading, setMapLoading] = useState(false);
   const [mapError, setMapError] = useState('');
+  const [mapRevision, setMapRevision] = useState(0);
   const omniState = useListState('omnivista-aps');
   const demoAps = demo ? data?.aps : null;
 
@@ -322,7 +323,16 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
     }).catch(err => { if (active) setMapError(err.message || 'No se pudieron cargar las ubicaciones del mapa.'); })
       .finally(() => { if (active) setMapLoading(false); });
     return () => { active = false; };
-  }, [route, visibleActiveTab, demo]);
+  }, [route, visibleActiveTab, demo, mapRevision]);
+  useEffect(() => {
+    const refreshCurrentInventory = () => {
+      if (route === 'aps' && visibleActiveTab === 'omnivista') setOmniRevision(value => value + 1);
+      else if (route === 'aps' && visibleActiveTab === 'map') setMapRevision(value => value + 1);
+      else setRevision(value => value + 1);
+    };
+    window.addEventListener('sgrs:refresh-current-module', refreshCurrentInventory);
+    return () => window.removeEventListener('sgrs:refresh-current-module', refreshCurrentInventory);
+  }, [route, visibleActiveTab]);
   useEffect(() => {
     setNetwork(null); setNetworkError('');
     if (demo) { setCatalog(demoCatalog()); setError(''); setLoading(false); return; }

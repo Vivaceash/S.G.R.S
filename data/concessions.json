@@ -18,5 +18,10 @@
     "dateOfEffective": 1793512799999,
     "updatedAt": 1791591956579,
     "reason": "Modificación de tiempo de concesión por administrador"
+  },
+  "grecia.torres": {
+    "dateOfEffective": 1793339999999,
+    "updatedAt": 1792013210863,
+    "reason": "Modificación de tiempo de concesión por administrador"
   }
 }

@@ -1343,6 +1343,7 @@ export default function App() {
       notify("La vista de demostración está actualizada.");
       return;
     }
+    window.dispatchEvent(new Event('sgrs:refresh-current-module'));
     loadController.current?.abort();
     const controller = new AbortController();
     loadController.current = controller;

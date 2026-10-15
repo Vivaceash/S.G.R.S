@@ -488,6 +488,9 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 account = str(user.get("username") or '').strip().lower()
                 user_devices = grouped.get(account, [])
                 user["devices"] = user_devices
+                # Preserve the OmniVista date for the account table; concession
+                # overrides and device authentication dates have different meanings.
+                user["omnivistaEffectiveDate"] = user.get("dateOfEffective")
                 if account in concessions and concessions[account].get("dateOfEffective"):
                     user["dateOfEffective"] = concessions[account]["dateOfEffective"]
                     user["customConcession"] = True

@@ -7049,6 +7049,16 @@ button.altas-widget-value:hover { background: #faf3f6; }
 .altas-analytics-widget.widget-tone-orange { --widget-accent: #9a471c; --widget-wash: #fff1e7; }
 .altas-analytics-widget.widget-tone-cyan { --widget-accent: #0c6588; --widget-wash: #e8f5fc; }
 .altas-analytics-widget.widget-tone-indigo { --widget-accent: #4e4d9c; --widget-wash: #f0eefc; }
+.altas-analytics .widget-tone-danger { --widget-accent: #ae1234; --widget-wash: #fce8ed; }
+.altas-analytics .widget-tone-success { --widget-accent: #087647; --widget-wash: #e3f5eb; }
+.altas-analytics .widget-tone-slate { --widget-accent: #526071; --widget-wash: #edf1f5; }
+.altas-analytics .widget-tone-orange { --widget-accent: #9a471c; --widget-wash: #fff1e7; }
+.altas-analytics .widget-tone-cyan { --widget-accent: #0c6588; --widget-wash: #e8f5fc; }
+.altas-analytics .widget-tone-indigo { --widget-accent: #4e4d9c; --widget-wash: #f0eefc; }
+.altas-analytics .widget-catalog article { border-top: 3px solid var(--widget-accent); background: #fff; box-shadow: 0 2px 8px #35243704; }
+.altas-analytics .widget-catalog article:hover { border-color: var(--widget-accent); }
+.altas-analytics .widget-catalog article .widget-heading-icon { color: var(--widget-accent); background: var(--widget-wash); border-color: color-mix(in srgb,var(--widget-accent) 15%,transparent); }
+.altas-analytics .widget-catalog article .widget-module { color: var(--widget-accent); }
 .altas-analytics-widget { border-top: 3px solid var(--widget-accent); }
 .altas-analytics-widget > header { padding-right: 62px; }
 .altas-analytics .dashboard-widget-cell { position: relative; }
@@ -7151,3 +7161,202 @@ button.altas-widget-value:hover { background: #faf3f6; }
 .altas-accounts-layout > .altas-concession-alerts { height: 1104px; min-height: 0; max-height: none; }
 .altas-analytics { max-height: none; overflow: visible; }
 .altas-accounts-heading h2 { font-size: 17px; font-weight: 700; }
+
+/* Tabla de cuentas: densidad y proporciones alineadas con los listados del dashboard. */
+.altas-accounts-layout > .altas-accounts-list,
+.altas-accounts-layout > .altas-concession-alerts {
+  height: clamp(460px, calc(100dvh - 300px), 760px);
+}
+.altas-accounts-layout .table-panel-heading {
+  min-height: 66px;
+  padding: 12px 16px;
+}
+.altas-accounts-layout th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 48px;
+  padding: 9px 12px;
+  font-size: 11px;
+  letter-spacing: 0.025em;
+}
+.altas-accounts-layout td {
+  height: 54px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.altas-accounts-table table { width: 100%; min-width: 1120px; table-layout: fixed; }
+.altas-accounts-table th, .altas-accounts-table td { padding-inline: 12px; }
+.altas-accounts-table th:nth-child(1) { width: 12%; }
+.altas-accounts-table th:nth-child(2) { width: 15%; }
+.altas-accounts-table th:nth-child(3) { width: 10%; }
+.altas-accounts-table th:nth-child(4) { width: 11%; }
+.altas-accounts-table th:nth-child(5) { width: 11%; }
+.altas-accounts-table th:nth-child(6) { width: 16%; }
+.altas-accounts-table th:nth-child(7) { width: 12%; }
+.altas-accounts-table th:nth-child(8) { width: 7%; }
+.altas-accounts-table th:nth-child(9) { width: 10%; }
+.altas-accounts-table td:nth-child(1),
+.altas-accounts-table td:nth-child(2),
+.altas-accounts-table td:nth-child(7) { overflow-wrap: anywhere; }
+.altas-accounts-table td:nth-child(3),
+.altas-accounts-table td:nth-child(8),
+.altas-accounts-table td:nth-child(9) { white-space: nowrap; }
+.altas-accounts-table .sort-button { gap: 6px; font-size: inherit; }
+.altas-accounts-table .altas-device-btn { min-height: 34px; padding: 6px 9px; gap: 6px; font-size: 11px; }
+@media (min-width: 1400px) {
+  .altas-accounts-table table { min-width: 0; }
+}
+.altas-accounts-table thead th,
+.altas-accounts-table thead th:first-child { background: #f3efeb; color: #741638; border-bottom-color: #e5ded8; letter-spacing: .025em; }
+.altas-accounts-table thead .sort-button { color: #741638; }
+.altas-accounts-table thead .sort-button svg { color: #9e8c92; }
+.altas-accounts-table th:nth-child(1) { width: 12%; }
+.altas-accounts-table th:nth-child(2) { width: 15%; }
+.altas-accounts-table th:nth-child(3) { width: 10%; }
+.altas-accounts-table th:nth-child(4) { width: 10%; }
+.altas-accounts-table th:nth-child(5) { width: 10%; }
+.altas-accounts-table th:nth-child(6) { width: 15%; }
+.altas-accounts-table th:nth-child(7) { width: 12%; }
+.altas-accounts-table th:nth-child(8) { width: 7%; }
+.altas-accounts-table th:nth-child(9) { width: 9%; }
+.altas-accounts-table th:first-child, .altas-accounts-table td:first-child { border-right: 1px solid #eee4e8; }
+.altas-accounts-table tbody tr { transition: background-color .16s ease, box-shadow .16s ease; }
+.altas-accounts-table tbody tr,
+.altas-accounts-table tbody tr:nth-child(even) { background: #fff; }
+.altas-accounts-table tbody tr:hover { background: #faf8f7; }
+.altas-accounts-table tbody tr:hover td:first-child { background: #faf8f7; }
+.altas-accounts-table .altas-cell-account { color: #17365b; font-weight: 600; }
+.altas-accounts-table .altas-cell-name { color: #26364a; font-weight: 550; }
+.altas-accounts-table .altas-profile-badge { padding: 0; background: transparent; border: 0; color: #17365b; }
+.altas-accounts-table td:nth-child(8) .badge { color: #17644a; background: #e3f4eb; border: 1px solid #c8e8d7; padding: 5px 10px; }
+.altas-accounts-table .altas-no-devices { padding: 0; background: transparent; color: #536273; font-style: normal; }
+.altas-accounts-table .altas-device-btn { background: #fff8fa; border-color: #e6bdcb; }
+.altas-accounts-table .altas-device-btn:hover { background: #f8eaf0; }
+/* Vista compacta: departamento y puesto no aportan a la consulta principal. */
+.altas-accounts-table tr > :nth-child(4),
+.altas-accounts-table tr > :nth-child(5) { display: none; }
+.altas-accounts-table th:nth-child(1) { width: 15%; }
+.altas-accounts-table th:nth-child(2) { width: 19%; }
+.altas-accounts-table th:nth-child(3) { width: 13%; }
+.altas-accounts-table th:nth-child(6) { width: 18%; }
+.altas-accounts-table th:nth-child(7) { width: 15%; }
+.altas-accounts-table th:nth-child(8) { width: 8%; }
+.altas-accounts-table th:nth-child(9) { width: 12%; }
+.altas-accounts-table tbody tr:nth-child(even) td:first-child,
+.altas-accounts-table tbody tr:hover td:first-child { background: #fff; }
+.altas-accounts-table tbody tr,
+.altas-accounts-table tbody tr:nth-child(even),
+.altas-accounts-table tbody tr:hover { background: #fff; box-shadow: none; }
+.altas-accounts-table .altas-cell-date.is-highlighted { display: inline-flex; min-height: 30px; padding: 5px 9px; border: 1px solid #ead8c2; border-radius: 7px; background: #fbf5eb; color: #694a20; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.altas-accounts-table .altas-cell-date.is-highlighted svg { color: #9a7136; }
+.altas-accounts-table .altas-profile-badge { font-family: inherit; font-size: 12px; font-weight: 600; }
+.altas-accounts-table .altas-profile-badge svg { color: #8a6b78; }
+
+/* Más aire y jerarquía para las alertas de concesión. */
+.altas-accounts-layout.has-alerts { grid-template-columns: minmax(0, 1fr) minmax(480px, 520px); }
+.altas-alerts-table th:nth-child(1) { width: 38%; }
+.altas-alerts-table th:nth-child(2) { width: auto; }
+.altas-alerts-table th:nth-child(3) { width: 116px; }
+.altas-alerts-table th, .altas-alerts-table td { padding: 16px 14px; }
+.altas-alert-account, .altas-alert-concession { gap: 8px; }
+.altas-alert-account strong { line-height: 1.45; }
+.altas-alert-account small, .altas-alert-concession small { line-height: 1.6; }
+.altas-alert-concession strong { padding: 5px 9px; }
+.altas-alert-engineer { display: block; margin-top: 4px; color: #74646c; }
+.altas-alert-row-actions { gap: 10px; }
+@media (max-width: 1200px) { .altas-accounts-layout.has-alerts { grid-template-columns: minmax(0, 1fr); } }
+.altas-accounts-table,
+.altas-accounts-table :is(th, td, button, span, strong, small) { font-family: "Montserrat", sans-serif; }
+.altas-accounts-table th:first-child,
+.altas-accounts-table td:first-child { padding-left: 22px; }
+
+/* Presentación propia para los indicadores clave de concesiones. */
+.altas-analytics-widget[data-kind="altas-valid"] .widget-data-body { background: linear-gradient(135deg,#f0faf4,#fff 78%); }
+.altas-analytics-widget[data-kind="altas-valid"] .altas-widget-value { display: grid; grid-template-columns: 76px minmax(0,1fr); align-items: center; gap: 4px 14px; min-height: 94px; border: 0; background: transparent; }
+.altas-analytics-widget[data-kind="altas-valid"] .altas-widget-value > strong { grid-column: 1; grid-row: 1 / span 2; font-size: 48px; line-height: 1; font-weight: 750; }
+.altas-analytics-widget[data-kind="altas-valid"] .altas-widget-value > span { grid-column: 2; grid-row: 1; order: 0; align-self: end; font-size: 13px; font-weight: 650; color: #245943; }
+.altas-analytics-widget[data-kind="altas-valid"] > header { background: linear-gradient(110deg,#e7f6ed,#fff 78%); }
+.altas-analytics-widget[data-kind="altas-expiring24"] .widget-data-body { background: linear-gradient(135deg,#fff4ed,#fffaf7 72%); }
+.altas-analytics-widget[data-kind="altas-expiring24"] .altas-widget-value { display: grid; grid-template-columns: minmax(0,1fr) 76px; align-items: center; gap: 4px 12px; min-height: 94px; border: 0; background: transparent; }
+.altas-analytics-widget[data-kind="altas-expiring24"] .altas-widget-value > span { grid-column: 1; grid-row: 1; order: 0; align-self: end; font-size: 13px; font-weight: 650; color: #763916; }
+.altas-analytics-widget[data-kind="altas-expiring24"] .altas-widget-value > strong { display: grid; grid-column: 2; grid-row: 1 / span 2; place-items: center; width: 68px; height: 68px; border: 1px solid #f1cbb7; border-radius: 18px; background: #fff; box-shadow: 0 4px 12px #9a471c12; font-size: 34px; }
+.altas-analytics-widget[data-kind="altas-expiring24"] > header { background: linear-gradient(110deg,#fff0e7,#fff 78%); }
+.altas-analytics-widget[data-kind="altas-expiring7"] .widget-data-body { background: linear-gradient(135deg,#fff9eb,#fff 78%); }
+.altas-analytics-widget[data-kind="altas-expiring7"] .altas-widget-value { display: grid; grid-template-columns: 76px minmax(0,1fr); align-items: center; gap: 4px 14px; min-height: 94px; border: 0; background: transparent; }
+.altas-analytics-widget[data-kind="altas-expiring7"] .altas-widget-value > strong { display: grid; grid-column: 1; grid-row: 1 / span 2; place-items: center; width: 68px; height: 68px; border: 2px dashed #d6ae66; border-radius: 50%; background: #fff; font-size: 30px; }
+.altas-analytics-widget[data-kind="altas-expiring7"] .altas-widget-value > span { grid-column: 2; grid-row: 1; order: 0; align-self: end; font-size: 13px; font-weight: 650; color: #705019; }
+.altas-analytics-widget[data-kind="altas-expiring7"] > header { background: linear-gradient(110deg,#fff6df,#fff 78%); }
+.altas-analytics-widget[data-kind="altas-expired"] .widget-data-body { background: linear-gradient(135deg,#fff0f3,#fff 78%); }
+.altas-analytics-widget[data-kind="altas-expired"] .altas-widget-value { border-color: #f1d5dc; background: #fff; }
+.altas-analytics-widget[data-kind="altas-expired"] > header { background: linear-gradient(110deg,#fce8ed,#fff 78%); }
+
+/* Los demás indicadores también tienen una composición visual según su tema. */
+.altas-analytics-widget[data-kind="altas-accounts"] .widget-data-body,
+.altas-analytics-widget[data-kind="altas-device-total"] .widget-data-body { background: linear-gradient(135deg,#eff5fe,#fff 76%); }
+.altas-analytics-widget[data-kind="altas-accounts"] .altas-widget-value,
+.altas-analytics-widget[data-kind="altas-device-total"] .altas-widget-value { min-height: 94px; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; border: 0; border-left: 4px solid var(--widget-accent); border-radius: 4px 12px 12px 4px; background: #fff; box-shadow: 0 4px 14px #3267b10d; }
+.altas-analytics-widget[data-kind="altas-accounts"] .altas-widget-value > span,
+.altas-analytics-widget[data-kind="altas-device-total"] .altas-widget-value > span { order: 0; grid-column: 1; font-weight: 650; }
+.altas-analytics-widget[data-kind="altas-accounts"] .altas-widget-value > strong,
+.altas-analytics-widget[data-kind="altas-device-total"] .altas-widget-value > strong { grid-column: 2; grid-row: 1; font-size: 42px; }
+.altas-analytics-widget[data-kind="altas-temporary"] .widget-data-body,
+.altas-analytics-widget[data-kind="altas-oficios"] .widget-data-body { background: linear-gradient(135deg,#f7f1fc,#fff 78%); }
+.altas-analytics-widget[data-kind="altas-temporary"] .altas-widget-value,
+.altas-analytics-widget[data-kind="altas-oficios"] .altas-widget-value { min-height: 94px; border: 1px solid color-mix(in srgb,var(--widget-accent) 18%,transparent); background: #fff; }
+.altas-analytics-widget[data-kind="altas-temporary"] .altas-widget-value > strong,
+.altas-analytics-widget[data-kind="altas-oficios"] .altas-widget-value > strong { font-size: 40px; }
+.altas-analytics-widget[data-kind="altas-active"] .widget-data-body,
+.altas-analytics-widget[data-kind="altas-with-devices"] .widget-data-body { background: linear-gradient(135deg,#edf8f4,#fff 78%); }
+.altas-analytics-widget[data-kind="altas-active"] .altas-widget-value,
+.altas-analytics-widget[data-kind="altas-with-devices"] .altas-widget-value { min-height: 94px; display: grid; grid-template-columns: 1fr auto; align-items: center; border: 0; border-radius: 12px; background: var(--widget-wash); }
+.altas-analytics-widget[data-kind="altas-active"] .altas-widget-value > span,
+.altas-analytics-widget[data-kind="altas-with-devices"] .altas-widget-value > span { order: 0; grid-column: 1; font-weight: 650; }
+.altas-analytics-widget[data-kind="altas-active"] .altas-widget-value > strong,
+.altas-analytics-widget[data-kind="altas-with-devices"] .altas-widget-value > strong { grid-column: 2; grid-row: 1; font-size: 40px; }
+.altas-analytics-widget[data-kind="altas-inactive"] .widget-data-body,
+.altas-analytics-widget[data-kind="altas-unknown-status"] .widget-data-body,
+.altas-analytics-widget[data-kind="altas-no-expiry"] .widget-data-body { background: linear-gradient(135deg,#f3f5f8,#fff 78%); }
+.altas-analytics-widget[data-kind="altas-inactive"] .altas-widget-value,
+.altas-analytics-widget[data-kind="altas-unknown-status"] .altas-widget-value,
+.altas-analytics-widget[data-kind="altas-no-expiry"] .altas-widget-value { min-height: 94px; border: 1px dashed color-mix(in srgb,var(--widget-accent) 36%,transparent); background: #fff; }
+.altas-analytics-widget[data-kind="altas-inactive"] .altas-widget-value > strong,
+.altas-analytics-widget[data-kind="altas-unknown-status"] .altas-widget-value > strong,
+.altas-analytics-widget[data-kind="altas-no-expiry"] .altas-widget-value > strong { font-size: 40px; }
+.altas-analytics-widget[data-kind="altas-non-temporary"] .widget-data-body,
+.altas-analytics-widget[data-kind="altas-without-devices"] .widget-data-body,
+.altas-analytics-widget[data-kind="altas-multiple-devices"] .widget-data-body,
+.altas-analytics-widget[data-kind="altas-five-devices"] .widget-data-body { background: linear-gradient(135deg,var(--widget-wash),#fff 78%); }
+.altas-analytics-widget[data-kind="altas-non-temporary"] .altas-widget-value,
+.altas-analytics-widget[data-kind="altas-without-devices"] .altas-widget-value,
+.altas-analytics-widget[data-kind="altas-multiple-devices"] .altas-widget-value,
+.altas-analytics-widget[data-kind="altas-five-devices"] .altas-widget-value { min-height: 94px; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; border: 0; border-bottom: 2px solid var(--widget-accent); border-radius: 0; background: transparent; }
+.altas-analytics-widget[data-kind="altas-non-temporary"] .altas-widget-value > span,
+.altas-analytics-widget[data-kind="altas-without-devices"] .altas-widget-value > span,
+.altas-analytics-widget[data-kind="altas-multiple-devices"] .altas-widget-value > span,
+.altas-analytics-widget[data-kind="altas-five-devices"] .altas-widget-value > span { order: 0; grid-column: 1; font-weight: 650; }
+.altas-analytics-widget[data-kind="altas-non-temporary"] .altas-widget-value > strong,
+.altas-analytics-widget[data-kind="altas-without-devices"] .altas-widget-value > strong,
+.altas-analytics-widget[data-kind="altas-multiple-devices"] .altas-widget-value > strong,
+.altas-analytics-widget[data-kind="altas-five-devices"] .altas-widget-value > strong { grid-column: 2; grid-row: 1; font-size: 42px; }
+.altas-analytics-widget[data-kind^="altas-"]:is([data-kind$="-android"],[data-kind$="-ios"],[data-kind$="-windows"],[data-kind$="-macos"],[data-kind$="-linux"],[data-kind$="-unknown"]) .widget-data-body { background: linear-gradient(135deg,var(--widget-wash),#fff 75%); }
+.altas-analytics-widget[data-kind^="altas-"]:is([data-kind$="-android"],[data-kind$="-ios"],[data-kind$="-windows"],[data-kind$="-macos"],[data-kind$="-linux"],[data-kind$="-unknown"]) .altas-widget-value { display: grid; grid-template-columns: 74px minmax(0,1fr); align-items: center; min-height: 94px; border: 0; background: transparent; }
+.altas-analytics-widget[data-kind^="altas-"]:is([data-kind$="-android"],[data-kind$="-ios"],[data-kind$="-windows"],[data-kind$="-macos"],[data-kind$="-linux"],[data-kind$="-unknown"]) .altas-widget-value > strong { display: grid; grid-column: 1; grid-row: 1 / span 2; place-items: center; width: 62px; height: 62px; border: 1px solid color-mix(in srgb,var(--widget-accent) 20%,transparent); border-radius: 16px; background: #fff; font-size: 30px; }
+.altas-analytics-widget[data-kind^="altas-"]:is([data-kind$="-android"],[data-kind$="-ios"],[data-kind$="-windows"],[data-kind$="-macos"],[data-kind$="-linux"],[data-kind$="-unknown"]) .altas-widget-value > span { grid-column: 2; grid-row: 1; order: 0; font-weight: 650; }
+.altas-analytics-widget[data-kind="altas-recent"] .widget-data-body,
+.altas-analytics-widget[data-kind="altas-unassociated"] .widget-data-body { background: linear-gradient(135deg,var(--widget-wash),#fff 78%); }
+.altas-analytics-widget[data-kind="altas-recent"] .altas-widget-value,
+.altas-analytics-widget[data-kind="altas-unassociated"] .altas-widget-value { min-height: 94px; border: 0; border-radius: 12px; background: var(--widget-wash); }
+.altas-analytics-widget[data-kind="altas-recent"] .altas-widget-value > strong,
+.altas-analytics-widget[data-kind="altas-unassociated"] .altas-widget-value > strong { font-size: 40px; }
+
+.altas-compact-list { border-top: 3px solid var(--widget-accent); background: #fff; }
+.altas-compact-list .network-pressure-header { background: linear-gradient(110deg,var(--widget-wash),#fff 80%); }
+.altas-compact-list .network-pressure-header h3 { color: var(--widget-accent); }
+.altas-compact-list li button:hover { background: var(--widget-wash); }
+.altas-compact-list li button > .altas-compact-quantity > i > em { background: var(--widget-accent); }
+.altas-compact-list li button > .altas-compact-quantity > b { color: var(--widget-accent); }
+.altas-compact-list[data-kind="altas-top-devices"] li button > span:first-child { font-weight: 650; }
+.altas-compact-list[data-kind="altas-departments"] li button,
+.altas-compact-list[data-kind="altas-profiles"] li button { border-bottom: 1px solid color-mix(in srgb,var(--widget-accent) 12%,transparent); }
