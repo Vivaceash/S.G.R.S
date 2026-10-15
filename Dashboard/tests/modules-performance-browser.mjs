@@ -21,7 +21,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  let apRequests = 0, documentaryRequests = 0, healthFinished = false;
+  let apRequests = 0, altasRequests = 0, documentaryRequests = 0, healthFinished = false;
   await page.route('**/api/**', async r => {
     const path = new URL(r.request().url()).pathname;
     let response = {};
@@ -33,7 +33,7 @@ try {
     else if (path === '/api/aps/map') response = { positions:aps.slice(0,100).map((ap,i)=>({id:`pos-${i}`,ap_id:ap.id,floor_id:['planta-baja','piso-1','piso-2','piso-3'][i%4],x:10+(i%10)*8,y:10+Math.floor(i/10)*8})) };
     else if (path === '/api/admin/users') response = { users };
     else if (path === '/api/admin/connections') response = { connections:['forti','omni','inventarios'].map(id=>({id,url:'http://127.0.0.1:8000/api/v1',auth_mode:'api-key',version:0,has_secret:true})) };
-    else if (path === '/api/altas/omnivista') response = { success:true, data:{ users, sources:{} } };
+    else if (path === '/api/altas/omnivista') { altasRequests++; response = { success:true, data:{ users, sources:{} } }; }
     else if (path === '/api/support/movements') response = { movements };
     else if (path === '/api/support/inventory') response = { items:Array.from({length:50},(_,i)=>({id:`stock-${i}`,description:`Tóner ${i}`,quantity:10,unit:'pza'})) };
     else if (path === '/api/forti/network/dhcp-pools') response = { success:true,data:{pools:data.segments} };
@@ -102,6 +102,18 @@ try {
     results.push({module:module.id,heading,tabs:visited,tableRows:await main.locator('table tbody tr').count()});
     console.log(module.id,'OK',visited.join(' | '));
   }
+  await page.evaluate(() => { location.hash = 'altas'; });
+  await page.waitForTimeout(500);
+  const beforeAltas = altasRequests;
+  assert.ok(beforeAltas > 0);
+  await page.evaluate(() => { location.hash = 'dispositivos'; });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { location.hash = 'altas'; });
+  await page.waitForTimeout(500);
+  assert.equal(altasRequests, beforeAltas, 'Returning to altas must reuse session data');
+  await page.evaluate(() => window.dispatchEvent(new Event('sgrs:refresh-current-module')));
+  await page.waitForTimeout(500);
+  assert.equal(altasRequests, beforeAltas + 1, 'Explicit refresh must reload altas');
   assert.deepEqual(errors,[]);
   if(process.env.SGRS_PERF_REPORT) writeFileSync(process.env.SGRS_PERF_REPORT,JSON.stringify({firstReady,results,apRequests,documentaryRequests,errors},null,2));
   console.log('ALL MODULES PASSED');

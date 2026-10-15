@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createAltasCache } from './altas-cache.mjs';
 import { LogIn, ShieldCheck } from 'lucide-react';
 import { Button, Field, Loading, Notice, SecretInput } from './components.jsx';
 import { useForm } from './forms.jsx';
@@ -99,6 +100,7 @@ export function SessionProvider({ children }) {
   const [setupAllowed, setSetupAllowed] = useState(false);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
+  const altasCache = useMemo(() => createAltasCache(), [identity?.user?.id, expired, demo]);
   useEffect(() => {
     if (demo) { setReady(true); setCsrfToken(''); return; }
     const controller = new AbortController(); let alive = true;
@@ -186,6 +188,7 @@ export function SessionProvider({ children }) {
   const sessionRoles = getEffectiveRoles(current?.roles);
 
   return <SessionContext.Provider value={{
+    altasCache,
     ...current,
     user: current?.user,
     allowedPages,

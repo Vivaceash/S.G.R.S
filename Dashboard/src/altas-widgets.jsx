@@ -19,22 +19,7 @@ function widgetTone(widget, stats) {
   return catalogWidgetTone(widget);
 }
 
-function catalogWidgetTone(widget) {
-  if (widget.kind === 'platform') return { android: 'success', ios: 'cyan', windows: 'blue', macos: 'purple', linux: 'amber', unknown: 'slate' }[widget.platform];
-  if (widget.metric) return ({
-    accounts: 'blue', temporary: 'purple', oficios: 'indigo', valid: 'success', expiring24: 'orange',
-    expiring7: 'amber', expired: 'danger', 'no-expiry': 'slate', 'non-temporary': 'blue', active: 'teal',
-    inactive: 'danger', 'unknown-status': 'slate', 'with-devices': 'teal', 'without-devices': 'amber',
-    'multiple-devices': 'cyan', 'five-devices': 'indigo',
-  })[widget.metric] || 'brand';
-  if (widget.kind === 'ranking') return 'indigo';
-  if (widget.kind === 'platforms') return 'cyan';
-  if (widget.kind === 'types' || widget.kind === 'devices') return 'teal';
-  if (widget.kind === 'departments' || widget.kind === 'recent') return 'blue';
-  if (widget.kind === 'profiles') return 'purple';
-  if (widget.kind === 'unassociated') return 'amber';
-  return 'brand';
-}
+function catalogWidgetTone() { return 'brand'; }
 
 function AnalyticsCard({ widget, stats, sources, loading, error, onFilter, onRefresh, updatedAt, demo }) {
   const Icon = ['platform', 'devices', 'types', 'platforms', 'ranking'].includes(widget.kind) ? Monitor : widget.scope === 'oficios' ? Clock3 : Users;
@@ -59,7 +44,7 @@ function AnalyticsCard({ widget, stats, sources, loading, error, onFilter, onRef
       </button></li>)}
     </ol></div> : <p className="widget-empty">Sin datos disponibles.</p>}
   </article>;
-  return <WidgetCard title={widget.title} module="Gestión de altas" Icon={Icon} tone={loading || error ? 'slate' : widgetTone(widget, stats)} kind={widget.id} className={`altas-analytics-widget${rows ? ' altas-list-widget' : ''}`}  loading={loading} updatedAt={updatedAt} demo={demo} onRefresh={onRefresh} footerAction={filter && onFilter ? { label: 'Filtrar cuentas', onClick: () => onFilter(filter) } : null}>
+  return <WidgetCard title={widget.title} module="Gestión de altas" Icon={Icon} tone={loading || error ? 'slate' : widgetTone(widget, stats)} kind={widget.id} className="altas-analytics-widget" loading={loading} updatedAt={updatedAt} demo={demo} onRefresh={onRefresh} footerAction={filter && onFilter ? { label: 'Filtrar cuentas', onClick: () => onFilter(filter) } : null}>
       {
         filter ? <button type="button" className="altas-widget-value" disabled={loading || Boolean(error) || !onFilter} onClick={() => onFilter?.(filter)} aria-label={`Filtrar ${widget.title}`}><strong>{loading || error ? '—' : number(value)}</strong><span>{widget.description}</span>{onFilter && <small>Filtrar cuentas</small>}</button> :
         <div className="altas-widget-value"><strong>{loading || error || value == null ? '—' : number(value)}</strong><span>{value == null ? 'Requiere un catálogo de terminales completo.' : widget.description}</span></div>}

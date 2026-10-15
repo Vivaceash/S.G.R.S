@@ -5952,10 +5952,10 @@ td .button { min-height: 31px; font-size: 11px; padding: 6px 13px; border-radius
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  background: url('./assets/login-calendar.svg') center / contain no-repeat;
+  background: url('./assets/login-calendar.webp') center / contain no-repeat;
   opacity: .18;
   pointer-events: none;
-  animation: login-calendar-turn 360s linear infinite;
+  animation: login-calendar-turn 360s steps(4320) infinite;
   will-change: transform;
   transition: opacity .4s ease;
 }
@@ -7360,3 +7360,138 @@ button.altas-widget-value:hover { background: #faf3f6; }
 .altas-compact-list[data-kind="altas-top-devices"] li button > span:first-child { font-weight: 650; }
 .altas-compact-list[data-kind="altas-departments"] li button,
 .altas-compact-list[data-kind="altas-profiles"] li button { border-bottom: 1px solid color-mix(in srgb,var(--widget-accent) 12%,transparent); }
+
+/* Altas uses one ISSSTE palette and the same card language as the dashboard. */
+.altas-page {
+  --altas-brand-wash: color-mix(in srgb,var(--color-brand) 6%,var(--surface));
+  --altas-brand-border: color-mix(in srgb,var(--color-brand) 17%,var(--border));
+  --altas-gold-wash: color-mix(in srgb,var(--color-gold) 10%,var(--surface));
+  --altas-row-hover: color-mix(in srgb,var(--color-brand) 4%,var(--surface));
+  color: var(--text);
+}
+.altas-page .widget-tone-brand,
+.altas-page .widget-tone-blue,
+.altas-page .widget-tone-purple,
+.altas-page .widget-tone-indigo,
+.altas-page .widget-tone-cyan,
+.altas-page .widget-tone-teal {
+  --widget-accent: var(--color-brand);
+  --widget-wash: var(--altas-brand-wash);
+}
+.altas-page .widget-tone-amber,
+.altas-page .widget-tone-orange {
+  --widget-accent: var(--color-warning);
+  --widget-wash: var(--warning-bg);
+}
+.altas-page .widget-tone-success { --widget-accent: var(--color-success); --widget-wash: var(--success-bg); }
+.altas-page .widget-tone-danger { --widget-accent: var(--color-danger); --widget-wash: var(--danger-bg); }
+.altas-page .widget-tone-slate { --widget-accent: var(--muted); --widget-wash: var(--surface-muted); }
+
+.altas-page :is(.dashboard-data-widget,.network-pressure,.altas-accounts-list,.altas-concession-alerts) {
+  border-color: var(--border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel);
+}
+.altas-page .dashboard-data-widget,
+.altas-page .altas-compact-list { border-top: 3px solid var(--widget-accent, var(--color-brand)); }
+.altas-page .altas-analytics-widget > header {
+  background: linear-gradient(115deg,var(--widget-wash),var(--surface) 82%);
+  border-bottom-color: var(--border);
+}
+.altas-page .altas-analytics-widget h2,
+.altas-page .altas-compact-list .network-pressure-header h3 { color: var(--widget-accent, var(--color-brand)); }
+.altas-page .altas-analytics-widget .widget-heading-icon {
+  color: var(--widget-accent, var(--color-brand));
+  background: var(--widget-wash, var(--altas-brand-wash));
+  border-color: color-mix(in srgb,var(--widget-accent, var(--color-brand)) 18%,var(--surface));
+}
+.altas-page .altas-analytics-widget .widget-data-body { background: var(--surface); }
+.altas-page .altas-widget-value {
+  border-color: color-mix(in srgb,var(--widget-accent, var(--color-brand)) 18%,var(--border));
+  background: linear-gradient(135deg,var(--surface),var(--widget-wash, var(--altas-brand-wash)));
+}
+.altas-page .dashboard-data-widget > footer { border-top-color: var(--border); background: var(--surface-muted); }
+.altas-page .dashboard-data-widget > footer button { color: var(--widget-accent, var(--color-brand)); }
+
+.altas-page .altas-compact-list { height: 100%; min-height: 190px; padding: 15px 17px; background: var(--surface); }
+.altas-page .altas-compact-list .network-pressure-header {
+  padding: 0 24px 9px 0;
+  border-bottom: 1px solid color-mix(in srgb,var(--widget-accent) 16%,var(--border));
+}
+.altas-page .altas-compact-list .network-pressure-header h3 { margin: 0; font-size: 15px; line-height: 1.4; }
+.altas-page .altas-compact-scroll { max-height: 142px; padding: 1px 4px 0 0; scrollbar-width: thin; }
+.altas-page .altas-compact-list ol { gap: 3px; }
+.altas-page .altas-compact-list li button {
+  min-height: 36px;
+  height: auto;
+  grid-template-columns: minmax(0,1fr) minmax(90px,.7fr);
+  gap: 12px;
+  padding: 5px 7px;
+  border-radius: 7px;
+}
+.altas-page .altas-compact-list li button:is(:hover,:focus-visible) { background: var(--widget-wash); }
+.altas-page .altas-compact-list li button > span:first-child { color: var(--text); }
+.altas-page .altas-compact-list li button > span:first-child strong { font-size: 12px; font-weight: 600; }
+.altas-page .altas-compact-list li button > .altas-compact-quantity { grid-template-columns: minmax(0,1fr) auto; gap: 8px; }
+.altas-page .altas-compact-quantity > i { height: 5px; overflow: hidden; border-radius: 99px; background: #ede9e7; }
+.altas-page .altas-compact-quantity > i > em { background: linear-gradient(90deg,#d3851f,var(--color-danger)); }
+.altas-page .altas-compact-quantity > b { color: var(--widget-accent); font-size: 12px; }
+
+.altas-page .altas-accounts-heading,
+.altas-page .altas-alerts-heading { color: var(--color-brand); border-bottom-color: var(--border); }
+.altas-page .altas-accounts-heading > svg,
+.altas-page .altas-alerts-heading > svg { color: var(--color-brand); background: var(--altas-brand-wash); }
+.altas-page .altas-alerts-count { color: var(--color-brand); border-color: var(--altas-brand-border); background: var(--altas-brand-wash); }
+.altas-page .altas-active-filter { color: var(--color-brand); background: var(--altas-brand-wash); }
+.altas-page .altas-accounts-layout .table-panel-heading { border-bottom-color: var(--border); background: var(--surface); }
+.altas-page .altas-accounts-layout .search-field { border-color: var(--border); background: var(--surface); }
+.altas-page .altas-accounts-layout .search-field:focus-within { border-color: var(--color-brand); box-shadow: 0 0 0 3px var(--altas-brand-wash); }
+.altas-page .altas-accounts-layout th,
+.altas-page .altas-accounts-layout thead th,
+.altas-page .altas-accounts-layout thead th:first-child { color: var(--color-brand); border-bottom-color: var(--border); background: var(--surface-muted); }
+.altas-page .altas-accounts-layout .sort-button { color: var(--color-brand); }
+.altas-page .altas-accounts-layout .table-footer { border-top-color: var(--border); background: var(--surface-muted); }
+.altas-page .altas-accounts-table tbody tr,
+.altas-page .altas-accounts-table tbody tr:nth-child(even) { background: var(--surface); }
+.altas-page .altas-accounts-table tbody tr:nth-child(even) td:first-child { background: var(--surface); }
+.altas-page .altas-accounts-table tbody tr:is(:hover,:focus-within) { background: var(--altas-row-hover); }
+.altas-page .altas-accounts-table tbody tr:is(:hover,:focus-within) td:first-child { background: var(--altas-row-hover); }
+.altas-page .altas-accounts-table .altas-cell-account { color: var(--color-brand); }
+.altas-page .altas-accounts-table .altas-cell-name { color: var(--text); }
+.altas-page .altas-accounts-table .altas-profile-badge {
+  padding: 4px 7px;
+  border: 1px solid var(--altas-brand-border);
+  border-radius: 7px;
+  background: var(--altas-brand-wash);
+  color: var(--color-brand);
+}
+.altas-page .altas-profile-badge svg { color: var(--color-brand); }
+.altas-page .altas-accounts-table td:nth-child(8) .badge-success { color: var(--color-success); border-color: color-mix(in srgb,var(--color-success) 20%,var(--border)); background: var(--success-bg); }
+.altas-page .altas-cell-date.is-highlighted { color: #694a20; border-color: color-mix(in srgb,var(--color-gold) 35%,var(--border)); background: var(--altas-gold-wash); }
+.altas-page .altas-cell-date.is-highlighted svg { color: var(--color-gold); }
+.altas-page .altas-device-btn { color: var(--color-brand); border-color: var(--altas-brand-border); background: var(--altas-brand-wash); }
+.altas-page .altas-device-btn:hover { background: color-mix(in srgb,var(--color-brand) 12%,var(--surface)); }
+.altas-page .altas-no-devices { color: var(--muted); }
+.altas-page .altas-alert-concession strong { color: var(--color-warning); }
+.altas-page .altas-alert-concession.is-urgent strong { color: var(--color-danger); }
+.altas-page .altas-accounts-layout .table-scroll,
+.altas-page .altas-accounts-table tbody tr[data-window-row="true"] { overflow-anchor: none; }
+
+.altas-page .altas-dialog-copy { display: grid; gap: 12px; margin-bottom: 14px; }
+.altas-page .altas-dialog-copy > p { margin: 0; }
+.altas-page .altas-dialog-note { display: grid; gap: 5px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-muted); font-size: 12px; }
+.altas-page .altas-dialog-muted { display: block; margin-top: 4px; color: var(--muted); }
+.altas-page .altas-concession-form { display: flex; flex-direction: column; gap: 14px; }
+.altas-page .altas-concession-form > p { margin: 0; font-size: 13px; }
+.altas-page .altas-date-label { display: flex; align-items: center; gap: 6px; color: var(--color-brand); font-size: 13px; font-weight: 600; }
+.altas-page .altas-date-label svg { color: var(--color-gold); }
+.altas-page .altas-date-input { width: 100%; min-height: 44px; margin-top: 6px; padding: 9px 12px; border-color: var(--border); border-radius: var(--radius-control); font-size: 14px; }
+.altas-page .altas-date-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.altas-page .altas-date-presets > span { color: var(--muted); font-size: 12px; }
+.altas-page .altas-date-preset { min-height: 40px; padding: 6px 11px; border-color: var(--border); border-radius: var(--radius-control); }
+.altas-page .altas-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+@media (pointer: coarse) {
+  .altas-page .altas-compact-list { min-height: 200px; }
+  .altas-page .altas-compact-scroll { max-height: 176px; }
+  .altas-page .altas-compact-list li button { min-height: 44px; }
+}

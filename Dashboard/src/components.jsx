@@ -1,4 +1,4 @@
-import React, { startTransition, useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { startTransition, useCallback, useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Search, X, ChevronLeft, ChevronRight, ArrowDownUp, Download, Info, RefreshCw, LoaderCircle, Eye, EyeOff } from 'lucide-react';
 import { EXCEL_MIME_TYPE, makeCsv, makeExcelWorkbook, number, paginate, selectRows, statusNames, statusTone } from './domain.mjs';
 
@@ -108,26 +108,73 @@ export function downloadExcel(name, sheets) {
   link.href = url; link.download = name.endsWith('.xls') ? name : `${name}.xls`; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export function DataTable({ title, rows, columns, state, noun = 'registros', pageSize = 10, paginated = true, toolbar, exportable = false, loading = false, error, onRetry, emptyText, rowKey = 'id', onRowClick, rowClassName, className = '' }) {
+export function DataTable({ title, rows, columns, state, noun = 'registros', pageSize = 10, paginated = true, infiniteScroll = false, resetKey, toolbar, exportable = false, loading = false, error, onRetry, emptyText, rowKey = 'id', onRowClick, rowClassName, className = '' }) {
   const query = useDeferredValue(state.query);
   const visible = useMemo(() => selectRows(rows, query, state.filters, state.sort, state.asc), [rows, query, state.filters, state.sort, state.asc]);
   const page = paginated ? paginate(visible, state.page, pageSize) : { rows: visible, current: 1, total: visible.length, pages: 1 };
   const [renderLimit, setRenderLimit] = useState(100);
-  useEffect(() => setRenderLimit(100), [query, state.filters, state.sort, state.asc, page.current, pageSize, paginated]);
-  const renderedRows = page.rows.slice(0, renderLimit);
+  const [windowStart, setWindowStart] = useState(0);
+  const scrollRef = useRef(null);
+  const pendingWindowScroll = useRef(null);
+  const movingWindow = useRef(false);
+  useEffect(() => {
+    setRenderLimit(100);
+    if (infiniteScroll) {
+      setWindowStart(0);
+      if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    }
+  }, [query, state.filters, state.sort, state.asc, page.current, pageSize, paginated, infiniteScroll, resetKey]);
+  const windowEnd = Math.min(windowStart + 100, page.rows.length);
+  const renderedRows = infiniteScroll
+    ? page.rows.slice(windowStart, windowEnd)
+    : page.rows.slice(0, renderLimit);
+  useLayoutEffect(() => {
+    const pending = pendingWindowScroll.current;
+    if (!infiniteScroll || !pending || !scrollRef.current) return;
+    const tableRows = [...scrollRef.current.querySelectorAll('tbody tr[data-window-row="true"]')];
+    const addedHeight = pending.direction === 'up'
+      ? tableRows.filter(row => Number(row.dataset.windowIndex) < pending.previousStart).reduce((sum, row) => sum + row.getBoundingClientRect().height, 0)
+      : 0;
+    scrollRef.current.scrollTop += pending.direction === 'up' ? addedHeight : -pending.removedHeight;
+    pendingWindowScroll.current = null;
+    movingWindow.current = false;
+  }, [windowStart, infiniteScroll]);
+  const handleInfiniteScroll = () => {
+    if (!infiniteScroll || movingWindow.current || page.rows.length <= 100) return;
+    const element = scrollRef.current;
+    if (!element) return;
+    const nearTop = element.scrollTop <= 48;
+    const nearBottom = element.scrollHeight - element.clientHeight - element.scrollTop <= 72;
+    if (nearTop && windowStart > 0) {
+      const nextStart = Math.max(0, windowStart - 25);
+      pendingWindowScroll.current = { direction: 'up', previousStart: windowStart, removedHeight: 0 };
+      movingWindow.current = true;
+      setWindowStart(nextStart);
+    } else if (nearBottom && windowEnd < page.rows.length) {
+      const nextStart = Math.min(windowStart + 25, page.rows.length - 100);
+      const removedHeight = [...element.querySelectorAll('tbody tr[data-window-row="true"]')]
+        .filter(row => Number(row.dataset.windowIndex) < nextStart)
+        .reduce((sum, row) => sum + row.getBoundingClientRect().height, 0);
+      pendingWindowScroll.current = { direction: 'down', removedHeight };
+      movingWindow.current = true;
+      setWindowStart(nextStart);
+    }
+  };
   useEffect(() => { if (paginated && !loading && !error && page.current !== state.page) state.setPage(page.current); }, [paginated, page.current, state.page, loading, error]);
   return <section className={`table-panel ${className}`} aria-label={title}>
     {(toolbar || exportable) && <div className="table-panel-heading"><div>{toolbar}</div>{exportable && <Button icon={Download} onClick={() => downloadCsv(title, columns.filter(c => c.key !== 'actions'), visible)} disabled={!visible.length}>Exportar consulta</Button>}</div>}
-    <div className="table-scroll" tabIndex={0} role="region" aria-label={`${title}. Desplázate para ver todas las columnas.`}>
+    <div ref={scrollRef} onScroll={handleInfiniteScroll} className="table-scroll" tabIndex={0} role="region" aria-label={`${title}. Desplázate para ver todas las filas y columnas.`}>
       <table><caption className="sr-only">{title}</caption><thead><tr>{columns.map(column => <th key={column.key} scope="col" aria-sort={state.sort === column.key ? state.asc ? 'ascending' : 'descending' : undefined}>
         {column.sortable === false ? column.label : <button type="button" className="sort-button" onClick={() => state.setSort(column.key)}>{column.label}<ArrowDownUp size={13} aria-hidden="true" /></button>}
       </th>)}</tr></thead><tbody>{!loading && !error && renderedRows.map((row, index) => {
         const cls = typeof rowClassName === 'function' ? rowClassName(row) : rowClassName;
-        return <tr key={row[rowKey] || index} className={cls} tabIndex={onRowClick ? 0 : undefined} onClick={onRowClick ? () => onRowClick(row) : undefined} onKeyDown={onRowClick ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(row); } } : undefined} title={onRowClick ? 'Haz clic para ver el detalle técnico' : undefined}>{columns.map(column => <td key={column.key}>{column.render ? column.render(row) : String(row[column.key] ?? '—')}</td>)}</tr>;
+        const rowIndex = (infiniteScroll ? windowStart : 0) + index;
+        return <tr key={row[rowKey] || rowIndex} data-window-row={infiniteScroll ? 'true' : undefined} data-window-index={infiniteScroll ? rowIndex : undefined} className={cls} tabIndex={onRowClick ? 0 : undefined} onClick={onRowClick ? () => onRowClick(row) : undefined} onKeyDown={onRowClick ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(row); } } : undefined} title={onRowClick ? 'Haz clic para ver el detalle técnico' : undefined}>{columns.map(column => <td key={column.key}>{column.render ? column.render(row) : String(row[column.key] ?? '—')}</td>)}</tr>;
       })}</tbody></table>
+      {infiniteScroll && <span className="sr-only" role="status" aria-live="polite">{page.rows.length ? `Filas ${windowStart + 1} a ${windowEnd} de ${number(page.rows.length)}.` : ''}</span>}
       {loading ? <Loading /> : error ? <Empty title="No se pudo cargar la información" action={<Button icon={RefreshCw} onClick={onRetry}>Volver a intentar</Button>}>{error}</Empty> : !visible.length && <Empty title={rows.length ? 'No se encontraron resultados' : 'Aún no hay registros'} action={rows.length ? <Button onClick={state.reset}>Limpiar filtros</Button> : null}>{rows.length ? 'Prueba otra búsqueda o elimina los filtros activos.' : emptyText}</Empty>}
     </div>
-    {!loading && !error && page.rows.length > renderLimit && <div className="table-progressive"><Button onClick={() => setRenderLimit(value => value + 100)}>Mostrar más filas ({page.rows.length - renderLimit} pendientes)</Button></div>}
+    {!infiniteScroll && !loading && !error && page.rows.length > renderLimit && <div className="table-progressive"><Button onClick={() => setRenderLimit(value => value + 100)}>Mostrar más filas ({page.rows.length - renderLimit} pendientes)</Button></div>}
     {paginated && <div className="table-footer"><span role="status">{visible.length ? `Mostrando ${(page.current - 1) * pageSize + 1}–${Math.min((page.current - 1) * pageSize + renderedRows.length, page.total)} de ${number(page.total)} ${noun}` : `0 ${noun}`}</span>
       <nav className="pagination" aria-label={`Paginación de ${title}`}><IconButton icon={ChevronLeft} label="Página anterior" disabled={page.current <= 1} onClick={() => state.setPage(page.current - 1)} />
         {Array.from({ length: Math.min(5, page.pages) }, (_, i) => Math.min(Math.max(1, page.current - 2), Math.max(1, page.pages - 4)) + i).map(p => <button type="button" key={p} className={p === page.current ? 'current' : ''} aria-label={`Página ${p}`} aria-current={p === page.current ? 'page' : undefined} onClick={() => state.setPage(p)}>{p}</button>)}

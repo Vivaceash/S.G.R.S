@@ -211,7 +211,7 @@ function parseOficioDescription(description, legacyEffectiveDate) {
 }
 
 export function Requests({ demo, data }) {
-  const { canViewSubmodule } = useSession();
+  const { canViewSubmodule, altasCache } = useSession();
   const canViewOficios = canViewSubmodule('altas', 'oficios');
   const canViewAll = canViewSubmodule('altas', 'all');
   const usersState = useListState('altas-usuarios');
@@ -219,7 +219,7 @@ export function Requests({ demo, data }) {
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [analyticsFilter, setAnalyticsFilter] = useState(null);
   const accountsListRef = useRef(null);
-  const [snapshot, setSnapshot] = useState({ users: [], sources: {}, loading: !demo, error: '', updatedAt: null });
+  const [snapshot, setSnapshot] = useState(() => (!demo && altasCache.peek()) || { users: [], sources: {}, loading: !demo, error: '', updatedAt: null });
   const [selectedUser, setSelectedUser] = useState(null);
   const [editingConcessionUser, setEditingConcessionUser] = useState(null);
   const [concessionDate, setConcessionDate] = useState('');
@@ -349,19 +349,17 @@ export function Requests({ demo, data }) {
       setSnapshot({ users: demoUsers, sources: {}, loading: false, error: '', updatedAt: new Date().toISOString() });
       return;
     }
-    const controller = new AbortController(); let alive = true;
-    setSnapshot(old => ({ ...old, loading: true, error: '' }));
-    request('/api/altas/omnivista', { signal: controller.signal }).then(result => {
-      if (!result.success && !result.data) throw new Error('OmniVista no confirmó la consulta.');
-      const data = result.data || {};
+    let alive = true;
+    setSnapshot(old => ({ ...old, loading: !altasCache.peek(), error: '' }));
+    altasCache.load(() => request('/api/altas/omnivista'), revision > 0).then(result => {
       if (alive) {
-        const users = Array.isArray(data.users) ? data.users : [];
-        setSnapshot({ users, sources: data.sources || {}, loading: false, error: '', updatedAt: new Date().toISOString() });
+        const users = result.users;
+        setSnapshot(result);
         setSelectedUser(current => current ? users.find(user => user.username === current.username) || null : null);
       }
     }).catch(error => { if (alive) setSnapshot(old => ({ ...old, loading: false, error: error.name === 'AbortError' ? 'Consulta cancelada.' : error.message })); });
-    return () => { alive = false; controller.abort(); };
-  }, [demo, revision]);
+    return () => { alive = false; };
+  }, [demo, revision, altasCache]);
 
   // Las alertas requieren el formato exacto: Oficio - fecha límite - ingeniero.
   const oficiosUsers = useMemo(() => {
@@ -511,7 +509,7 @@ export function Requests({ demo, data }) {
   ];
 
   return (
-    <>
+    <div className="altas-page">
       <PageHeading
         eyebrow="Gestión de altas · Consulta"
         title="Gestión de Altas de Red"
@@ -545,6 +543,9 @@ export function Requests({ demo, data }) {
             title="Todas las cuentas de usuarios OmniVista"
             className="altas-accounts-table"
             paginated={false}
+            infiniteScroll
+            resetKey={`${snapshot.updatedAt || ''}:${analyticsFilter?.id || ''}:${analyticsFilter?.value || ''}`}
+            rowKey="username"
             rows={filterAltasUsers(snapshot.users, analyticsFilter, now)}
             columns={userColumns}
             state={usersState}
@@ -587,13 +588,13 @@ export function Requests({ demo, data }) {
         </aside>}
       </div>
       <Dialog open={Boolean(selectedUser)} title={`Dispositivos de ${selectedUser?.username || 'la cuenta'}`} onClose={() => setSelectedUser(null)} wide>
-        <div style={{ marginBottom: '14px' }}>
-          <p className="muted" style={{ margin: 0 }}>Cotejo entre Company Property de OmniVista y el inventario observado por FortiGate.</p>
+        <div className="altas-dialog-copy">
+          <p className="muted">Cotejo entre Company Property de OmniVista y el inventario observado por FortiGate.</p>
           {selectedUser?.description && (
-            <div style={{ marginTop: '8px', padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}>
+            <div className="altas-dialog-note">
               <strong>Motivo de alta / Oficio:</strong> {selectedUser.description}
               {(selectedUser.effectiveTime || selectedUser.dateOfEffective) && (
-                <span style={{ display: 'block', marginTop: '3px', color: '#64748b' }}>
+                <span className="altas-dialog-muted">
                   Límite de concesión: {new Date(Number(selectedUser.effectiveTime || selectedUser.dateOfEffective)).toLocaleString('es-MX')}
                 </span>
               )}
@@ -634,13 +635,13 @@ export function Requests({ demo, data }) {
         title={`Modificar tiempo de concesión · ${editingConcessionUser?.username || ''}`}
         onClose={() => !concessionBusy && setEditingConcessionUser(null)}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <p className="muted" style={{ margin: 0, fontSize: '13px' }}>
+        <div className="altas-concession-form">
+          <p className="muted">
             Selecciona la nueva fecha y hora límite en la que la cuenta de <strong>{editingConcessionUser?.fullName || editingConcessionUser?.username}</strong> finalizará su concesión y deberá ser dada de baja en la red.
           </p>
 
           {editingConcessionUser && (
-            <div style={{ padding: '10px 14px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div className="altas-dialog-note">
               <div><strong>Cuenta:</strong> <span className="font-mono">{editingConcessionUser.username}</span></div>
               {editingConcessionUser.department && <div><strong>Área:</strong> {editingConcessionUser.department}</div>}
               {editingConcessionUser.description && <div><strong>Oficio / Motivo:</strong> {editingConcessionUser.description}</div>}
@@ -654,7 +655,7 @@ export function Requests({ demo, data }) {
           )}
 
           <div className="field">
-            <label htmlFor="concession-date-picker" style={{ fontWeight: 600, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label htmlFor="concession-date-picker" className="altas-date-label">
               <Calendar size={16} /> Fecha de vencimiento (Día)
             </label>
             <input
@@ -662,23 +663,15 @@ export function Requests({ demo, data }) {
               type="date"
               value={concessionDate}
               onChange={e => setConcessionDate(e.target.value)}
-              className="form-input"
-              style={{
-                width: '100%',
-                padding: '9px 12px',
-                borderRadius: '8px',
-                border: '1px solid #cbd5e1',
-                fontSize: '14px',
-                marginTop: '6px'
-              }}
+              className="form-input altas-date-input"
             />
-            <small className="field-help" style={{ color: '#64748b', marginTop: '4px', display: 'block' }}>
+            <small className="field-help altas-dialog-muted">
               Selecciona únicamente el día límite para dar de baja al usuario en la red.
             </small>
           </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-            <span style={{ fontSize: '11.5px', color: '#64748b' }}>Accesos rápidos:</span>
+          <div className="altas-date-presets">
+            <span>Accesos rápidos:</span>
             {[
               { label: 'Mañana', days: 1 },
               { label: '+3 días', days: 3 },
@@ -689,8 +682,7 @@ export function Requests({ demo, data }) {
               <button
                 key={preset.label}
                 type="button"
-                className="button button-ghost"
-                style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid #e2e8f0' }}
+                className="button button-ghost altas-date-preset"
                 onClick={() => {
                   const d = new Date(Date.now() + preset.days * 86400 * 1000);
                   const pad = n => String(n).padStart(2, '0');
@@ -706,7 +698,7 @@ export function Requests({ demo, data }) {
             <Notice tone="danger" title="Error al guardar">{concessionError}</Notice>
           )}
 
-          <div className="dialog-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+          <div className="dialog-actions altas-dialog-actions">
             <Button onClick={() => setEditingConcessionUser(null)} disabled={concessionBusy}>
               Cancelar
             </Button>
@@ -718,7 +710,7 @@ export function Requests({ demo, data }) {
       </Dialog>
 
       <Note title="Alcance de la consulta">Las alertas muestran cuentas con descripción de "Oficio" y concesión vigente, ordenadas por vencimiento. El listado principal incluye todas las cuentas autorizadas de OmniVista.</Note>
-    </>
+    </div>
   );
 }
 export function Inventory({ data, demo, navigate, openEditor, errors, loading, refresh, canWrite, canExport }) {
