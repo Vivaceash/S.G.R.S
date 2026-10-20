@@ -29,6 +29,7 @@ USER_MANAGEMENT = ["users.read", "users.create", "users.edit", "users.delete"]
 ROLE_RANK = {"soporte": 1, "viewer": 1, "admin": 2, "super-admin": 3}
 KNOWN_CAPABILITIES = tuple(dict.fromkeys(READ + OPERATE + MANAGE + USER_MANAGEMENT))
 SESSION_SECONDS = 8 * 3600
+PERSISTENT_SESSION_SECONDS = 30 * 24 * 3600
 IDLE_SECONDS = 30 * 60
 
 AVAILABLE_PAGES = (
@@ -359,6 +360,8 @@ def database(write=False):
             db.execute("ALTER TABLE users ADD COLUMN allowed_pages TEXT NOT NULL DEFAULT '[]'")
         if "allowed_submodules" not in cols:
             db.execute("ALTER TABLE users ADD COLUMN allowed_submodules TEXT")
+        if "keep_session" not in cols:
+            db.execute("ALTER TABLE users ADD COLUMN keep_session INTEGER NOT NULL DEFAULT 0 CHECK(keep_session IN (0,1))")
         if "is_hidden" not in cols:
             db.execute("ALTER TABLE users ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0 CHECK(is_hidden IN (0,1))")
         if "capabilities" not in cols:
@@ -399,6 +402,7 @@ def database(write=False):
 def public_user(row):
     user = {k: row[k] for k in ("id", "username", "name", "role", "version", "created_at")}
     user["active"] = bool(row["active"])
+    user["keep_session"] = bool(row["keep_session"]) if "keep_session" in row.keys() else False
     raw_pages = row.get("allowed_pages") if hasattr(row, "get") else (row["allowed_pages"] if "allowed_pages" in row.keys() else None)
     user["allowed_pages"] = parse_allowed_pages(raw_pages, row["role"])
     raw_submodules = row['allowed_submodules'] if 'allowed_submodules' in row.keys() else None
@@ -419,6 +423,7 @@ def user_for_actor(row, actor, include_permissions=None):
     else:
         user.pop("allowed_pages", None)
         user.pop("allowed_submodules", None)
+        user.pop("keep_session", None)
         user.pop("capabilities", None)
         user.pop("is_hidden", None)
     return user
@@ -588,6 +593,7 @@ def _user_snapshot(row):
         "name": row["name"],
         "role": row["role"],
         "active": bool(row["active"]),
+        "keep_session": bool(row["keep_session"]),
         "is_hidden": bool(row["is_hidden"]),
         "allowed_pages": pages,
         "allowed_submodules": parse_allowed_submodules(row["allowed_submodules"], pages),
@@ -672,6 +678,10 @@ def save_user(body, actor=None, bootstrap=False):
             if hidden and actor_role != "super-admin":
                 raise AccessError(403, "Solo un super-admin puede ocultar una cuenta.")
 
+        previous = db.execute("SELECT keep_session FROM users WHERE id=?", (user_id,)).fetchone() if user_id else None
+        keep_session = body.get("keep_session", bool(previous["keep_session"]) if previous else False)
+        if not isinstance(keep_session, bool):
+            raise AccessError(422, "Mantener sesión iniciada debe ser un valor booleano.")
         if not isinstance(hidden, bool):
             raise AccessError(422, "La visibilidad debe ser un valor booleano.")
         try:
@@ -680,9 +690,9 @@ def save_user(body, actor=None, bootstrap=False):
                 before = _user_snapshot(old)
                 stored_pages = allowed_pages or (['__none__'] if role == 'super-admin' else [])
                 db.execute("""UPDATE users SET username=?,name=?,role=?,active=?,password_hash=?,version=version+1,
-                    allowed_pages=?,allowed_submodules=?,capabilities=?,must_change_password=?,is_hidden=? WHERE id=?""",
+                    allowed_pages=?,allowed_submodules=?,capabilities=?,must_change_password=?,is_hidden=?,keep_session=? WHERE id=?""",
                            (username, name, role, int(active), encoded or old["password_hash"], json.dumps(stored_pages),
-                            json.dumps(allowed_submodules), json.dumps(child_capabilities), int(must_change), int(hidden), user_id))
+                            json.dumps(allowed_submodules), json.dumps(child_capabilities), int(must_change), int(hidden), int(keep_session), user_id))
                 updated = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
                 after = _user_snapshot(updated)
                 audit(db, actor, "user.updated", user_id, {"before": before, "after": after})
@@ -703,10 +713,10 @@ def save_user(body, actor=None, bootstrap=False):
                 stored_pages = allowed_pages or (['__none__'] if role == 'super-admin' else [])
                 db.execute("""INSERT INTO users
                     (id,username,name,role,active,password_hash,created_at,allowed_pages,allowed_submodules,
-                     capabilities,must_change_password,is_hidden)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                     capabilities,must_change_password,is_hidden,keep_session)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                            (user_id, username, name, role, int(active), encoded, int(time.time()), json.dumps(stored_pages),
-                            json.dumps(allowed_submodules), json.dumps(child_capabilities), int(must_change), int(hidden)))
+                            json.dumps(allowed_submodules), json.dumps(child_capabilities), int(must_change), int(hidden), int(keep_session)))
                 audit(db, actor or "bootstrap-local", "user.created", user_id,
                       {"role": role, "capabilities": child_capabilities, "allowed_pages": allowed_pages})
         except sqlite3.IntegrityError:
@@ -818,8 +828,9 @@ def login(body, address):
         fresh = db.execute("SELECT * FROM users WHERE id=?", (row["id"],)).fetchone()
         if not fresh["active"] or fresh["version"] != row["version"]:
             raise AccessError(401, "La cuenta cambió. Vuelve a iniciar sesión.")
-        db.execute("DELETE FROM sessions WHERE expires<? OR touched<?", (now, now-IDLE_SECONDS))
-        db.execute("INSERT INTO sessions VALUES(?,?,?,?,?)", (hashlib.sha256(token.encode()).hexdigest(), row["id"], csrf, now+SESSION_SECONDS, now))
+        db.execute("""DELETE FROM sessions WHERE expires<=? OR (touched<=? AND user_id IN
+            (SELECT id FROM users WHERE keep_session=0))""", (now, now-IDLE_SECONDS))
+        db.execute("INSERT INTO sessions VALUES(?,?,?,?,?)", (hashlib.sha256(token.encode()).hexdigest(), row["id"], csrf, now+(PERSISTENT_SESSION_SECONDS if fresh["keep_session"] else SESSION_SECONDS), now))
         audit(db, row["id"], "session.login", row["id"])
         identity_row = db.execute("SELECT * FROM users WHERE id=?", (row["id"],)).fetchone()
     return token, session_identity(identity_row, csrf)
@@ -836,10 +847,13 @@ def session(cookie):
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     now = int(time.time())
     with database() as db:
-        row = db.execute("SELECT users.*,sessions.csrf FROM sessions JOIN users ON users.id=sessions.user_id WHERE token_hash=? AND expires>? AND touched>? AND active=1", (token_hash, now, now-IDLE_SECONDS)).fetchone()
+        row = db.execute("SELECT users.*,sessions.csrf FROM sessions JOIN users ON users.id=sessions.user_id WHERE token_hash=? AND expires>? AND (users.keep_session=1 OR touched>?) AND active=1", (token_hash, now, now-IDLE_SECONDS)).fetchone()
         if not row or row["role"] not in ROLES:
             return None
-        db.execute("UPDATE sessions SET touched=? WHERE token_hash=?", (now, token_hash))
+        if row["keep_session"]:
+            db.execute("UPDATE sessions SET touched=?,expires=? WHERE token_hash=?", (now, now+PERSISTENT_SESSION_SECONDS, token_hash))
+        else:
+            db.execute("UPDATE sessions SET touched=? WHERE token_hash=?", (now, token_hash))
         return {**session_identity(row, row["csrf"]), "token_hash": token_hash}
 
 

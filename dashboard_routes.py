@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 """Same-origin HTTP boundary for the local dashboard (used by server.Handler)."""
+from http.cookies import SimpleCookie
 import hmac
 import ipaddress
 import json
@@ -17,7 +18,7 @@ import dashboard_inventory as inventory
 import dashboard_inventarios as inventories_api
 from dashboard_device_history import get_longest_connected_devices
 
-from dashboard_access import (AccessError, SESSION_SECONDS, database, session, login,
+from dashboard_access import (AccessError, SESSION_SECONDS, PERSISTENT_SESSION_SECONDS, database, session, login,
                               list_users, project_hidden_actors, save_user, change_password, delete_user,
                               connection, connection_values,
                               save_connection, audit, dashboard_preferences, save_dashboard_preferences,
@@ -236,16 +237,22 @@ class AccessRoutes:
         except (ValueError, UnicodeError):
             raise AccessError(400, "La solicitud no contiene un objeto JSON válido.") from None
 
-    def _cookie(self, token, clear=False):
+    def _cookie(self, token, clear=False, persistent=False):
         # En conexiones HTTP LAN o desarrollo local sin proxy HTTPS, no exigir
         # '; Secure' para que los navegadores no descarten la cookie sgrs_session.
         secure = "; Secure" if self._secure_transport() else ""
-        self._session_cookie = f"sgrs_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={0 if clear else SESSION_SECONDS}{secure}"
+        self._session_cookie = f"sgrs_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={0 if clear else PERSISTENT_SESSION_SECONDS if persistent else SESSION_SECONDS}{secure}"
+
+    def _renew_session_cookie(self, identity):
+        if identity and identity["user"].get("keep_session"):
+            cookies = SimpleCookie(self.headers.get("Cookie", ""))
+            self._cookie(cookies["sgrs_session"].value, persistent=True)
 
     def _authorize(self, mutation=False):
         self.identity = session(self.headers.get("Cookie"))
         if not self.identity:
             raise AccessError(401, "Inicia sesión para acceder al sistema.")
+        self._renew_session_cookie(self.identity)
         if mutation and not hmac.compare_digest(self.headers.get("X-CSRF-Token", ""), self.identity["csrf"]):
             raise AccessError(403, "La sesión cambió. Inicia sesión nuevamente antes de guardar.")
         if self.identity.get("must_change_password") and urlsplit(self.path).path not in (
@@ -284,6 +291,7 @@ class AccessRoutes:
             path = urlsplit(self.path).path
             if path == "/api/auth/session":
                 identity = session(self.headers.get("Cookie"))
+                self._renew_session_cookie(identity)
                 with database() as db:
                     setup = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
                 self._send_json({k: v for k, v in identity.items() if k != "token_hash"} if identity else {"user": None, "setup_required": setup, "web_bootstrap_allowed": os.environ.get("SGRS_ALLOW_WEB_BOOTSTRAP") == "1" and self.client_address[0] in ("127.0.0.1", "::1")})
@@ -487,7 +495,7 @@ class AccessRoutes:
             path = urlsplit(self.path).path
             if path == "/api/auth/login":
                 token, identity = login(self._body(), self.client_address[0])
-                self._cookie(token)
+                self._cookie(token, persistent=identity["user"].get("keep_session", False))
                 self._send_json(identity)
                 return True
             if path == "/api/auth/bootstrap":
@@ -500,7 +508,7 @@ class AccessRoutes:
                     raise AccessError(422, "Las contraseñas no coinciden.")
                 save_user({"username": body["username"], "name": body["name"], "role": "super-admin", "password": body["password"]}, bootstrap=True)
                 token, identity = login(body, self.client_address[0])
-                self._cookie(token)
+                self._cookie(token, persistent=identity["user"].get("keep_session", False))
                 self._send_json(identity)
                 return True
             if path == "/api/mobile-report":

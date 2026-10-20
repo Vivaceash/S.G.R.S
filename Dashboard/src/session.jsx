@@ -119,16 +119,18 @@ export function SessionProvider({ children }) {
   }, [demo, revision]);
   useEffect(() => {
     const onExpired = () => {
-      if (!demo) {
-        clearIdfViewSession(identity?.user?.id);
-        setExpired(true);
-      }
+      if (!demo) { clearIdfViewSession(identity?.user?.id); setExpired(true); }
     };
     const check = () => { if (!demo && !expired) setRevision(value => value+1); };
     window.addEventListener('sgrs-session-expired', onExpired);
     window.addEventListener('focus', check);
-    return () => { window.removeEventListener('sgrs-session-expired', onExpired); window.removeEventListener('focus', check); };
-  }, [demo, expired, identity?.user?.id]);
+    const renewal = !demo && !expired && identity?.user?.keep_session ? window.setInterval(check, 5 * 60 * 1000) : null;
+    return () => {
+      if (renewal !== null) window.clearInterval(renewal);
+      window.removeEventListener('sgrs-session-expired', onExpired);
+      window.removeEventListener('focus', check);
+    };
+  }, [demo, expired, identity?.user?.id, identity?.user?.keep_session]);
   const setDemo = value => {
     setCsrfToken(''); setDemoState(value); setError(''); setExpired(false); setIdentity(null); setReady(value);
     const url = new URL(location.href); if (value) url.searchParams.set('demo', '1'); else url.searchParams.delete('demo');
