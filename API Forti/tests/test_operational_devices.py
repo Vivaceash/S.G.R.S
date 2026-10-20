@@ -102,3 +102,29 @@ def test_operational_endpoint_preserves_native_active_count_and_new_ip(monkeypat
     assert next(d for d in response.data.devices if d.mac == A).ip == '10.0.0.99'
     assert next(d for d in response.data.devices if d.mac == B).ip is None
     assert 'timestamp_from' not in get.call_args_list[1].kwargs['params']
+
+
+def test_transient_empty_active_snapshot_is_retried(monkeypatch):
+    from app.routers.devices import list_connected_devices, fortios_client
+    history = [device()]
+    get = AsyncMock(side_effect=[{'results': history}, {'results': []}, {'results': history}])
+    monkeypatch.setattr(fortios_client, 'get_connected_devices', get)
+    monkeypatch.setattr(fortios_client, 'request', AsyncMock(return_value={'results': []}))
+    monkeypatch.setattr(fortios_client, 'get_dhcp_leases', AsyncMock(return_value={'results': []}))
+    monkeypatch.setattr(fortios_client, 'get_arp_table', AsyncMock(return_value={'results': []}))
+    response = asyncio.run(list_connected_devices(view='operational', status_filter='all', online_only=None,
+        active_window=3600, vendor=None, search=None, interface=None, vdom=None))
+    assert response.data.online_devices == 1
+    assert get.await_count == 3
+
+
+@pytest.mark.parametrize('retry', [{'results': []}, {'status': 'error', 'results': []}, RuntimeError('unavailable')])
+def test_unverified_empty_snapshot_does_not_publish_offline_reservations(monkeypatch, retry):
+    from fastapi import HTTPException
+    from app.routers.devices import list_connected_devices, fortios_client
+    get = AsyncMock(side_effect=[{'results': [device()]}, {'results': []}, retry])
+    monkeypatch.setattr(fortios_client, 'get_connected_devices', get)
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(list_connected_devices(view='operational', status_filter='all', online_only=None,
+            active_window=3600, vendor=None, search=None, interface=None, vdom=None))
+    assert exc.value.status_code == 502

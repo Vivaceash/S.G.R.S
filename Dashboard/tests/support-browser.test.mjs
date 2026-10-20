@@ -122,7 +122,7 @@ try {
   assert.equal(await downloadBtn.isVisible(), true, 'Botón de descarga Excel debe ser visible');
 
   const checkboxes = exportDialog.locator('input[type="checkbox"]');
-  assert.equal(await checkboxes.count(), 2, 'Deben haber 2 checkboxes (computadoras e impresoras)');
+  assert.equal(await checkboxes.count(), 4, 'Deben haber 4 checkboxes (computadoras, impresoras, institucionales wifi, redes)');
   assert.equal(await checkboxes.nth(0).isChecked(), true, 'Computadoras marcado por defecto');
   assert.equal(await checkboxes.nth(1).isChecked(), true, 'Impresoras marcado por defecto');
 
@@ -141,6 +141,17 @@ try {
   await ambosBtn.click();
   assert.equal(await checkboxes.nth(0).isChecked(), true, 'Ambos activa computadoras');
   assert.equal(await checkboxes.nth(1).isChecked(), true, 'Ambos activa impresoras');
+
+  const todosBtn = exportDialog.locator('button:has-text("Todos")');
+  await todosBtn.click();
+  for (let i = 0; i < 4; i++) {
+    assert.equal(await checkboxes.nth(i).isChecked(), true, `Checkbox ${i} debe estar activo al pulsar Todos`);
+  }
+
+  const soloRedesBtn = exportDialog.locator('button:has-text("Solo redes")');
+  await soloRedesBtn.click();
+  assert.equal(await checkboxes.nth(0).isChecked(), false, 'Computadoras desmarcado en solo redes');
+  assert.equal(await checkboxes.nth(3).isChecked(), true, 'Redes activo en solo redes');
 
   // Cerrar diálogo de exportación
   const cancelBtn = exportDialog.locator('button:has-text("Cancelar")');

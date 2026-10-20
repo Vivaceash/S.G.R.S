@@ -1,3 +1,4 @@
+import { QUERY_TIMEOUT_MS } from './query-policy.mjs';
 export const LOCALE = 'es-MX';
 export const TIME_ZONE = 'America/Mexico_City';
 export const IDF_VIEW_SESSION_PREFIX = 'sgrs:idf-view:';
@@ -448,20 +449,123 @@ export const SUPPORT_EXPORT_COLUMNS = [
   },
 ];
 
-export function buildSupportSheets({ computers = [], printers = [], includeComputers = true, includePrinters = true, columns = SUPPORT_EXPORT_COLUMNS } = {}) {
+export const SUPPORT_NETWORK_EXPORT_COLUMNS = [
+  {
+    key: 'name',
+    label: 'Nombre de Red',
+    value: s => s.name || s.interface || '—',
+  },
+  {
+    key: 'interface',
+    label: 'Interfaz / VLAN',
+    value: s => s.interface || (s.vlan != null ? `VLAN ${s.vlan}` : '—'),
+  },
+  {
+    key: 'subnet',
+    label: 'Segmento / Subred',
+    value: s => s.subnet || s.ip_ranges?.[0] || '—',
+  },
+  {
+    key: 'default_gateway',
+    label: 'Gateway',
+    value: s => s.default_gateway || '—',
+  },
+  {
+    key: 'active_leases',
+    label: 'IPs Ocupadas',
+    value: s => s.active_leases != null ? String(s.active_leases) : '0',
+  },
+  {
+    key: 'available_ips',
+    label: 'IPs Libres',
+    value: s => {
+      const free = s.available_ips != null ? s.available_ips : Math.max(0, (Number(s.capacity) || 0) - (Number(s.active_leases) || 0));
+      return String(free);
+    },
+  },
+  {
+    key: 'capacity',
+    label: 'Capacidad Total',
+    value: s => s.capacity != null ? String(s.capacity) : '0',
+  },
+  {
+    key: 'utilization',
+    label: 'Uso (%)',
+    value: s => `${number(s.utilization_percent || 0)}%`,
+  },
+  {
+    key: 'status',
+    label: 'Estado de Saturación',
+    value: s => getSaturationLabel(getSaturationStatus(s)),
+  },
+];
+
+export function buildSupportSheets({
+  computers = [],
+  printers = [],
+  institutionalWifi = [],
+  topUptime = [],
+  unmatchedOmni = [],
+  networks = [],
+  criticalNetworks = [],
+  includeComputers = true,
+  includePrinters = true,
+  includeInstitutionalWifi = false,
+  includeTopUptime = false,
+  includeUnmatchedOmni = false,
+  includeNetworks = false,
+  includeCriticalNetworks = false,
+  columns = SUPPORT_EXPORT_COLUMNS,
+  networkColumns = SUPPORT_NETWORK_EXPORT_COLUMNS,
+} = {}) {
   const sheets = [];
-  if (includeComputers) {
+  if (includeComputers && computers) {
     sheets.push({
       name: 'Computadoras',
       columns,
       rows: computers,
     });
   }
-  if (includePrinters) {
+  if (includePrinters && printers) {
     sheets.push({
       name: 'Impresoras',
       columns,
       rows: printers,
+    });
+  }
+  if (includeInstitutionalWifi && institutionalWifi) {
+    sheets.push({
+      name: 'Institucionales WiFi',
+      columns,
+      rows: institutionalWifi,
+    });
+  }
+  if (includeTopUptime && topUptime) {
+    sheets.push({
+      name: 'Top Uptime',
+      columns,
+      rows: topUptime,
+    });
+  }
+  if (includeUnmatchedOmni && unmatchedOmni) {
+    sheets.push({
+      name: 'Sin Cotejo OmniVista',
+      columns,
+      rows: unmatchedOmni,
+    });
+  }
+  if (includeNetworks && networks) {
+    sheets.push({
+      name: 'Redes y Estados',
+      columns: networkColumns,
+      rows: networks,
+    });
+  }
+  if (includeCriticalNetworks && criticalNetworks) {
+    sheets.push({
+      name: 'Redes Críticas',
+      columns: networkColumns,
+      rows: criticalNetworks,
     });
   }
   return sheets;
@@ -597,7 +701,7 @@ export async function request(path, { signal, body } = {}) {
   if (!path.startsWith('/api/') || new URL(path, location.origin).origin !== location.origin) throw new Error('Destino de solicitud no permitido.');
   if (location.protocol !== 'https:' && !(location.protocol === 'http:' && isLocalOrPrivateHost(location.hostname))) throw new ApiError(403, 'Abre el dashboard mediante HTTPS para proteger las credenciales y la sesión.');
   const response = await fetch(path, {
-    signal: signal || AbortSignal.timeout(15000), credentials: 'same-origin', cache: 'no-store', redirect: 'error', headers: body ? { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken } : { Accept: 'application/json' },
+    signal: signal || AbortSignal.timeout(body ? 15000 : QUERY_TIMEOUT_MS), credentials: 'same-origin', cache: 'no-store', redirect: 'error', headers: body ? { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken } : { Accept: 'application/json' },
     method: body ? 'POST' : 'GET', ...(body ? { body: JSON.stringify(body) } : {}),
   });
   if (!response.ok) {

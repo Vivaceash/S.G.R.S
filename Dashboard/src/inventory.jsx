@@ -1,3 +1,4 @@
+import { QUERY_TIMEOUT_MS } from './query-policy.mjs';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, Save, Server, Camera, Wifi, TriangleAlert, Users, MapPin, Trash2, Power, Download } from 'lucide-react';
 import { Badge, Button, DataTable, Dialog, Field, Loading, Metric, Notice, SearchField, Select, downloadCsv, useListState } from './components.jsx';
@@ -215,7 +216,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   const cctvUpdated = canViewSubmodule('cctv', 'updated');
   const cctvOriginal = canViewSubmodule('cctv', 'original');
   const [catalog, setCatalog] = useState(emptyCatalog);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!demo);
   const [error, setError] = useState('');
   const [network, setNetwork] = useState(null);
   const [checking, setChecking] = useState(false);
@@ -278,7 +279,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
 
     let active = true;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
     const fetchOmniAps = async () => {
       setOmniLoading(true);
       setOmniError('');

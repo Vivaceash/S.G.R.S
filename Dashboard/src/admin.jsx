@@ -1,3 +1,4 @@
+import { QUERY_TIMEOUT_MS } from './query-policy.mjs';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { UserPlus, ShieldCheck, Settings2, PlugZap, Save, LockKeyhole, Server, Trash2 } from 'lucide-react';
 import { Badge, Button, DataTable, Dialog, Field, Loading, Notice, SearchField, SecretInput, Select, useListState } from './components.jsx';
@@ -26,7 +27,7 @@ function useAdminLoad(path, demo, example) {
     if (demo) return;
     const controller = new AbortController(); let alive = true;
     setLoading(true); setError('');
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    const timeout = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
     request(path, { signal: controller.signal }).then(result => { if (alive) setValue(result); })
       .catch(error => { if (alive) setError(error.name === 'AbortError' ? 'La consulta tardó demasiado. Vuelve a intentar.' : error.message); })
       .finally(() => { clearTimeout(timeout); if (alive) setLoading(false); });

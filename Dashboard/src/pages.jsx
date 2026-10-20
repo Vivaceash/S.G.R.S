@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, AlertCircle, ArrowRight, ArrowUpDown, Building2, Calendar, Camera, Check, CheckCircle2, Eye, Thermometer, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Copy, Download, FileText, Grid, HardDrive, Headset, Info, Laptop, Layers3, List, Monitor, Network, Package, Plus, Printer, Radio, RotateCcw, Router, Search, Server, ShieldCheck, Smartphone, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X, LogIn, LogOut, UserPlus, KeyRound, PlugZap, MapPin, MapPinOff } from 'lucide-react';
-import { Badge, Button, DataTable, Dialog, Empty, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, downloadExcel, useListState } from './components.jsx';
-import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getOverviewSegmentDevices, isMeztliSegment, paginate, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, getSupportSegments, normalizeText } from './domain.mjs';
+import { Badge, Button, DataTable, Dialog, Empty, Loading, InfiniteMore, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, downloadExcel, useListState } from './components.jsx';
+import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getOverviewSegmentDevices, isMeztliSegment, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, getSupportSegments, normalizeText } from './domain.mjs';
 import { useSession } from './session.jsx';
 import { DashboardWidgets } from './dashboard-widgets.jsx';
 import { AltasWidgets } from './altas-widgets.jsx';
@@ -165,7 +165,7 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
         <div className={`capacity-meter capacity-meter-${meterTone}`} style={{ '--meter-fill': meterColor }}><meter min="0" max="100" value={segment.utilization_percent || 0} className={`meter-${meterTone}`} style={{ '--meter-fill': meterColor }} aria-label={`Utilización de ${segment.interface}`} /><small><span className={`meter-bullet meter-bullet-${meterTone}`} style={{ background: meterColor }} aria-hidden="true" />{number(segment.utilization_percent)}% utilizado</small></div>
         <div className="segment-description"><Building2 size={21} aria-hidden="true" /><p>{segment.description || `Pool de direcciones de la interfaz ${segment.interface}. Consulta los equipos asociados a este segmento.`}</p></div>
         <Button variant={isSelected ? 'secondary' : 'primary'} className={`w-full ${isSelected ? 'is-selected' : ''}`} icon={Server} aria-expanded={isSelected} onClick={() => { const key = segmentKey(segment); if (activeSegmentKey === key) { setActiveSegmentKey(null); } else { setActiveSegmentKey(key); setTimeout(() => { devicesPanelRef.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' }); }, 60); } }}>{isSelected ? 'Ocultar dispositivos' : 'Ver dispositivos'} {isSelected ? <ChevronDown size={17} /> : <ArrowRight size={17} />}</Button>
-      </article>; })}</div>{!visibleSegments.length && <Empty title="Sin segmentos principales" action={<Button icon={Plus} onClick={editSegments}>Elegir principales</Button>}>Agrega los segmentos que quieres ver en tu dashboard.</Empty>}</> : <div className="panel"><Empty title={loading ? 'Consultando segmentos de red' : 'Sin segmentos disponibles'}>{loading ? 'Espera mientras se consulta la capacidad DHCP.' : 'La conexión con el servicio DHCP no devolvió segmentos. Puedes revisar el inventario IP o actualizar la consulta.'}</Empty></div>}
+      </article>; })}</div>{!visibleSegments.length && <Empty title="Sin segmentos principales" action={<Button icon={Plus} onClick={editSegments}>Elegir principales</Button>}>Agrega los segmentos que quieres ver en tu dashboard.</Empty>}</> : <div className="panel">{loading ? <Loading label="Consultando segmentos de red…" /> : <Empty title="Sin segmentos disponibles">{loading ? 'Espera mientras se consulta la capacidad DHCP.' : 'La conexión con el servicio DHCP no devolvió segmentos. Puedes revisar el inventario IP o actualizar la consulta.'}</Empty>}</div>}
     </section>
     <section data-widget-id="network" className="network-usage panel" aria-labelledby="network-usage-title">
       <div className="network-usage-heading"><div><p className="eyebrow">Conectividad por red</p><h2 id="network-usage-title">Usuarios conectados por red</h2><p>Distribución de las concesiones DHCP activas por segmento.</p></div><p className="network-usage-total"><strong>{number(totalConnections)}</strong><span>conexiones activas</span></p></div>
@@ -350,7 +350,7 @@ export function Requests({ demo, data }) {
       return;
     }
     let alive = true;
-    setSnapshot(old => ({ ...old, loading: !altasCache.peek(), error: '' }));
+    setSnapshot(old => ({ ...old, loading: true, error: '' }));
     altasCache.load(() => request('/api/altas/omnivista'), revision > 0).then(result => {
       if (alive) {
         const users = result.users;
@@ -850,8 +850,6 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
   const devices = useMemo(() => selectedSegment ? eligible.filter(device => deviceInSegment(device, segment)) : eligible, [eligible, selectedSegment, segment]);
   const typeOptions = useMemo(() => Array.from(new Set(devices.map(d => formatDeviceType(d.type, d.os || d.omnivista?.os || d.raw?.os_name, d.omnivista?.device_name || d.name, d.vendor)).filter(Boolean))).sort((a, b) => a.localeCompare(b, "es")), [devices]);
   const vendorOptions = useMemo(() => Array.from(new Set(devices.map(d => d.vendor).filter(Boolean))).sort((a, b) => a.localeCompare(b, "es")), [devices]);
-  const sizeChoice = ['25', '50', '100', 'all'].includes(state.pageSize) ? state.pageSize : '25';
-  const pageSize = sizeChoice === 'all' ? Math.max(1, devices.length) : Number(sizeChoice);
 
   const columns = [
     {
@@ -972,12 +970,6 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
               <option value="online">En servicio</option>
               <option value="offline">Reservados fuera de línea</option>
             </Select>
-            <Select label="Por página" value={sizeChoice} onChange={e => state.setPageSize(e.target.value)} className="devices-filter-select">
-              <option value="25">25 dispositivos</option>
-              <option value="50">50 dispositivos</option>
-              <option value="100">100 dispositivos</option>
-              <option value="all">Todos</option>
-            </Select>
           </div>
           {canExport && (
             <Button
@@ -998,7 +990,6 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
         rows={rows}
         columns={columns}
         state={state}
-        pageSize={pageSize}
         noun="dispositivos"
         exportable={false}
         loading={loading}
@@ -1473,8 +1464,8 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [vendorFilter, setVendorFilter] = useState('');
-  const [pageSizeChoice, setPageSizeChoice] = useState('25');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  useEffect(() => setLimit(25), [segment, query, statusFilter, typeFilter, vendorFilter]);
 
   const segmentDevices = getOverviewSegmentDevices(devices, segment);
   const onlineCount = segmentDevices.filter(d => d.status === 'online').length;
@@ -1508,18 +1499,8 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
     );
   }), [segmentDevices, query, statusFilter, typeFilter, vendorFilter, segment]);
 
-  const pageSize = pageSizeChoice === 'all' ? Math.max(1, filtered.length) : Number(pageSizeChoice);
-  const pageData = paginate(filtered, currentPage, pageSize);
-
-  useEffect(() => {
-    if (pageData.current !== currentPage) {
-      setCurrentPage(pageData.current);
-    }
-  }, [pageData.current, currentPage]);
-
-  const handleQuery = q => { setQuery(q); setCurrentPage(1); };
-  const handleStatus = e => { setStatusFilter(e.target.value); setCurrentPage(1); };
-  const handleSize = e => { setPageSizeChoice(e.target.value); setCurrentPage(1); };
+  const handleQuery = setQuery;
+  const handleStatus = e => setStatusFilter(e.target.value);
 
   return <section className="segment-devices-panel" ref={panelRef} aria-labelledby="segment-devices-title">
     <div className="segment-devices-header">
@@ -1541,11 +1522,11 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
       <div className="devices-toolbar-main">
         <SearchField defer value={query} onChange={handleQuery} placeholder="Buscar por equipo, IP, MAC o fabricante…" />
         <div className="devices-filters-group">
-          <Select label="Tipo de dispositivo" value={typeFilter} onChange={e => { setTypeFilter(e.target.value); setCurrentPage(1); }} className="devices-filter-select">
+          <Select label="Tipo de dispositivo" value={typeFilter} onChange={e => { setTypeFilter(e.target.value); }} className="devices-filter-select">
             <option value="">Todos los tipos</option>
             {typeOptions.map(t => <option key={t} value={t}>{t}</option>)}
           </Select>
-          <Select label="Marca / Fabricante" value={vendorFilter} onChange={e => { setVendorFilter(e.target.value); setCurrentPage(1); }} className="devices-filter-select">
+          <Select label="Marca / Fabricante" value={vendorFilter} onChange={e => { setVendorFilter(e.target.value); }} className="devices-filter-select">
             <option value="">Todas las marcas</option>
             {vendorOptions.map(v => <option key={v} value={v}>{v}</option>)}
           </Select>
@@ -1553,12 +1534,6 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
             <option value="">Todos los estados</option>
             <option value="online">En servicio</option>
             <option value="offline">Fuera de línea / Reservados</option>
-          </Select>
-          <Select label="Por página" value={pageSizeChoice} onChange={handleSize} className="devices-filter-select">
-            <option value="25">25 dispositivos</option>
-            <option value="50">50 dispositivos</option>
-            <option value="100">100 dispositivos</option>
-            <option value="all">Todos</option>
           </Select>
         </div>
       </div>
@@ -1579,7 +1554,7 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
             </tr>
           </thead>
           <tbody>
-            {pageData.rows.map((d, index) => <tr key={`${d.mac || d.ip || d.id || index}`} className="segment-device-row" role="button" tabIndex={0} onClick={() => openEditor?.('device-detail', d)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEditor?.('device-detail', d); } }} title={`Haz clic para ver la información técnica de ${d.omnivista?.device_name || d.name || d.ip || 'este dispositivo'}`}>
+            {filtered.slice(0, limit).map((d, index) => <tr key={`${d.mac || d.ip || d.id || index}`} className="segment-device-row" role="button" tabIndex={0} onClick={() => openEditor?.('device-detail', d)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEditor?.('device-detail', d); } }} title={`Haz clic para ver la información técnica de ${d.omnivista?.device_name || d.name || d.ip || 'este dispositivo'}`}>
               <td>
                 <div className="cell-detail">
                   <div className="flex items-center gap-2">
@@ -1607,21 +1582,7 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
             </tr>)}
           </tbody>
         </table>
-        <div className="table-footer">
-          <span role="status">
-            {pageSizeChoice === 'all'
-              ? `Mostrando todos los ${number(filtered.length)} dispositivos`
-              : `Mostrando ${(pageData.current - 1) * pageSize + 1}–${Math.min(pageData.current * pageSize, pageData.total)} de ${number(pageData.total)} dispositivos`}
-          </span>
-          {pageData.pages > 1 && <nav className="pagination" aria-label={`Paginación de dispositivos de ${segment.name || segment.interface}`}>
-            <IconButton icon={ChevronLeft} label="Página anterior" disabled={pageData.current <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} />
-            {Array.from({ length: Math.min(5, pageData.pages) }, (_, i) => {
-              const start = Math.min(Math.max(1, pageData.current - 2), Math.max(1, pageData.pages - 4));
-              return start + i;
-            }).map(p => <button type="button" key={p} className={p === pageData.current ? 'current' : ''} aria-label={`Página ${p}`} aria-current={p === pageData.current ? 'page' : undefined} onClick={() => setCurrentPage(p)}>{p}</button>)}
-            <IconButton icon={ChevronRight} label="Página siguiente" disabled={pageData.current >= pageData.pages} onClick={() => setCurrentPage(p => Math.min(pageData.pages, p + 1))} />
-          </nav>}
-        </div>
+        <InfiniteMore count={limit} total={filtered.length} onMore={() => setLimit(value => value + 25)} />
       </> : <Empty title={segmentDevices.length ? 'Sin coincidencias' : 'Sin dispositivos en este segmento'} action={segmentDevices.length ? <Button onClick={() => { setQuery(''); setStatusFilter(''); }}>Limpiar filtros</Button> : undefined}>{segmentDevices.length ? 'No hay dispositivos que coincidan con los criterios de búsqueda.' : `No se detectaron dispositivos asociados ni reservas DHCP registradas para la red ${segment.name || segment.interface}.`}</Empty>}
     </div>
   </section>;
@@ -1629,6 +1590,7 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
 
 export function SupportMovements({ demo }) {
   const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(!demo);
   const [selected, setSelected] = useState(null);
   const [photoError, setPhotoError] = useState(false);
   const showDetail = row => { setPhotoError(false); setSelected(row); };
@@ -1638,11 +1600,15 @@ export function SupportMovements({ demo }) {
   useEffect(() => setLimit(25), [query]);
   const reload = () => {
     if (demo) return;
+    setLoading(true);
     request('/api/support/movements').then(result => { setRows(result.movements || []); setError(''); })
-      .catch(problem => setError(problem.message || 'No se pudo cargar la bitácora.'));
+      .catch(problem => setError(problem.message || 'No se pudo cargar la bitácora.'))
+      .finally(() => setLoading(false));
   };
   useEffect(() => { reload(); }, [demo]);
   const visible = rows.filter(row => !query || normalizeText(`${row.element} ${row.identifier} ${row.actor_name || ''} ${row.actor} ${row.idf_name} ${row.notes}`).includes(normalizeText(query)));
+  if (loading) return <><PageHeading title="Bitácora de soporte" /><Loading /></>;
+  if (error && !rows.length) return <Notice title="No se pudo cargar la bitácora" tone="warning" action={<Button onClick={reload}>Reintentar</Button>}>{error}</Notice>;
   return <section className="support-log-view">
     <PageHeading eyebrow="Movimientos" title="Bitácora de soporte" description="Retiros de tóner y otros elementos provenientes del IDF 3" />
     <div className="support-log-origin" role="note">
@@ -1798,8 +1764,9 @@ export function SupportMovements({ demo }) {
           </div>
         )}
       </div>
+      <InfiniteMore count={limit} total={visible.length} onMore={() => setLimit(value => value + 25)} />
     </div>
-    {visible.length > limit && <div className="table-progressive"><Button onClick={() => setLimit(value => value + 25)}>Mostrar más movimientos ({visible.length - limit} pendientes)</Button></div>}
+
     <Dialog open={Boolean(selected)} onClose={() => setSelected(null)} title="Detalle del registro" wide>
       {selected && <div className="idf-report-sheet">
         <div className="idf-report-sheet-header">
@@ -1854,6 +1821,8 @@ export function SupportInventory({ canEdit = false }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  const [limit, setLimit] = useState(25);
+  useEffect(() => setLimit(25), [query]);
   const [editing, setEditing] = useState(null);
   const [draftQuantity, setDraftQuantity] = useState('');
   const [reason, setReason] = useState('');
@@ -1882,7 +1851,7 @@ export function SupportInventory({ canEdit = false }) {
   return <section className="support-inventory-view">
     <PageHeading eyebrow="IDF 3" title="Inventario soporte IDF 3" description="Inventario inicial del área de soporte" />
     {error && <Notice tone="danger">{error}</Notice>}
-    {loading ? <p>Cargando inventario…</p> : <>
+    {loading ? <Loading label="Cargando inventario…" /> : error && !items.length ? null : <>
       <div className="support-inventory-summary">
         <span className="support-inventory-summary-icon">
           <Package size={26} aria-hidden="true" />
@@ -1926,7 +1895,7 @@ export function SupportInventory({ canEdit = false }) {
             </tr>
           </thead>
           <tbody>
-            {visible.map(item => (
+            {visible.slice(0, limit).map(item => (
               <tr key={item.id}>
                 <td>
                   <span className="support-inventory-number">{item.source_number}</span>
@@ -1977,7 +1946,7 @@ export function SupportInventory({ canEdit = false }) {
 
         {/* Tarjetas táctiles adaptadas a pantallas móviles (smartphones) */}
         <div className="support-inventory-mobile-list" aria-label="Lista de inventario para pantallas pequeñas">
-          {visible.map(item => (
+          {visible.slice(0, limit).map(item => (
             <article key={item.id} className="support-inventory-mobile-card">
               <div className="support-inventory-mobile-card-header">
                 <span className="support-inventory-number">#{item.source_number}</span>
@@ -2022,6 +1991,7 @@ export function SupportInventory({ canEdit = false }) {
             </div>
           )}
         </div>
+        <InfiniteMore count={limit} total={visible.length} onMore={() => setLimit(value => value + 25)} />
       </div>
       <p className="support-inventory-footnote">Las cantidades conservan sus unidades originales: piezas, cajas, kits, pares, paquetes o bolsas. Ningún estado se ha verificado físicamente.</p>
     </>}
@@ -2035,554 +2005,8 @@ export function SupportInventory({ canEdit = false }) {
   </section>;
 }
 
-export function SupportDashboard({ data, navigate, openEditor, loading, errors, refresh, demo }) {
-  const [networkQuery, setNetworkQuery] = useState('');
-  const [computerQuery, setComputerQuery] = useState('');
-  const [printerQuery, setPrinterQuery] = useState('');
-  const [computerSort, setComputerSort] = useState('uptime');
-  const [computerLimit, setComputerLimit] = useState(25);
-  const [printerLimit, setPrinterLimit] = useState(25);
-  useEffect(() => setComputerLimit(25), [computerQuery, computerSort]);
-  useEffect(() => setPrinterLimit(25), [printerQuery]);
+export { SupportDashboard } from './support-widgets.jsx';
 
-  const [exportOpen, setExportOpen] = useState(false);
-  const [exportComputers, setExportComputers] = useState(true);
-  const [exportPrinters, setExportPrinters] = useState(true);
-
-  const { segments = [], devices = [] } = data;
-
-  const supportSegments = useMemo(() => getSupportSegments(segments), [segments]);
-
-  // Balance y resumen de saturación para Columna 1
-  const saturationSummary = useMemo(() => supportSegments.reduce((acc, s) => {
-    const status = getSaturationStatus(s);
-    if (status === 'critical') acc.critical++;
-    else if (status === 'warning') acc.warning++;
-    else acc.normal++;
-
-    const cap = Number(s.capacity) || 0;
-    const occ = Number(s.active_leases) || 0;
-    const free = s.available_ips != null
-      ? Number(s.available_ips)
-      : Math.max(0, cap - occ);
-
-    acc.totalIps += cap;
-    acc.occupiedIps += occ;
-    acc.availableIps += free;
-    return acc;
-  }, { critical: 0, warning: 0, normal: 0, totalIps: 0, occupiedIps: 0, availableIps: 0 }), [supportSegments]);
-
-  // 1. Redes y estados
-  const filteredSegments = useMemo(() => supportSegments.filter(s => {
-    if (!networkQuery.trim()) return true;
-    const q = normalizeText(networkQuery);
-    return (
-      (s.name && normalizeText(s.name).includes(q)) ||
-      (s.interface && normalizeText(s.interface).includes(q)) ||
-      (s.subnet && normalizeText(s.subnet).includes(q)) ||
-      (s.default_gateway && normalizeText(s.default_gateway).includes(q)) ||
-      (s.vlan && normalizeText(s.vlan).includes(q)) ||
-      (s.description && normalizeText(s.description).includes(q))
-    );
-  }), [supportSegments, networkQuery]);
-
-  // 2. Computadoras conectadas (online y tipo Computadora)
-  const isComputer = d => {
-    if (d.status !== 'online') return false;
-    const os = d.os || d.omnivista?.os || d.raw?.os_name || '';
-    const name = d.omnivista?.device_name || d.name || '';
-    const type = formatDeviceType(d.type, os, name, d.vendor);
-    return type === 'Computadora';
-  };
-  const computers = useMemo(() => devices.filter(isComputer), [devices]);
-  const filteredComputers = useMemo(() => computers.filter(c => {
-    if (!computerQuery.trim()) return true;
-    const q = normalizeText(computerQuery);
-    const ovName = normalizeText(c.omnivista?.device_name || '');
-    const ovLoc = normalizeText(c.omnivista?.location || '');
-    return (
-      (c.name && normalizeText(c.name).includes(q)) ||
-      (c.ip && normalizeText(c.ip).includes(q)) ||
-      (c.mac && normalizeText(c.mac).includes(q)) ||
-      (c.vendor && normalizeText(c.vendor).includes(q)) ||
-      (c.os && normalizeText(c.os).includes(q)) ||
-      ovName.includes(q) ||
-      ovLoc.includes(q)
-    );
-  }), [computers, computerQuery]);
-
-  const sortedComputers = useMemo(() => [...filteredComputers].sort((a, b) => {
-    if (computerSort === 'uptime') {
-      const aUptime = Number(a.uptime_seconds) || 0;
-      const bUptime = Number(b.uptime_seconds) || 0;
-      return bUptime - aUptime;
-    }
-    return 0;
-  }), [filteredComputers, computerSort]);
-
-  // 3. Impresoras conectadas (online y tipo Impresora)
-  const isPrinter = d => {
-    if (d.status !== 'online') return false;
-    const os = d.os || d.omnivista?.os || d.raw?.os_name || '';
-    const name = d.omnivista?.device_name || d.name || '';
-    const type = formatDeviceType(d.type, os, name, d.vendor);
-    return type === 'Impresora';
-  };
-  const printers = useMemo(() => devices.filter(isPrinter), [devices]);
-  const filteredPrinters = useMemo(() => printers.filter(p => {
-    if (!printerQuery.trim()) return true;
-    const q = normalizeText(printerQuery);
-    const ovName = normalizeText(p.omnivista?.device_name || '');
-    const ovLoc = normalizeText(p.omnivista?.location || '');
-    return (
-      (p.name && normalizeText(p.name).includes(q)) ||
-      (p.ip && normalizeText(p.ip).includes(q)) ||
-      (p.mac && normalizeText(p.mac).includes(q)) ||
-      (p.vendor && normalizeText(p.vendor).includes(q)) ||
-      (p.model && normalizeText(p.model).includes(q)) ||
-      ovName.includes(q) ||
-      ovLoc.includes(q)
-    );
-  }), [printers, printerQuery]);
-
-  const handleExportExcel = () => {
-    if (!exportComputers && !exportPrinters) return;
-
-    const sheets = buildSupportSheets({
-      computers,
-      printers,
-      includeComputers: exportComputers,
-      includePrinters: exportPrinters,
-      columns: SUPPORT_EXPORT_COLUMNS,
-    });
-
-    if (!sheets.length) return;
-
-    let filename = 'listado-soporte-dispositivos';
-    if (exportComputers && !exportPrinters) filename = 'listado-soporte-computadoras';
-    else if (!exportComputers && exportPrinters) filename = 'listado-soporte-impresoras';
-
-    downloadExcel(filename, sheets);
-    setExportOpen(false);
-  };
-  const handleExportCsv = handleExportExcel;
-
-  return (
-    <>
-      <PageHeading
-        eyebrow="Atención y diagnóstico técnico"
-        title="Dashboard de Soporte"
-        description="Monitoreo operativo de segmentos de red, computadoras e impresoras en servicio"
-        updatedAt={data.updatedAt}
-      />
-
-      <div className="support-kpi-bar" role="region" aria-label="Resumen de telemetría de soporte">
-        <div className="support-kpi-group">
-          <div className="support-kpi-card kpi-network">
-            <div className="support-kpi-icon"><Network size={18} aria-hidden="true" /></div>
-            <div className="support-kpi-info">
-              <span className="support-kpi-count">{number(supportSegments.length)}</span>
-              <span className="support-kpi-label">Redes de soporte</span>
-            </div>
-          </div>
-
-          <div className="support-kpi-divider" aria-hidden="true" />
-
-          <div className="support-kpi-card kpi-computers">
-            <div className="support-kpi-icon"><Monitor size={18} aria-hidden="true" /></div>
-            <div className="support-kpi-info">
-              <span className="support-kpi-count">{number(computers.length)}</span>
-              <span className="support-kpi-label">Computadoras en línea</span>
-            </div>
-            <span className="support-kpi-pulse pulse-success" title="En servicio" />
-          </div>
-
-          <div className="support-kpi-divider" aria-hidden="true" />
-
-          <div className="support-kpi-card kpi-printers">
-            <div className="support-kpi-icon"><Printer size={18} aria-hidden="true" /></div>
-            <div className="support-kpi-info">
-              <span className="support-kpi-count">{number(printers.length)}</span>
-              <span className="support-kpi-label">Impresoras en línea</span>
-            </div>
-            <span className="support-kpi-pulse pulse-info" title="En servicio" />
-          </div>
-        </div>
-
-        <div className="support-kpi-actions">
-          <Button
-            icon={Download}
-            variant="primary"
-            className="support-export-action"
-            onClick={() => setExportOpen(true)}
-          >
-            Exportar listado Excel
-          </Button>
-        </div>
-      </div>
-
-      <section className="support-dashboard-grid" aria-label="Tablero de 3 columnas para soporte">
-        {/* Columna 1: Listado de redes y estados */}
-        <div className="support-column">
-          <div className="support-column-header">
-            <div className="support-column-title">
-              <Network size={20} className="text-brand" aria-hidden="true" />
-              <h3>Listado de redes y estados</h3>
-            </div>
-            <span className="support-column-badge">{number(filteredSegments.length)}</span>
-          </div>
-
-          {/* Panel resumen de saturación */}
-          <div className="support-saturation-panel" aria-label="Resumen de saturación de redes">
-            <div className="support-saturation-counts">
-              <span className="badge badge-danger" title="Redes saturadas / críticas con utilización >= 80%">
-                <span className="badge-dot" aria-hidden="true" />
-                <strong>{saturationSummary.critical}</strong> {saturationSummary.critical === 1 ? 'Saturada' : 'Saturadas'}
-              </span>
-              <span className="badge badge-warning" title="Redes en uso medio con utilización entre 50% y 79%">
-                <span className="badge-dot" aria-hidden="true" />
-                <strong>{saturationSummary.warning}</strong> Uso medio
-              </span>
-              <span className="badge badge-success" title="Redes disponibles con utilización < 50%">
-                <span className="badge-dot" aria-hidden="true" />
-                <strong>{saturationSummary.normal}</strong> {saturationSummary.normal === 1 ? 'Disponible' : 'Disponibles'}
-              </span>
-            </div>
-            <div className="support-saturation-balance">
-              <div className="support-balance-col">
-                <span className="support-balance-lbl">Total IPs</span>
-                <strong className="support-balance-num">{number(saturationSummary.totalIps)}</strong>
-              </div>
-              <div className="support-balance-col">
-                <span className="support-balance-lbl">IPs Ocupadas</span>
-                <strong className="support-balance-num text-danger">{number(saturationSummary.occupiedIps)}</strong>
-              </div>
-              <div className="support-balance-col">
-                <span className="support-balance-lbl">IPs Libres</span>
-                <strong className="support-balance-num text-success">{number(saturationSummary.availableIps)}</strong>
-              </div>
-            </div>
-          </div>
-
-          <div className="support-column-search">
-            <SearchField defer
-              value={networkQuery}
-              onChange={setNetworkQuery}
-              placeholder="Buscar red, VLAN o gateway…"
-            />
-          </div>
-          <div className="support-column-body" tabIndex={0} aria-label="Lista de redes y segmentos">
-            {filteredSegments.length ? (
-              filteredSegments.map(segment => {
-                const satStatus = getSaturationStatus(segment);
-                const satLabel = getSaturationLabel(satStatus);
-                const meterTone = getUtilizationTone(segment.utilization_percent);
-                const meterColor = getUtilizationColor(segment.utilization_percent);
-                const freeIps = segment.available_ips ?? Math.max(0, (Number(segment.capacity) || 0) - (Number(segment.active_leases) || 0));
-
-                return (
-                  <article key={segmentKey(segment)} className="support-item-card support-network-card">
-                    <div className="support-card-top">
-                      <div className="support-card-name">
-                        <span className="segment-dot" />
-                        <strong>{segment.name || segment.interface}</strong>
-                      </div>
-                      <Badge status={satStatus}>{satLabel}</Badge>
-                    </div>
-                    <div className="support-network-subnet">
-                      <small>VLAN: {segment.vlan || segment.interface || '—'}</small>
-                      <span className="font-mono">{segment.subnet || segment.ip_ranges?.[0] || 'Rango no informado'}</span>
-                    </div>
-                    <div className="support-network-breakdown">
-                      <div className="support-breakdown-item">
-                        <span className="support-breakdown-label">IPs Ocupadas</span>
-                        <strong className="support-breakdown-val text-danger">{number(segment.active_leases || 0)}</strong>
-                      </div>
-                      <div className="support-breakdown-item">
-                        <span className="support-breakdown-label">IPs Libres</span>
-                        <strong className="support-breakdown-val text-success">{number(freeIps)}</strong>
-                      </div>
-                      <div className="support-breakdown-item">
-                        <span className="support-breakdown-label">Capacidad</span>
-                        <strong className="support-breakdown-val">{number(segment.capacity || 0)}</strong>
-                      </div>
-                    </div>
-                    <div className="support-network-meta">
-                      <span><Router size={14} aria-hidden="true" /> {segment.default_gateway || 'Sin gateway'}</span>
-                      <span className="support-network-meta-tag">{satLabel} ({number(segment.utilization_percent)}%)</span>
-                    </div>
-                    <div className={`capacity-meter capacity-meter-${meterTone}`} style={{ '--meter-fill': meterColor }}>
-                      <meter min="0" max="100" value={segment.utilization_percent || 0} aria-label={`Utilización de ${segment.name || segment.interface}`} />
-                      <div className="support-meter-footer">
-                        <small><span className={`meter-bullet meter-bullet-${meterTone}`} style={{ background: meterColor }} aria-hidden="true" />{number(segment.utilization_percent)}% utilizado</small>
-                        <small className={`support-sat-indicator sat-${satStatus}`}>{satLabel}</small>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })
-            ) : (
-              <div className="support-empty-state">
-                <p>No se encontraron redes coincidentes.</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Columna 2: Computadoras conectadas */}
-        <div className="support-column">
-          <div className="support-column-header">
-            <div className="support-column-title">
-              <Monitor size={20} className="text-success" aria-hidden="true" />
-              <h3>Computadoras conectadas</h3>
-            </div>
-            <span className="support-column-badge badge-success">{number(filteredComputers.length)}</span>
-          </div>
-          <div className="support-column-search">
-            <SearchField defer
-              value={computerQuery}
-              onChange={setComputerQuery}
-              placeholder="Buscar computadora, IP, usuario…"
-            />
-            <div className="support-column-sort">
-              <ArrowUpDown size={14} className="text-muted" aria-hidden="true" />
-              <label htmlFor="computer-sort-select" className="support-sort-label">Ordenar:</label>
-              <select
-                id="computer-sort-select"
-                className="support-sort-select"
-                value={computerSort}
-                onChange={e => setComputerSort(e.target.value)}
-                aria-label="Criterio de ordenamiento de computadoras"
-              >
-                <option value="standard">En línea (estándar)</option>
-                <option value="uptime">Mayor tiempo conectadas (Top Uptime)</option>
-              </select>
-            </div>
-          </div>
-          <div className="support-column-body" tabIndex={0} aria-label="Lista de computadoras conectadas">
-            {sortedComputers.length ? (
-              sortedComputers.slice(0, computerLimit).map((pc, idx) => {
-                const displayName = pc.omnivista?.device_name || pc.name || 'Computadora';
-                const loc = pc.omnivista?.location || formatLocation(pc.location, pc.vendor);
-                return (
-                  <article
-                    key={`${pc.mac || pc.ip || idx}`}
-                    className="support-item-card support-device-card"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => openEditor?.('device-detail', pc)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        openEditor?.('device-detail', pc);
-                      }
-                    }}
-                    title={`Ver detalle técnico de ${displayName}`}
-                  >
-                    <div className="support-card-top">
-                      <div className="support-card-name">
-                        <Monitor size={17} className="text-muted" aria-hidden="true" />
-                        <strong>{displayName}</strong>
-                        {pc.omnivista?.matched && (
-                          <span className="network-tag omni-tag" title="Cotejado con OmniVista 2500">OmniVista</span>
-                        )}
-                      </div>
-                      <Badge status={pc.status} />
-                    </div>
-                    <div className="support-device-addresses">
-                      <div className="support-device-ip-group">
-                        <span className="ip-address font-mono">{pc.ip || '—'}</span>
-                        {pc.mac && <span className="font-mono text-muted text-xs">{pc.mac}</span>}
-                      </div>
-                      {pc.uptime_seconds != null && (
-                        <span className="support-uptime-badge" title={`Tiempo observado conectado por SGRS: ${formatUptime(pc.uptime_seconds)}`}>
-                          <Clock size={12} aria-hidden="true" />
-                          <span>Observado: {formatUptime(pc.uptime_seconds)}</span>
-                        </span>
-                      )}
-                    </div>
-                    <div className="support-device-info">
-                      <span className="support-vendor">{pc.vendor || pc.os || 'Computadora'}</span>
-                      {loc && loc !== '—' && <span className="support-location text-location">{loc}</span>}
-                    </div>
-                  </article>
-                );
-              })
-            ) : (
-              <div className="support-empty-state">
-                <p>No se encontraron computadoras en línea coincidentes.</p>
-              </div>
-            )}
-            {sortedComputers.length > computerLimit && <Button onClick={() => setComputerLimit(value => value + 25)}>Mostrar más computadoras ({sortedComputers.length - computerLimit} pendientes)</Button>}
-          </div>
-        </div>
-
-        {/* Columna 3: Impresoras conectadas */}
-        <div className="support-column">
-          <div className="support-column-header">
-            <div className="support-column-title">
-              <Printer size={20} className="text-info" aria-hidden="true" />
-              <h3>Impresoras conectadas</h3>
-            </div>
-            <span className="support-column-badge badge-info">{number(filteredPrinters.length)}</span>
-          </div>
-          <div className="support-column-search">
-            <SearchField defer
-              value={printerQuery}
-              onChange={setPrinterQuery}
-              placeholder="Buscar impresora, IP, modelo…"
-            />
-          </div>
-          <div className="support-column-body" tabIndex={0} aria-label="Lista de impresoras conectadas">
-            {filteredPrinters.length ? (
-              filteredPrinters.slice(0, printerLimit).map((printer, idx) => {
-                const displayName = printer.omnivista?.device_name || printer.name || 'Impresora';
-                const loc = printer.omnivista?.location || formatLocation(printer.location, printer.vendor);
-                return (
-                  <article
-                    key={`${printer.mac || printer.ip || idx}`}
-                    className="support-item-card support-device-card"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => openEditor?.('device-detail', printer)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        openEditor?.('device-detail', printer);
-                      }
-                    }}
-                    title={`Ver detalle técnico de ${displayName}`}
-                  >
-                    <div className="support-card-top">
-                      <div className="support-card-name">
-                        <Printer size={17} className="text-muted" aria-hidden="true" />
-                        <strong>{displayName}</strong>
-                        {printer.omnivista?.matched && (
-                          <span className="network-tag omni-tag" title="Cotejado con OmniVista 2500">OmniVista</span>
-                        )}
-                      </div>
-                      <Badge status={printer.status} />
-                    </div>
-                    <div className="support-device-addresses">
-                      <span className="ip-address font-mono">{printer.ip || '—'}</span>
-                      {printer.mac && <span className="font-mono text-muted text-xs">{printer.mac}</span>}
-                    </div>
-                    <div className="support-device-info">
-                      <span className="support-vendor">{printer.vendor || printer.model || 'Impresora'}</span>
-                      {loc && loc !== '—' && <span className="support-location text-location">{loc}</span>}
-                    </div>
-                  </article>
-                );
-              })
-            ) : (
-              <div className="support-empty-state">
-                <p>No se encontraron impresoras en línea coincidentes.</p>
-              </div>
-            )}
-            {filteredPrinters.length > printerLimit && <Button onClick={() => setPrinterLimit(value => value + 25)}>Mostrar más impresoras ({filteredPrinters.length - printerLimit} pendientes)</Button>}
-          </div>
-        </div>
-      </section>
-
-      {/* Dialog interactivo para exportación Excel con hojas separadas */}
-      <Dialog
-        open={exportOpen}
-        onClose={() => setExportOpen(false)}
-        title="Exportar listado de dispositivos (Excel)"
-        footer={
-          <div className="dialog-actions">
-            <Button onClick={() => setExportOpen(false)}>Cancelar</Button>
-            <Button
-              variant="primary"
-              icon={Download}
-              disabled={!exportComputers && !exportPrinters}
-              onClick={handleExportExcel}
-            >
-              Descargar archivo Excel
-            </Button>
-          </div>
-        }
-      >
-        <p className="dialog-description">
-          Descarga el reporte de inventario en formato Excel (.xls). Al seleccionar ambas opciones (&ldquo;Ambos&rdquo;), computadoras e impresoras se descargarán en un único archivo Excel separadas en hojas independientes (&ldquo;Computadoras&rdquo; e &ldquo;Impresoras&rdquo;).
-        </p>
-
-        <div className="support-export-modal-body">
-          <div className="support-quick-selection">
-            <span className="support-quick-label">Selección rápida:</span>
-            <div className="support-quick-btn-group">
-              <button
-                type="button"
-                className={`support-quick-btn ${exportComputers && exportPrinters ? 'is-active' : ''}`}
-                onClick={() => { setExportComputers(true); setExportPrinters(true); }}
-              >
-                Ambos
-              </button>
-              <button
-                type="button"
-                className={`support-quick-btn ${exportComputers && !exportPrinters ? 'is-active' : ''}`}
-                onClick={() => { setExportComputers(true); setExportPrinters(false); }}
-              >
-                Solo computadoras
-              </button>
-              <button
-                type="button"
-                className={`support-quick-btn ${!exportComputers && exportPrinters ? 'is-active' : ''}`}
-                onClick={() => { setExportComputers(false); setExportPrinters(true); }}
-              >
-                Solo impresoras
-              </button>
-            </div>
-          </div>
-
-          <div className="support-checkbox-list">
-            <label className={`support-checkbox-card ${exportComputers ? 'is-checked' : ''}`}>
-              <input
-                type="checkbox"
-                checked={exportComputers}
-                onChange={e => setExportComputers(e.target.checked)}
-              />
-              <div className="support-checkbox-details">
-                <div className="support-checkbox-main">
-                  <Monitor size={18} className="text-success" aria-hidden="true" />
-                  <strong>Computadoras</strong>
-                </div>
-                <span className="support-checkbox-count">{number(computers.length)} equipos</span>
-              </div>
-            </label>
-
-            <label className={`support-checkbox-card ${exportPrinters ? 'is-checked' : ''}`}>
-              <input
-                type="checkbox"
-                checked={exportPrinters}
-                onChange={e => setExportPrinters(e.target.checked)}
-              />
-              <div className="support-checkbox-details">
-                <div className="support-checkbox-main">
-                  <Printer size={18} className="text-info" aria-hidden="true" />
-                  <strong>Impresoras</strong>
-                </div>
-                <span className="support-checkbox-count">{number(printers.length)} equipos</span>
-              </div>
-            </label>
-          </div>
-
-          {!exportComputers && !exportPrinters && (
-            <Notice tone="warning" title="Sin categorías seleccionadas">
-              Selecciona al menos una categoría para poder descargar el listado Excel.
-            </Notice>
-          )}
-
-          <div className="support-export-note">
-            <small className="text-muted">
-              El archivo contiene las 8 columnas requeridas: Tipo de Dispositivo, Dirección IP, Dirección MAC, Nombre de Equipo / Hostname, Interfaz, Tiempo Conectado, Ubicación y Piso.
-            </small>
-          </div>
-        </div>
-      </Dialog>
-    </>
-  );
-}
 
 
 export function resolveActionMetadata(action = '') {
