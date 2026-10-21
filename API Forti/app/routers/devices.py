@@ -170,6 +170,18 @@ async def list_connected_devices(
             latest_list = collection(raw_latest, 'devices')
         except (ValueError, AttributeError):
             raise HTTPException(status_code=502, detail='No se pudo obtener el inventario nativo completo de FortiGate.')
+        # An empty native active snapshot can be transient while FortiOS rebuilds
+        # Device Detection. Verify it before turning every DHCP reservation red.
+        if not latest_list and raw_list:
+            try:
+                raw_latest = await fortios_client.get_connected_devices(
+                    params={"query_type": "unified_latest", "count": 5000}, vdom=vdom,
+                )
+                latest_list = collection(raw_latest, 'devices')
+            except Exception:
+                raise HTTPException(status_code=502, detail='No se pudo verificar la actividad de los dispositivos. Reintenta la consulta.')
+            if not latest_list:
+                raise HTTPException(status_code=502, detail='FortiGate devolvió dos consultas de actividad vacías. No se pueden confirmar las desconexiones. Reintenta la consulta.')
         live_macs = {d['mac'].lower().replace('-', ':') for d in latest_list if d.get('mac') and d.get('is_online') is not False}
 
     # Prefer the latest IP observation, not just membership in the active MAC set.

@@ -1,5 +1,6 @@
+import { QUERY_TIMEOUT_MS } from './query-policy.mjs';
 import React, { Children, useEffect, useState } from 'react';
-import { Activity, ArrowDown, ArrowUp, ArrowRight, Building2, Camera, Check, CheckCircle2, CircleAlert, Clock3, EyeOff, FileText, Layers3, LayoutDashboard, Monitor, Network, Package, Plus, RefreshCw, RotateCcw, Settings2, ShieldCheck, Trash2, Wifi } from 'lucide-react';
+import { Activity, ArrowDown, ArrowUp, ArrowRight, Building2, Camera, Check, CheckCircle2, CircleAlert, Clock3, EyeOff, FileText, Layers3, LayoutDashboard, Monitor, Network, Package, Plus, RefreshCw, RotateCcw, Settings2, ShieldCheck, SlidersHorizontal, Trash2, Wifi } from 'lucide-react';
 import { Button, Empty, IconButton, Loading, Notice, SearchField } from './components.jsx';
 import { dateTime, formatDeviceType, number, reportsFromData, request } from './domain.mjs';
 import { useSession } from './session.jsx';
@@ -63,7 +64,7 @@ function useWidgetQuery(id, demo, data) {
       if (pending || document.hidden) return;
       pending = true;
       controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
+      const timeout = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
       setSnapshot(old => ({ ...old, loading: true, error: '' }));
       try {
         const value = await request(path, { signal: controller.signal });
@@ -209,7 +210,7 @@ function DataWidget({ id, data, loading, errors, demo, navigate, refresh }) {
   </WidgetCard>;
 }
 
-export function DashboardWidgets({ children, data, demo, userId, loading, errors = {}, navigate, refresh, catalog: customCatalog, catalogTone, defaultLayout = DEFAULT_WIDGET_LAYOUT, storagePrefix = 'sgrs:dashboard-widgets:v1', title = 'Tu dashboard', personalizeLabel = 'Personalizar dashboard', quickHide = false, groupBy }) {
+export function DashboardWidgets({ children, data, demo, userId, loading, errors = {}, navigate, refresh, catalog: customCatalog, catalogTone, catalogIcon, defaultLayout = DEFAULT_WIDGET_LAYOUT, storagePrefix = 'sgrs:dashboard-widgets:v1', title = 'Tu dashboard', personalizeLabel = 'Personalizar dashboard', quickHide = false, groupBy }) {
   const session = useSession();
   const key = `${storagePrefix}:${demo ? 'demo:' : ''}${userId}`;
   const catalog = customCatalog || WIDGET_CATALOG.filter(widget => widgetAllowed(widget.id, session));
@@ -248,27 +249,83 @@ export function DashboardWidgets({ children, data, demo, userId, loading, errors
     } catch { setSaveError('No se pudo guardar el cambio en este navegador.'); }
   };
   return <div className="dashboard-customization">
-    <div className="dashboard-customize-bar"><div><LayoutDashboard size={19} /><span>{editing ? customCatalog ? `Vista previa · ${title}` : 'Vista previa de tu dashboard' : title}<small>{editing ? 'Ajusta los widgets y guarda al terminar.' : 'Organiza la información que necesitas.'}</small></span></div><Button icon={Settings2} onClick={start} disabled={editing}>{personalizeLabel}</Button></div>
-    {message && <p className="widget-save-message" role="status"><Check size={16} />{message}</p>}
+    <div className="dashboard-customize-bar">
+      <div>
+        <LayoutDashboard size={19} aria-hidden="true" />
+        <span>
+          {editing ? (customCatalog ? `Vista previa · ${title}` : 'Vista previa de tu dashboard') : title}
+          <small>{editing ? 'Ajusta los widgets y guarda al terminar.' : 'Organiza la información que necesitas según tus prioridades operativas.'}</small>
+        </span>
+      </div>
+      <Button icon={Settings2} variant="secondary" onClick={start} disabled={editing}>{personalizeLabel}</Button>
+    </div>
+    {message && <p className="widget-save-message" role="status"><Check size={16} aria-hidden="true" />{message}</p>}
     {saveError && !editing && <Notice tone="danger" title="No se pudo ocultar el widget">{saveError}</Notice>}
     {editing && <section className="widget-editor" aria-label="Personalizar widgets">
-      <div className="widget-editor-heading"><div><h2>Agregar widgets</h2><p>Elige información de tus módulos. El diseño se guarda solo en este navegador.</p></div><Button icon={RotateCcw} onClick={() => { setDraft(defaultLayout.filter(widget => allowed.has(widget.id))); setSaveError(''); }}>Restablecer diseño</Button></div>
+      <div className="widget-editor-heading">
+        <div>
+          <h2><SlidersHorizontal size={18} aria-hidden="true" /> {customCatalog ? `Personalizar ${title.toLowerCase()}` : 'Personalizar widgets del dashboard'}</h2>
+          <p>Elige información de tus módulos para configurar tu tablero. El diseño se guarda en este navegador.</p>
+        </div>
+        <Button icon={RotateCcw} onClick={() => { setDraft(defaultLayout.filter(widget => allowed.has(widget.id))); setSaveError(''); }}>Restablecer diseño</Button>
+      </div>
       <SearchField defer value={query} onChange={setQuery} label="Buscar widgets" placeholder="Buscar por widget o módulo…" />
       <div className="widget-catalog">{catalog.filter(widget => `${widget.title} ${widget.module}`.toLocaleLowerCase('es').includes(query.toLocaleLowerCase('es'))).map(widget => {
         const added = draft.some(item => item.id === widget.id);
-        const [CatalogIcon, moduleTone] = WIDGET_VISUALS[widget.module] || [LayoutDashboard, 'brand'];
+        const [ModuleIcon, moduleTone] = WIDGET_VISUALS[widget.module] || [LayoutDashboard, 'brand'];
+        const CatalogIcon = catalogIcon?.(widget) || ModuleIcon;
         const tone = catalogTone?.(widget) || moduleTone;
-        return <article key={widget.id} data-widget-id={widget.id} className={`widget-tone-${tone} ${added ? 'is-added' : ''}`}><div className="widget-catalog-label"><span className="widget-heading-icon"><CatalogIcon size={20} /></span><span className="widget-module">{widget.module}</span></div><h3>{widget.title}</h3><p>{widget.description}</p><Button icon={added ? Trash2 : Plus} aria-label={`${added ? 'Quitar del diseño' : 'Agregar'} ${widget.title}`} onClick={() => setDraft(current => added ? current.filter(item => item.id !== widget.id) : [...current, { id: widget.id, size: widget.size }])}>{added ? 'Quitar widget' : 'Agregar widget'}</Button></article>;
+        return <article key={widget.id} data-widget-id={widget.id} className={`widget-tone-${tone} ${added ? 'is-added' : ''}`}>
+          <div className="widget-catalog-label">
+            <div className="widget-catalog-title-group">
+              <span className="widget-heading-icon"><CatalogIcon size={18} strokeWidth={2} aria-hidden="true" /></span>
+              <strong className="widget-catalog-card-title">{widget.title}</strong>
+            </div>
+            <span className="widget-module">{widget.module}</span>
+          </div>
+          <h3>{widget.title}</h3>
+          <p className="widget-catalog-desc">{widget.description}</p>
+          <Button
+            icon={added ? Trash2 : Plus}
+            variant={added ? 'secondary' : 'primary'}
+            aria-label={`${added ? 'Quitar del diseño' : 'Agregar'} ${widget.title}`}
+            onClick={() => setDraft(current => added ? current.filter(item => item.id !== widget.id) : [...current, { id: widget.id, size: widget.size }])}
+          >
+            {added ? 'Quitar widget' : 'Agregar widget'}
+          </Button>
+        </article>;
       })}</div>
       {saveError && <Notice tone="danger" title="Diseño sin guardar">{saveError}</Notice>}
-      <div className="widget-editor-actions"><span>{draft.length} widgets · Vista previa debajo</span><Button onClick={() => { setEditing(false); setSaveError(''); }}>Cancelar</Button><Button variant="primary" onClick={save}>Guardar diseño</Button></div>
+      <div className="widget-editor-actions">
+        <span><strong>{draft.length}</strong> widgets seleccionados · Vista previa debajo</span>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Button onClick={() => { setEditing(false); setSaveError(''); }}>Cancelar</Button>
+          <Button variant="primary" onClick={save}>Guardar diseño</Button>
+        </div>
+      </div>
     </section>}
     {groups.map(({ group, widgets }) => <div key={group} className="dashboard-widget-grid" data-widget-group={group || undefined} aria-label={group || (editing ? 'Vista previa del diseño' : 'Widgets del dashboard')}>{widgets.map((widget, index) => {
       const definition = catalog.find(item => item.id === widget.id);
       const slotError = widget.id === 'metrics' ? (errors.ips || errors.devices || errors.segments) : ['segments', 'network'].includes(widget.id) ? errors.segments : '';
       return <section key={widget.id} className={`dashboard-widget-cell widget-span-${widget.size}`} data-widget={widget.id} style={{ '--widget-span': widget.size }}>
         {quickHide && !editing && <IconButton icon={EyeOff} label={`Ocultar ${definition.title}`} className="widget-hide-control" onClick={() => hide(widget.id)} />}
-        {editing && <div className="widget-placement"><strong>{definition.title}</strong><div><label><span className="sr-only">Ancho de {definition.title}</span><select aria-label={`Ancho de ${definition.title}`} value={widget.size} onChange={event => setDraft(current => current.map(item => item.id === widget.id ? { ...item, size: Number(event.target.value) } : item))}>{WIDGET_SIZES.filter(size => size.value >= definition.min).map(size => <option key={size.value} value={size.value}>{size.label}</option>)}</select></label><IconButton icon={ArrowUp} label={`Subir ${definition.title}`} disabled={index === 0} onClick={() => move(widget.id, widgets[index - 1].id)} /><IconButton icon={ArrowDown} label={`Bajar ${definition.title}`} disabled={index === widgets.length - 1} onClick={() => move(widget.id, widgets[index + 1].id)} /><IconButton icon={Trash2} label={`Quitar ${definition.title}`} onClick={() => setDraft(current => current.filter(item => item.id !== widget.id))} /></div></div>}
+        {editing && <div className="widget-placement">
+          <span className="widget-placement-title">
+            <SlidersHorizontal size={14} aria-hidden="true" />
+            <strong>{definition.title}</strong>
+          </span>
+          <div>
+            <label className="widget-size-label">
+              <span className="sr-only">Ancho de {definition.title}</span>
+              <select aria-label={`Ancho de ${definition.title}`} value={widget.size} onChange={event => setDraft(current => current.map(item => item.id === widget.id ? { ...item, size: Number(event.target.value) } : item))}>
+                {WIDGET_SIZES.filter(size => size.value >= definition.min).map(size => <option key={size.value} value={size.value}>{size.label}</option>)}
+              </select>
+            </label>
+            <IconButton icon={ArrowUp} label={`Subir ${definition.title}`} disabled={index === 0} onClick={() => move(widget.id, widgets[index - 1].id)} />
+            <IconButton icon={ArrowDown} label={`Bajar ${definition.title}`} disabled={index === widgets.length - 1} onClick={() => move(widget.id, widgets[index + 1].id)} />
+            <IconButton icon={Trash2} label={`Quitar ${definition.title}`} onClick={() => setDraft(current => current.filter(item => item.id !== widget.id))} />
+          </div>
+        </div>}
         {slots[widget.id] && slotError && <WidgetWarning error={slotError} onRetry={refresh} />}
         {slots[widget.id] || <DataWidget id={widget.id} data={data} demo={demo} loading={loading} errors={errors} navigate={navigate} refresh={refresh} />}
       </section>;

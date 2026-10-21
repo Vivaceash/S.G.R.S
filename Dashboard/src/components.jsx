@@ -73,8 +73,8 @@ export function Dialog({ open, onClose, title, children, footer, wide = false, b
 export function Empty({ title = 'Aún no hay registros', children = 'Los registros aparecerán aquí cuando estén disponibles.', action }) {
   return <div className="empty-state"><Search size={30} strokeWidth={1.4} aria-hidden="true" /><h3>{title}</h3><p>{children}</p>{action}</div>;
 }
-export function Loading() {
-  return <div className="loading-state" role="status"><LoaderCircle className="spinner" size={26} aria-hidden="true" />Consultando información…</div>;
+export function Loading({ label = 'Consultando información…' }) {
+  return <div className="loading-state" role="status"><LoaderCircle className="spinner" size={26} aria-hidden="true" />{label}</div>;
 }
 export function useListState(id) {
   const read = () => { const p = new URLSearchParams(location.search); return { page: Number(p.get(`${id}.page`)) || 1, pageSize: p.get(`${id}.size`) || '', sort: p.get(`${id}.sort`) || '', asc: p.get(`${id}.order`) !== 'desc', filters: Object.fromEntries([...p].filter(([k]) => k.startsWith(`${id}.filter.`)).map(([k, v]) => [k.slice(`${id}.filter.`.length), v])) }; };
@@ -108,7 +108,8 @@ export function downloadExcel(name, sheets) {
   link.href = url; link.download = name.endsWith('.xls') ? name : `${name}.xls`; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export function DataTable({ title, rows, columns, state, noun = 'registros', pageSize = 10, paginated = true, infiniteScroll = false, resetKey, toolbar, exportable = false, loading = false, error, onRetry, emptyText, rowKey = 'id', onRowClick, rowClassName, className = '' }) {
+export function DataTable({ title, rows, columns, state, noun = 'registros', pageSize = 10, paginated = true, infiniteScroll = true, resetKey, toolbar, exportable = false, loading = false, error, onRetry, emptyText, rowKey = 'id', onRowClick, rowClassName, className = '' }) {
+  paginated = paginated && !infiniteScroll;
   const query = useDeferredValue(state.query);
   const visible = useMemo(() => selectRows(rows, query, state.filters, state.sort, state.asc), [rows, query, state.filters, state.sort, state.asc]);
   const page = paginated ? paginate(visible, state.page, pageSize) : { rows: visible, current: 1, total: visible.length, pages: 1 };
@@ -123,7 +124,7 @@ export function DataTable({ title, rows, columns, state, noun = 'registros', pag
       setWindowStart(0);
       if (scrollRef.current) scrollRef.current.scrollTop = 0;
     }
-  }, [query, state.filters, state.sort, state.asc, page.current, pageSize, paginated, infiniteScroll, resetKey]);
+  }, [query, state.filters, state.sort, state.asc, page.current, pageSize, paginated, infiniteScroll, resetKey, visible.length]);
   const windowEnd = Math.min(windowStart + 100, page.rows.length);
   const renderedRows = infiniteScroll
     ? page.rows.slice(windowStart, windowEnd)
@@ -181,4 +182,27 @@ export function DataTable({ title, rows, columns, state, noun = 'registros', pag
         <IconButton icon={ChevronRight} label="Página siguiente" disabled={page.current >= page.pages} onClick={() => state.setPage(page.current + 1)} />
       </nav></div>}
   </section>;
+}
+
+// Observe the end within its nearest scrolling container (or the viewport).
+export function InfiniteMore({ count, total, onMore }) {
+  const ref = useRef(null);
+  const callback = useRef(onMore);
+  callback.current = onMore;
+  useEffect(() => {
+    const target = ref.current;
+    if (!target || count >= total) return;
+    let root = target.parentElement;
+    while (root && !/(auto|scroll)/.test(getComputedStyle(root).overflowY)) root = root.parentElement;
+    let requested = false;
+    const observer = new IntersectionObserver(entries => {
+      if (!requested && entries.some(entry => entry.isIntersecting && entry.target.getClientRects().length)) {
+        requested = true;
+        callback.current();
+      }
+    }, { root, rootMargin: '0px 0px 72px 0px' });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [count, total]);
+  return count < total ? <div ref={ref} className="infinite-more" role="status"><LoaderCircle size={18} className="spinner" aria-hidden="true" /> Cargando más registros…</div> : null;
 }

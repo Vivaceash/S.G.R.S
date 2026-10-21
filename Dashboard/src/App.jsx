@@ -1,3 +1,4 @@
+import { QUERY_TIMEOUT_MS } from './query-policy.mjs';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
@@ -41,6 +42,7 @@ import {
   Empty,
   IconButton,
   Loading,
+  InfiniteMore,
   Notice,
   SearchField,
 } from "./components.jsx";
@@ -808,6 +810,8 @@ function IdfHub({
     tab: canViewActivity ? "activity" : canViewInventory ? "inventory" : "qr",
   }));
   const selectedId = canOpenIdfs ? viewState.selectedId : "";
+  const [deviceLimit, setDeviceLimit] = useState(25);
+  useEffect(() => setDeviceLimit(25), [selectedId]);
   const tab = viewState.tab;
   const idfs = useMemo(
     () => data.idfs.filter((idf) => idf.id !== "idf-13" && idf.name !== "IDF 13"),
@@ -1074,7 +1078,7 @@ function IdfHub({
                     </tr>
                   </thead>
                   <tbody>
-                    {devices.map((device) => (
+                    {devices.slice(0, deviceLimit).map((device) => (
                       <tr
                         key={device.id}
                         className={
@@ -1124,6 +1128,7 @@ function IdfHub({
                     ))}
                   </tbody>
                 </table>
+                <InfiniteMore count={deviceLimit} total={devices.length} onMore={() => setDeviceLimit(value => value + 25)} />
               </div>
             ) : (
               <Empty title="Sin equipos documentados">
@@ -1317,6 +1322,7 @@ export default function App() {
   const generation = useRef(0);
   const loadController = useRef(null);
   const loadedResources = useRef(new Set());
+  const [pendingResources, setPendingResources] = useState(new Set());
   const mutationLock = useRef(false);
   const toastTimer = useRef(null);
   const currentRoute = useRef(route);
@@ -1349,7 +1355,7 @@ export default function App() {
     loadController.current = controller;
     const version = ++generation.current;
     setLoading(true);
-    const timer = setTimeout(() => controller.abort(), 12000);
+    const timer = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
     const endpoints = {
       ...(idfDataView !== null ? { idfs: `/api/idfs${idfDataView}` } : {}),
       ips: "/api/ips",
@@ -1360,6 +1366,7 @@ export default function App() {
       segments: "/api/forti/network/dhcp-pools",
       ...(canReadAudit ? { audit: "/api/audit" } : {}),
     };
+    setPendingResources(new Set(Object.keys(endpoints)));
     setData(old => ({ ...old,
       ...(idfDataView === null ? { idfs: [], resources: [] } : {}),
       ...(!reportsPath ? { reports: {} } : {}),
@@ -1387,6 +1394,11 @@ export default function App() {
         loadedResources.current.add(key);
         setErrors(old => ({ ...old, [key]: error.name === "AbortError"
           ? "Se agotó el tiempo de consulta. Vuelve a intentar." : error.message }));
+      }
+      finally {
+        if (version === generation.current) setPendingResources(old => {
+          const next = new Set(old); next.delete(key); return next;
+        });
       }
     }));
     clearTimeout(timer);
@@ -1508,6 +1520,7 @@ export default function App() {
     loadController.current?.abort();
     generation.current++;
     setLoading(false);
+    setPendingResources(new Set());
     mutationLock.current = true;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
@@ -1760,7 +1773,7 @@ export default function App() {
     idf: ['idfs', ...(reportsPath ? ['reports'] : [])], inventario: ['idfs'],
     'bitacora-idf': ['idfs', ...(reportsPath ? ['reports'] : [])], soporte: ['devices', 'segments'],
   }[route.path] || [];
-  const pageLoading = loading && pageResources.some(key => !loadedResources.current.has(key));
+  const pageLoading = !demo && pageResources.some(key => pendingResources.has(key) || (loading && !loadedResources.current.has(key)));
   const shared = {
     data,
     demo,

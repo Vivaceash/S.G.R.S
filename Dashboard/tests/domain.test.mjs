@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { csvCell, makeCsv, paginate, selectRows, inventoryFromIdfs, reportsFromData, roleLabel, AVAILABLE_PAGES, ROLE_PAGE_DEFAULTS, formatDeviceType, BASE_ROLE_CATALOG, getEffectiveRoles, formatUptime, getSaturationStatus, getSaturationLabel, makeExcelWorkbook, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, escapeXml, sanitizeWorksheetName, EXCEL_MIME_TYPE, SUPPORT_ALLOWED_NETWORKS, isSupportSegment, getSupportSegments, normalizeText, usersForDemo, projectUsersForActor, getCardRoles, getUserFilterRoles, countUsersForRoleCard, canViewPageId } from '../src/domain.mjs';
+import { csvCell, makeCsv, paginate, selectRows, inventoryFromIdfs, reportsFromData, roleLabel, AVAILABLE_PAGES, ROLE_PAGE_DEFAULTS, formatDeviceType, BASE_ROLE_CATALOG, getEffectiveRoles, formatUptime, getSaturationStatus, getSaturationLabel, makeExcelWorkbook, SUPPORT_EXPORT_COLUMNS, SUPPORT_NETWORK_EXPORT_COLUMNS, buildSupportSheets, escapeXml, sanitizeWorksheetName, EXCEL_MIME_TYPE, SUPPORT_ALLOWED_NETWORKS, isSupportSegment, getSupportSegments, normalizeText, usersForDemo, projectUsersForActor, getCardRoles, getUserFilterRoles, countUsersForRoleCard, canViewPageId } from '../src/domain.mjs';
 import { createDemo } from '../src/demo.mjs';
 
 test('Incidencias sin ID conservan su identidad y la resolución sustituye solo su origen', () => {
@@ -535,6 +535,55 @@ test('makeExcelWorkbook genera una sola hoja cuando solo se solicita una categor
   assert.ok(!printXml.includes('<Worksheet ss:Name="Computadoras">'));
   assert.ok(printXml.includes('IMP-SOLO-PRINT'));
   assert.ok(!printXml.includes('PC-SOLO-COMP'));
+});
+
+test('buildSupportSheets y makeExcelWorkbook generan hojas independientes para los 7 widgets de soporte', () => {
+  const comp = { hostname: '04820300-PC1', ip: '192.168.90.10', mac: 'AA:01', interface: 'LAN_QUETZAL', uptime_seconds: 3600 };
+  const print = { hostname: 'IMP-PISO1', ip: '192.168.90.20', mac: 'AA:02', interface: 'PRINTERS', uptime_seconds: 7200 };
+  const wifi = { hostname: '04820300-WIFI1', ip: '192.168.94.30', mac: 'AA:03', interface: 'meztli', uptime_seconds: 1800 };
+  const uptime = { hostname: '04820300-SRV', ip: '192.168.90.5', mac: 'AA:04', interface: 'LAN_QUETZAL', uptime_seconds: 999999 };
+  const unmatch = { name: 'DISPOSITIVO-DESCONOCIDO', ip: '192.168.90.40', mac: 'AA:05', interface: 'LAN_QUETZAL', status: 'online' };
+  const seg1 = { name: 'Red Quetzalcóatl', interface: 'port1', subnet: '192.168.90.0/24', default_gateway: '192.168.90.1', active_leases: 140, available_ips: 114, capacity: 254, utilization_percent: 55 };
+  const segCrit = { name: 'Red Saturada', interface: 'port2', subnet: '192.168.91.0/24', default_gateway: '192.168.91.1', active_leases: 230, available_ips: 24, capacity: 254, utilization_percent: 90 };
+
+  const allSheets = buildSupportSheets({
+    computers: [comp],
+    printers: [print],
+    institutionalWifi: [wifi],
+    topUptime: [uptime],
+    unmatchedOmni: [unmatch],
+    networks: [seg1],
+    criticalNetworks: [segCrit],
+    includeComputers: true,
+    includePrinters: true,
+    includeInstitutionalWifi: true,
+    includeTopUptime: true,
+    includeUnmatchedOmni: true,
+    includeNetworks: true,
+    includeCriticalNetworks: true,
+  });
+
+  assert.equal(allSheets.length, 7, 'Deben generarse exactamente 7 hojas');
+  const sheetNames = allSheets.map(s => s.name);
+  assert.deepEqual(sheetNames, [
+    'Computadoras',
+    'Impresoras',
+    'Institucionales WiFi',
+    'Top Uptime',
+    'Sin Cotejo OmniVista',
+    'Redes y Estados',
+    'Redes Críticas',
+  ]);
+
+  const xml = makeExcelWorkbook(allSheets);
+  for (const name of sheetNames) {
+    assert.ok(xml.includes(`<Worksheet ss:Name="${name}">`), `El libro debe contener la hoja "${name}"`);
+  }
+
+  // Verificar columnas de red en la hoja de Redes y Estados
+  for (const col of SUPPORT_NETWORK_EXPORT_COLUMNS) {
+    assert.ok(xml.includes(`<Data ss:Type="String">${escapeXml(col.label)}</Data>`), `Header de red ${col.label} debe existir en el XML`);
+  }
 });
 
 test('makeExcelWorkbook y escapeXml sanitizan XML y neutralizan fórmulas maliciosas', () => {

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Clock3, Monitor, Users } from 'lucide-react';
+import { Users, UserRoundCheck, UserRoundX, UserRoundSearch, UserRoundPlus, UserRoundMinus, UsersRound, CalendarClock, CalendarCheck2, CalendarX2, CalendarDays, CalendarSearch, FileText, ShieldCheck, ShieldQuestion, Building2, Trophy, Layers3, Monitor, MonitorSmartphone, Smartphone, Laptop, Terminal, CircleHelp, Link2, Unlink, Network } from 'lucide-react';
 import { DashboardWidgets, WidgetCard } from './dashboard-widgets.jsx';
 import { Notice } from './components.jsx';
 import { number } from './domain.mjs';
@@ -19,10 +19,39 @@ function widgetTone(widget, stats) {
   return catalogWidgetTone(widget);
 }
 
-function catalogWidgetTone() { return 'brand'; }
+// One visual identity per indicator, shared by the catalog and placed cards.
+const METRIC_ICONS = {
+  accounts: Users, temporary: CalendarClock, oficios: FileText, valid: CalendarCheck2,
+  expiring24: CalendarClock, expiring7: CalendarDays, expired: CalendarX2,
+  'no-expiry': CalendarSearch, 'non-temporary': ShieldCheck,
+  active: UserRoundCheck, inactive: UserRoundX, 'unknown-status': UserRoundSearch,
+  'with-devices': Link2, 'without-devices': UserRoundMinus,
+  'multiple-devices': UsersRound, 'five-devices': Network,
+};
+const KIND_ICONS = { ranking: Trophy, platforms: Layers3, types: MonitorSmartphone,
+  departments: Building2, profiles: ShieldCheck, devices: Network,
+  unassociated: Unlink, recent: UserRoundPlus };
+const PLATFORM_ICONS = { android: Smartphone, ios: Smartphone, windows: Monitor,
+  macos: Laptop, linux: Terminal, unknown: CircleHelp };
+function catalogWidgetIcon(widget) {
+  return widget.kind === 'metric' ? METRIC_ICONS[widget.metric] || ShieldQuestion
+    : widget.kind === 'platform' ? PLATFORM_ICONS[widget.platform] || Monitor
+    : KIND_ICONS[widget.kind] || Users;
+}
+function catalogWidgetTone(widget) {
+  if (widget.kind === 'ranking') return 'amber';
+  if (['platform', 'platforms'].includes(widget.kind)) return 'blue';
+  if (widget.kind === 'profiles') return 'purple';
+  if (['departments', 'recent'].includes(widget.kind)) return 'teal';
+  if (['types', 'devices', 'unassociated'].includes(widget.kind)) return 'cyan';
+  if (['active', 'valid'].includes(widget.metric)) return 'success';
+  if (widget.metric === 'expired') return 'danger';
+  if (['expiring24', 'expiring7', 'no-expiry'].includes(widget.metric)) return 'orange';
+  return widget.scope === 'oficios' ? 'purple' : 'brand';
+}
 
 function AnalyticsCard({ widget, stats, sources, loading, error, onFilter, onRefresh, updatedAt, demo }) {
-  const Icon = ['platform', 'devices', 'types', 'platforms', 'ranking'].includes(widget.kind) ? Monitor : widget.scope === 'oficios' ? Clock3 : Users;
+  const Icon = catalogWidgetIcon(widget);
   let value;
   let filter;
   let rows;
@@ -36,12 +65,14 @@ function AnalyticsCard({ widget, stats, sources, loading, error, onFilter, onRef
   if (widget.kind === 'types') rows = Object.entries(stats.types).filter(([, count]) => count > 0).map(([key, count]) => ({ label: TYPE_LABELS[key], count, filter: { id: 'type', value: key, label: TYPE_LABELS[key] } }));
   if (['departments', 'profiles'].includes(widget.kind)) rows = stats[widget.kind].slice(0, 8).map(([key, count]) => ({ label: key || (widget.kind === 'departments' ? 'Sin departamento' : 'Sin perfil'), count, filter: { id: widget.kind === 'departments' ? 'department' : 'accessRoleProfile', value: key, label: key || (widget.kind === 'departments' ? 'Sin departamento' : 'Sin perfil') } }));
   const max = Math.max(1, ...(rows || []).map(row => row.count));
-  if (rows) return <article className={`network-pressure altas-compact-list widget-tone-${loading || error ? 'slate' : widgetTone(widget, stats)}`} data-kind={widget.id} aria-label={widget.title} aria-busy={loading}>
-    <div className="network-pressure-header"><h3>{widget.title}</h3></div>
+  if (rows) return <article className={`network-pressure altas-compact-list altas-list-${widget.kind} widget-tone-${loading || error ? 'slate' : widgetTone(widget, stats)}`} data-kind={widget.id} aria-label={widget.title} aria-busy={loading}>
+    <div className="network-pressure-header"><span className="widget-heading-icon"><Icon size={21} strokeWidth={1.7} aria-hidden="true" /></span><h3>{widget.title}</h3></div>
     {loading ? <p className="widget-empty">Cargando…</p> : error ? <p className="widget-empty">Consulta no disponible.</p> : rows.length ? <div className="altas-compact-scroll" tabIndex={0} role="region" aria-label={`Listado de ${widget.title}`}><ol>
-      {rows.map(row => <li key={row.filter.value}><button type="button" disabled={!onFilter} onClick={() => onFilter?.(row.filter)} aria-label={`Filtrar ${row.label}`} title={[row.label, row.detail].filter(Boolean).join(' · ')}>
-        <span><strong>{row.label}</strong></span><span className="altas-compact-quantity"><i aria-hidden="true"><em style={{ width: `${row.count / max * 100}%` }} /></i><b>{number(row.count)}</b></span>
-      </button></li>)}
+      {rows.map((row, index) => {
+        const RowIcon = widget.kind === 'platforms' ? PLATFORM_ICONS[row.filter.value] || Monitor : widget.kind === 'types' ? MonitorSmartphone : widget.kind === 'departments' ? Building2 : ShieldCheck;
+        return <li key={row.filter.value}><button type="button" disabled={!onFilter} onClick={() => onFilter?.(row.filter)} aria-label={`Filtrar ${row.label}`} title={[row.label, row.detail].filter(Boolean).join(' · ')}>
+        <span className="altas-row-label">{widget.kind === 'ranking' ? <em className={`altas-rank rank-${index + 1}`}>{String(index + 1).padStart(2, '0')}</em> : <span className="altas-row-symbol"><RowIcon size={15} aria-hidden="true" /></span>}<strong>{row.label}</strong></span><span className="altas-compact-quantity"><i aria-hidden="true"><em style={{ width: `${row.count / max * 100}%` }} /></i><b>{number(row.count)}</b></span>
+      </button></li>; })}
     </ol></div> : <p className="widget-empty">Sin datos disponibles.</p>}
   </article>;
   return <WidgetCard title={widget.title} module="Gestión de altas" Icon={Icon} tone={loading || error ? 'slate' : widgetTone(widget, stats)} kind={widget.id} className="altas-analytics-widget" loading={loading} updatedAt={updatedAt} demo={demo} onRefresh={onRefresh} footerAction={filter && onFilter ? { label: 'Filtrar cuentas', onClick: () => onFilter(filter) } : null}>
@@ -59,8 +90,9 @@ export function AltasWidgets({ users, sources = {}, now, demo, loading, error, o
   const defaultLayout = ALTAS_DEFAULT_LAYOUT.filter(widget => allowed.has(widget.id));
   return <section className="altas-analytics" aria-label="Indicadores de gestión de altas">
     {(sources.users?.complete === false || sources.company_properties?.complete === false) && <Notice title="Consulta parcial" tone="warning">Los indicadores se calculan con los registros recibidos. Los dispositivos sin cuenta solo se muestran cuando la consulta de terminales está completa.</Notice>}
-    <DashboardWidgets groupBy={widgetGroup} catalog={catalog} catalogTone={catalogWidgetTone} defaultLayout={defaultLayout} storagePrefix="sgrs:altas-widgets:v1" title="Indicadores de gestión de altas" personalizeLabel="Personalizar indicadores" demo={demo} userId={`${session.user?.id}:${session.user?.role}`}>
+    <DashboardWidgets groupBy={widgetGroup} catalog={catalog} catalogTone={catalogWidgetTone} catalogIcon={catalogWidgetIcon} defaultLayout={defaultLayout} storagePrefix="sgrs:altas-widgets:v1" title="Indicadores de gestión de altas" personalizeLabel="Personalizar indicadores" demo={demo} userId={`${session.user?.id}:${session.user?.role}`}>
       {catalog.map(widget => <AnalyticsCard key={widget.id} data-widget-id={widget.id} widget={widget} stats={stats} sources={sources} loading={loading} error={error} onFilter={onFilter} onRefresh={onRefresh} updatedAt={updatedAt} demo={demo} />)}
     </DashboardWidgets>
   </section>;
 }
+
