@@ -33,6 +33,7 @@ try {
     else if (path === '/api/ips') body = data.ips;
     else if (path === '/api/audit') body = { events: data.audit };
     else if (path === '/api/health') body = data.health;
+    else if (path === '/api/networks') body = { networks: data.segments, sources: [], partial: false };
     else if (path === '/api/forti/network/dhcp-pools') body = { data: { pools: data.segments } };
     else if (path === '/api/forti/network/dhcp-leases') body = { data: [] };
     else if (path === '/api/support/inventory') {

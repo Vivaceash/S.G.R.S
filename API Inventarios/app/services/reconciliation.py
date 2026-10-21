@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime, timezone, timedelta
 import json
+import logging
 import uuid
 from app.core.config import settings
 from app.core.errors import InventoryError
@@ -67,11 +68,11 @@ class Reconciler:
 
     async def periodic(self):
         while True:
-            await asyncio.sleep(settings.REFRESH_SECONDS)
             try:
                 self.start()
-            except InventoryError:
-                pass
+            except Exception as exc:
+                logging.getLogger('inventarios_api').warning('Cotejo periódico pendiente; se reintentará (%s).', type(exc).__name__)
+            await asyncio.sleep(settings.REFRESH_SECONDS)
 
     async def close(self):
         tasks = list(self.tasks)

@@ -6,6 +6,7 @@ import { PageHeading } from './pages.jsx';
 import { useForm } from './forms.jsx';
 import { roleLabel, request, dateTime, AVAILABLE_PAGES, SUBMODULES, defaultSubmodules, ROLE_PAGE_DEFAULTS, BASE_ROLE_CATALOG, getEffectiveRoles, usersForDemo, projectUsersForActor, countUsersForRoleCard, getCardRoles, getUserFilterRoles, capabilityLabel, canAssignRole, canEditUserTarget } from './domain.mjs';
 import { useSession } from './session.jsx';
+import { MODULE_PERMISSIONS, ROLE_CAPABILITIES, SUBMODULE_READ_PERMISSIONS, readCapabilities, selectModule, selectAction } from './user-permissions.mjs';
 
 export const BASE_ROLES = BASE_ROLE_CATALOG;
 
@@ -50,43 +51,61 @@ function InheritedUserForm({ row, save, cancel, onDirty, canConfigure, canDelete
   const initialSubmodules = Array.isArray(row?.allowed_submodules) ? row.allowed_submodules : defaultSubmodules(initialPages).filter(item => isSuperAdmin || actorSubmodules.includes(item));
   const [allowedPages, setAllowedPages] = useState(initialPages);
   const [allowedSubmodules, setAllowedSubmodules] = useState(initialSubmodules);
-  const [selectedCapabilities, setSelectedCapabilities] = useState(() => Array.isArray(row?.capabilities) ? row.capabilities : actorCapabilities);
-  const capabilityOptions = [...new Set([...(row?.capabilities || []), ...actorCapabilities])];
+  const [selectedCapabilities, setSelectedCapabilities] = useState(() => [...new Set([
+    ...(Array.isArray(row?.capabilities) ? row.capabilities : (ROLE_CAPABILITIES[initialRole] || []).filter(cap => isSuperAdmin || actorCapabilities.includes(cap))),
+    ...initialPages.flatMap(page => readCapabilities(page, initialSubmodules)).filter(cap => isSuperAdmin || actorCapabilities.includes(cap)),
+  ])]);
   const pageOptions = AVAILABLE_PAGES.filter(page => isSuperAdmin || actorPages.includes(page.id) || allowedPages.includes(page.id));
   const canChangeCapability = capability => isSuperAdmin || actorCapabilities.includes(capability);
   const canChangeSubmodule = key => isSuperAdmin || actorSubmodules.includes(key);
   const markChanged = () => { f.change('confirmed', false); onDirty?.(true); };
+  const access = { pages: allowedPages, submodules: allowedSubmodules, capabilities: selectedCapabilities };
+  const applyAccess = next => {
+    setAllowedPages(next.pages); setAllowedSubmodules(next.submodules); setSelectedCapabilities(next.capabilities); markChanged();
+  };
+  const canEnablePage = (pageId, role = f.values.role) => (pageId !== 'conexiones' || role === 'super-admin')
+    && (MODULE_PERMISSIONS[pageId]?.read || []).every(cap => canChangeCapability(cap) || selectedCapabilities.includes(cap));
   const togglePage = pageId => {
     if (!canConfigure || (!isSuperAdmin && !actorPages.includes(pageId))) return;
-    const selected = allowedPages.includes(pageId);
-    const nextPages = selected ? allowedPages.filter(page => page !== pageId) : [...allowedPages, pageId];
-    setAllowedPages(nextPages);
-    setAllowedSubmodules(current => selected ? current.filter(item => !item.startsWith(`${pageId}:`)) : [...new Set([...current, ...(SUBMODULES[pageId] || []).map(tab => `${pageId}:${tab.id}`).filter(canChangeSubmodule)])]);
-    markChanged();
+    const enabled = !allowedPages.includes(pageId);
+    if (enabled && !canEnablePage(pageId)) return;
+    applyAccess(selectModule(access, pageId, enabled, canChangeCapability, canChangeSubmodule));
   };
   const toggleSubmodule = (pageId, tabId) => {
     const key = `${pageId}:${tabId}`;
     if (!canConfigure || !canChangeSubmodule(key)) return;
     const next = allowedSubmodules.includes(key) ? allowedSubmodules.filter(item => item !== key) : [...allowedSubmodules, key];
     if (!next.some(item => item.startsWith(`${pageId}:`))) return;
+    const required = SUBMODULE_READ_PERMISSIONS[key] || [];
+    if (next.includes(key) && required.some(cap => !selectedCapabilities.includes(cap) && !canChangeCapability(cap))) return;
+    if (next.includes(key)) setSelectedCapabilities(current => [...new Set([...current, ...required])]);
     setAllowedSubmodules(next); markChanged();
   };
-  const toggleCapability = capability => {
-    if (!canConfigure || !canChangeCapability(capability)) return;
-    setSelectedCapabilities(current => current.includes(capability) ? current.filter(item => item !== capability) : [...current, capability]);
-    markChanged();
+  const toggleCapability = (pageId, capability) => {
+    if (!canConfigure || (!isSuperAdmin && !actorPages.includes(pageId)) || !canEnablePage(pageId)) return;
+    applyAccess(selectAction(access, pageId, capability, canChangeCapability, canChangeSubmodule));
   };
   const selectAllPages = () => {
     if (!canConfigure) return;
-    const pages = isSuperAdmin ? AVAILABLE_PAGES.map(page => page.id) : actorPages;
-    setAllowedPages(pages); setAllowedSubmodules(defaultSubmodules(pages).filter(canChangeSubmodule)); markChanged();
+    const pages = (isSuperAdmin ? AVAILABLE_PAGES.map(page => page.id) : actorPages).filter(page => canEnablePage(page));
+    applyAccess(pages.reduce((next, page) => selectModule(next, page, true, canChangeCapability, canChangeSubmodule), access));
   };
-  const deselectAllPages = () => { if (canConfigure) { setAllowedPages([]); setAllowedSubmodules([]); markChanged(); } };
-  const loadRoleDefaults = () => {
+  const deselectAllPages = () => {
     if (!canConfigure) return;
-    const pages = (ROLE_PAGE_DEFAULTS[f.values.role] || []).filter(page => isSuperAdmin || actorPages.includes(page));
-    setAllowedPages(pages); setAllowedSubmodules(defaultSubmodules(pages).filter(canChangeSubmodule)); markChanged();
+    const next = allowedPages.filter(page => isSuperAdmin || actorPages.includes(page))
+      .reduce((value, page) => selectModule(value, page, false, canChangeCapability, canChangeSubmodule), access);
+    applyAccess({ ...next, capabilities: next.capabilities.filter(cap => !canChangeCapability(cap)
+      || next.pages.some(page => [...readCapabilities(page, next.submodules), ...(MODULE_PERMISSIONS[page]?.actions || [])].includes(cap))) });
   };
+  const roleAccess = role => {
+    const pages = (ROLE_PAGE_DEFAULTS[role] || []).filter(page => (isSuperAdmin || actorPages.includes(page)) && canEnablePage(page, role));
+    const preservedPages = allowedPages.filter(page => !isSuperAdmin && !actorPages.includes(page));
+    const base = { pages: preservedPages, submodules: allowedSubmodules.filter(key => preservedPages.includes(key.split(':')[0])),
+      capabilities: [...new Set([...selectedCapabilities.filter(cap => !canChangeCapability(cap)),
+        ...(ROLE_CAPABILITIES[role] || []).filter(canChangeCapability)])] };
+    return pages.reduce((next, page) => selectModule(next, page, true, canChangeCapability, canChangeSubmodule), base);
+  };
+  const loadRoleDefaults = () => { if (canConfigure) applyAccess(roleAccess(f.values.role)); };
   const submitWithPermissions = values => {
     const payload = { ...values };
     if (canConfigure) {
@@ -112,8 +131,7 @@ function InheritedUserForm({ row, save, cancel, onDirty, canConfigure, canDelete
   const change = (key, value) => {
     f.change(key, value); f.change('confirmed', false);
     if (key === 'role' && !row) {
-      const pages = (ROLE_PAGE_DEFAULTS[value] || []).filter(page => isSuperAdmin || actorPages.includes(page));
-      setAllowedPages(pages); setAllowedSubmodules(defaultSubmodules(pages).filter(canChangeSubmodule));
+      applyAccess(roleAccess(value));
     }
   };
   return <form noValidate onSubmit={f.submit} ref={f.form} aria-busy={f.busy}>
@@ -124,10 +142,38 @@ function InheritedUserForm({ row, save, cancel, onDirty, canConfigure, canDelete
       <Field label="Rol asignado" required><select value={f.values.role} onChange={e => change('role', e.target.value)}>{selectableRoles.map(role => <option key={role.id} value={role.id}>{roleLabel(role.id)}</option>)}</select></Field>
       <Field label="Estado de la cuenta"><select value={f.values.active ? 'active' : 'inactive'} onChange={e => change('active', e.target.value === 'active')}><option value="active">Activa</option><option value="inactive">Suspendida</option></select></Field>
       <div className="col-span-full"><Field label="Mantener sesión iniciada" hint="Conserva la sesión durante 30 días desde el último uso y la renueva mientras el dashboard permanezca abierto."><input type="checkbox" className="confirmation-checkbox" checked={f.values.keep_session} disabled={!canConfigure} onChange={e => change('keep_session', e.target.checked)} /></Field></div>
-      {row ? <div className="col-span-full"><Field label="Nueva contraseña (opcional)" error={f.errors.password} hint="Déjala vacía para conservarla. Al cambiarla, la persona deberá actualizarla al iniciar sesión."><SecretInput autoComplete="new-password" value={f.values.password} maxLength={128} onChange={e => change('password', e.target.value)} /></Field></div> : <div className="col-span-full"><Notice title="Contraseña inicial asignada automáticamente">La cuenta recibirá la contraseña inicial del servidor y deberá cambiarla en su primer acceso.</Notice></div>}
       {isSuperAdmin && <div className="col-span-full"><Field label="Ocultar a otros usuarios" hint="Solo un super-admin podrá consultar y administrar esta cuenta."><input type="checkbox" className="confirmation-checkbox" checked={f.values.is_hidden} onChange={e => change('is_hidden', e.target.checked)} /></Field></div>}
-      {canConfigure && <div className="col-span-full permission-panel"><div className="modular-pages-header"><div><h3>Permisos funcionales</h3><p className="muted">Solo puedes asignar permisos que tu cuenta ya tiene. Los permisos que no puedes administrar se conservan.</p></div></div><div className="permission-list">{capabilityOptions.map(capability => <label key={capability} className="permission-item"><input type="checkbox" checked={selectedCapabilities.includes(capability)} disabled={!canChangeCapability(capability)} onChange={() => toggleCapability(capability)} /><span>{capabilityLabel(capability)}</span></label>)}</div></div>}
-      {canConfigure && <div className="col-span-full modular-pages-container"><div className="modular-pages-header"><div><h3>Acceso a módulos y pestañas</h3><p className="muted">La cuenta hereda como máximo las pantallas y pestañas disponibles para ti.</p></div><div className="modular-pages-actions"><button type="button" className="btn-link" onClick={selectAllPages}>Seleccionar disponibles</button><span>·</span><button type="button" className="btn-link" onClick={deselectAllPages}>Deseleccionar</button><span>·</span><button type="button" className="btn-link" onClick={loadRoleDefaults}>Cargar sugeridas por rol</button></div></div><div className="modular-pages-grid">{pageOptions.map(page => { const checked = allowedPages.includes(page.id); const editable = isSuperAdmin || actorPages.includes(page.id); return <div key={page.id} className={`modular-page-group ${checked ? 'is-selected' : ''}`}><label className={`modular-page-item ${checked ? 'is-selected' : ''}`}><input type="checkbox" checked={checked} disabled={!editable} onChange={() => togglePage(page.id)} /><span>{page.label}</span></label>{checked && SUBMODULES[page.id] && <div className="modular-submodule-list" aria-label={`Pestañas de ${page.label}`}>{SUBMODULES[page.id].map(tab => { const key = `${page.id}:${tab.id}`; return <label key={tab.id} className="modular-submodule-item"><input type="checkbox" checked={allowedSubmodules.includes(key)} disabled={!canChangeSubmodule(key)} onChange={() => toggleSubmodule(page.id, tab.id)} /><span>{tab.label}</span></label>; })}</div>}</div>; })}</div></div>}
+      {canConfigure && <section className="col-span-full modular-pages-container unified-permissions" aria-label="Permisos por módulo">
+        <div className="modular-pages-header"><div><h3>Permisos por módulo</h3>
+          <p className="muted">Selecciona las pantallas, pestañas y acciones permitidas. Cada acción habilita su módulo y la lectura necesaria. Las acciones compartidas se aplican a los módulos seleccionados.</p>
+        </div><div className="modular-pages-actions">
+          <button type="button" className="btn-link" onClick={selectAllPages}>Seleccionar disponibles</button><span>·</span>
+          <button type="button" className="btn-link" onClick={deselectAllPages}>Deseleccionar</button><span>·</span>
+          <button type="button" className="btn-link" onClick={loadRoleDefaults}>Cargar sugeridas por rol</button>
+        </div></div>
+        <div className="modular-pages-grid">{pageOptions.map(page => {
+          const checked = allowedPages.includes(page.id);
+          const editable = isSuperAdmin || actorPages.includes(page.id);
+          const enableable = canEnablePage(page.id);
+          return <section key={page.id} className={`modular-page-group ${checked ? 'is-selected' : ''}`} aria-label={`Permisos de ${page.label}`}>
+            <label className={`modular-page-item ${checked ? 'is-selected' : ''}`}>
+              <input type="checkbox" checked={checked} disabled={!editable || (!checked && !enableable)} onChange={() => togglePage(page.id)} />
+              <span>{page.label}</span>
+            </label>
+            {page.id === 'conexiones' && f.values.role !== 'super-admin' && <p className="permission-module-hint">Disponible para el rol Admin.</p>}
+            {checked && SUBMODULES[page.id] && <div className="modular-submodule-list" aria-label={`Pestañas de ${page.label}`}>{SUBMODULES[page.id].map(tab => {
+              const key = `${page.id}:${tab.id}`;
+              return <label key={tab.id} className="modular-submodule-item"><input type="checkbox" checked={allowedSubmodules.includes(key)} disabled={!canChangeSubmodule(key)} onChange={() => toggleSubmodule(page.id, tab.id)} /><span>{tab.label}</span></label>;
+            })}</div>}
+            {(MODULE_PERMISSIONS[page.id]?.actions || []).length > 0 && <div className="module-permission-actions" aria-label={`Acciones en ${page.label}`}>
+              {(MODULE_PERMISSIONS[page.id]?.actions || []).filter(cap => canChangeCapability(cap) || selectedCapabilities.includes(cap)).map(cap =>
+                <label key={cap} className="modular-submodule-item"><input type="checkbox" checked={checked && selectedCapabilities.includes(cap)} disabled={!editable || !enableable || !canChangeCapability(cap)} onChange={() => toggleCapability(page.id, cap)} /><span>{capabilityLabel(cap)}</span></label>
+              )}
+            </div>}
+          </section>;
+        })}</div>
+      </section>}
+      {row ? <div className="col-span-full"><Field label="Nueva contraseña (opcional)" error={f.errors.password} hint="Déjala vacía para conservarla. Al cambiarla, la persona deberá actualizarla al iniciar sesión."><SecretInput autoComplete="new-password" value={f.values.password} maxLength={128} onChange={e => change('password', e.target.value)} /></Field></div> : <div className="col-span-full"><Notice title="Contraseña inicial asignada automáticamente">La cuenta recibirá la contraseña inicial del servidor y deberá cambiarla en su primer acceso.</Notice></div>}
     </div><Notice title={`Permisos de ${roleLabel(f.values.role)}`} tone={f.values.active ? 'info' : 'warning'}>{normalizedRoles.find(r => r.id === f.values.role)?.description} {!f.values.active && 'La cuenta no podrá iniciar sesión. Sus registros se conservarán.'} {row && 'Los cambios de cuenta revocan sus sesiones activas.'}</Notice>
     <Field label={`Confirmo ${row ? 'actualizar' : 'crear'} esta cuenta con el rol ${roleLabel(f.values.role)}`} required error={f.errors.confirmed}><input className="confirmation-checkbox" type="checkbox" checked={f.values.confirmed} onChange={e => f.change('confirmed', e.target.checked)} /></Field>
     </fieldset><div className="form-actions">{canDelete && <Button type="button" icon={Trash2} variant="danger" onClick={onDelete}>Eliminar usuario</Button>}<Button type="button" disabled={f.busy} onClick={cancel}>Cancelar</Button><Button type="submit" icon={Save} variant="primary" busy={f.busy} disabled={f.uncertain}>{row ? 'Guardar usuario y permisos' : 'Crear usuario y asignar rol'}</Button></div>

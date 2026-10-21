@@ -166,14 +166,14 @@ def test_unauthorized_access_rejected():
     assert res_ver.status_code == 401
 
 
-def test_only_liveness_is_public_but_deep_health_requires_authentication():
-    """Solo /health es público; los diagnósticos consultan OmniVista y requieren clave."""
+def test_health_checks_are_public_but_system_version_requires_authentication():
+    """Los health checks son públicos; la consulta de versión conserva su autenticación."""
     assert client.get("/health").status_code == 200
     res_h1 = client.get("/api/v1/health")
-    assert res_h1.status_code == 401
+    assert res_h1.status_code == 200
 
     res_h2 = client.get("/api/v1/system/health")
-    assert res_h2.status_code == 401
+    assert res_h2.status_code == 200
     assert client.get("/api/v1/system/version").status_code == 401
 
 

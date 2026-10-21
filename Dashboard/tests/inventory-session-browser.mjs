@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createDemo } from '../src/demo.mjs';
 
 const base = process.env.SGRS_TEST_URL || 'http://127.0.0.1:3000';
-const browser = await chromium.launch({ executablePath: process.env.SGRS_BROWSER || '/opt/brave-bin/brave', headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+const browser = await chromium.launch({ ...(process.env.SGRS_BROWSER ? {executablePath: process.env.SGRS_BROWSER} : {}), headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
 try {
   for (const section of ['aps', 'cctv']) {
     const context = await browser.newContext();

@@ -12,10 +12,23 @@ try {
   await expect(table.locator('.empty-state')).toHaveCount(0);
   await page.evaluate(() => window.completeQuery(350));
   await expect(table.locator('tbody tr')).toHaveCount(100);
+  const assertScrollContained = async () => {
+    const geometry = await page.evaluate(() => {
+      const list = document.querySelector('.table-scroll');
+      const status = list.querySelector('[role="status"]');
+      const contentEnd = document.querySelector('#custom-list').getBoundingClientRect().bottom + scrollY;
+      return { contained: status.offsetParent === list,
+        documentEnd: document.documentElement.scrollHeight, contentEnd: Math.max(innerHeight, contentEnd) };
+    });
+    expect(geometry.contained, 'El estado oculto debe posicionarse dentro de la lista').toBe(true);
+    expect(geometry.documentEnd, 'Las filas recortadas no deben alargar el scroll de la página').toBeLessThanOrEqual(Math.ceil(geometry.contentEnd) + 1);
+  };
+  await assertScrollContained();
   await expect(table.locator('.pagination')).toHaveCount(0);
   for (let i = 0; i < 12; i++) { await table.locator('.table-scroll').evaluate(el => { el.scrollTop = el.scrollHeight; }); await page.waitForTimeout(100); }
   await expect(table.locator('tbody tr').last()).toContainText('Equipo 350');
   await expect(table.locator('tbody tr')).toHaveCount(100);
+  await assertScrollContained();
   for (let i = 0; i < 12; i++) { await table.locator('.table-scroll').evaluate(el => { el.scrollTop = 0; }); await page.waitForTimeout(100); }
   await expect(table.locator('tbody tr').first()).toContainText('Equipo 1');
   const custom = page.locator('#custom-list');

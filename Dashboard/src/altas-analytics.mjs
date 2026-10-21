@@ -36,8 +36,8 @@ export function deviceType(device) {
 }
 const hasPlatform = (user, platform) => userDevices(user).some(device => devicePlatform(device) === platform);
 const hasType = (user, type) => userDevices(user).some(device => deviceType(device) === type);
-const active = user => /^(online|active|enabled)$/i.test(String(user.status || ''));
-const inactive = user => /^(offline|inactive|disabled)$/i.test(String(user.status || ''));
+const active = user => /^(1|online|active|enabled|normal)$/i.test(String(user.status ?? ''));
+const inactive = user => /^(0|offline|inactive|disabled)$/i.test(String(user.status ?? ''));
 const remaining = (user, now) => isTemporary(user) && expiry(user) !== null ? expiry(user) - now : null;
 const within = (user, now, days) => { const time = remaining(user, now); return time !== null && time > 0 && time <= days * DAY; };
 
@@ -47,25 +47,43 @@ export const METRICS = [
   ['oficios', 'Cuentas por oficio', 'Descripción con Oficio', isOficio],
   ['valid', 'Concesiones vigentes', 'Temporales con fecha futura', (u, now) => remaining(u, now) > 0],
   ['expiring24', 'Vencen en 24 horas', 'Temporales próximas a vencer', (u, now) => within(u, now, 1)],
-  ['expiring7', 'Vencen en 7 días', 'Incluye las próximas 24 horas', (u, now) => within(u, now, 7)],
+  ['expiring7', 'Vencen entre 24 h y 7 días', 'Más de 24 horas y hasta 7 días; excluye las próximas 24 horas', (u, now) => within(u, now, 7) && !within(u, now, 1)],
   ['expired', 'Concesiones vencidas', 'Temporales cuya fecha ya pasó', (u, now) => remaining(u, now) !== null && remaining(u, now) <= 0],
   ['no-expiry', 'Temporales sin fecha', 'Sin vencimiento válido informado', u => isTemporary(u) && expiry(u) === null],
   ['non-temporary', 'Sin temporal identificada', 'No se identificó concesión temporal', u => !isTemporary(u)],
   ['active', 'Cuentas activas', 'Estado activo informado por OmniVista', active],
-  ['inactive', 'Cuentas inactivas', 'Estado inactivo informado por OmniVista', inactive],
+  ['inactive-by-crosscheck', 'Inactivas por cotejo', 'Autenticación vacía en OmniVista y sin coincidencias en FortiGate; consultas completas.', u => u.activityAssessment?.status === 'inactive'],
+  ['activity-unverified', 'Actividad sin verificar', 'Evidencia insuficiente para confirmar inactividad.', u => !u.activityAssessment || u.activityAssessment.status === 'unknown'],
+  ['inactive', 'Inactivas según OmniVista', 'Estado inactivo informado por OmniVista', inactive],
   ['unknown-status', 'Estado no identificado', 'Sin estado activo o inactivo reconocido', u => !active(u) && !inactive(u)],
   ['with-devices', 'Cuentas con equipos', 'Al menos un dispositivo asociado', u => userDevices(u).length > 0],
   ['without-devices', 'Cuentas sin equipos', 'Sin dispositivos asociados en la consulta', u => userDevices(u).length === 0],
-  ['multiple-devices', 'Usuarios con varios equipos', 'Dos o más dispositivos distintos', u => userDevices(u).length >= 2],
-  ['five-devices', 'Usuarios con 5 o más equipos', 'Mayor concentración de dispositivos', u => userDevices(u).length >= 5],
+  ['multiple-devices', 'Usuarios con 2 o más equipos', 'Dos o más dispositivos distintos; incluye los de 5 o más', u => userDevices(u).length >= 2],
 ];
 const temporalIds = new Set(['temporary', 'oficios', 'valid', 'expiring24', 'expiring7', 'expired', 'no-expiry']);
+const statusIds = new Set(['active', 'inactive', 'unknown-status']);
 export const ALTAS_WIDGET_CATALOG = [
-  ...METRICS.map(([id, title, description]) => ({ id: `altas-${id}`, title, description, kind: 'metric', metric: id, scope: temporalIds.has(id) ? 'oficios' : 'all', module: 'Gestión de altas', min: 3, size: 3 })),
-  ...Object.entries(PLATFORM_LABELS).map(([platform, label]) => ({ id: `altas-${platform}`, title: `Dispositivos ${label}`, description: 'Equipos distintos; pulsa para filtrar sus cuentas.', kind: 'platform', platform, scope: 'all', module: 'Gestión de altas', min: 3, size: 3 })),
-  ...[['device-total', 'Dispositivos asociados', 'Equipos distintos por MAC o identificador.', 'devices'], ['unassociated', 'Dispositivos sin cuenta', 'Terminales sin cuenta coincidente; requiere consulta completa.', 'unassociated'], ['top-devices', 'Usuarios con más dispositivos', 'Ranking de cuentas por equipos distintos asociados.', 'ranking'], ['platforms', 'Sistemas operativos', 'Distribución de dispositivos por sistema reportado.', 'platforms'], ['device-types', 'Tipos de dispositivo', 'Móviles, computadoras, impresoras y otros equipos.', 'types'], ['departments', 'Cuentas por departamento', 'Departamentos con más cuentas consultadas.', 'departments'], ['profiles', 'Perfiles de acceso', 'Distribución de cuentas por perfil de red.', 'profiles'], ['recent', 'Altas de los últimos 7 días', 'Cuentas con fecha de alta disponible y reciente.', 'recent']].map(([id, title, description, kind]) => ({ id: `altas-${id}`, title, description, kind, scope: 'all', module: 'Gestión de altas', min: ['devices','unassociated','recent'].includes(kind) ? 3 : 4, size: ['devices','unassociated','recent'].includes(kind) ? 3 : 4 })),
+  ...METRICS.filter(([id]) => !statusIds.has(id)).map(([id, title, description]) => ({ id: `altas-${id}`, title, description, kind: 'metric', metric: id, scope: temporalIds.has(id) ? 'oficios' : 'all', module: 'Gestión de altas', min: 3, size: 3 })),
+  ...[['device-total', 'Dispositivos asociados', 'Equipos distintos por MAC o identificador.', 'devices'], ['unassociated', 'Dispositivos sin cuenta', 'Terminales sin cuenta coincidente; requiere consulta completa.', 'unassociated'], ['top-devices', 'Usuarios con más dispositivos', 'Ranking de cuentas por equipos distintos asociados.', 'ranking'], ['account-status', 'Estado de cuentas en OmniVista', 'Activas, inactivas y sin estado informado; distinto de actividad por cotejo.', 'statuses'], ['platforms', 'Sistemas operativos', 'Distribución de dispositivos por sistema reportado.', 'platforms'], ['device-types', 'Tipos de dispositivo', 'Móviles, computadoras, impresoras y otros equipos.', 'types'], ['departments', 'Cuentas por departamento', 'Departamentos con más cuentas consultadas.', 'departments'], ['profiles', 'Perfiles de acceso', 'Distribución de cuentas por perfil de red.', 'profiles'], ['recent', 'Altas de los últimos 7 días', 'Cuentas con fecha de alta disponible y reciente.', 'recent']].map(([id, title, description, kind]) => ({ id: `altas-${id}`, title, description, kind, scope: 'all', module: 'Gestión de altas', min: ['devices','unassociated','recent'].includes(kind) ? 3 : 4, size: ['devices','unassociated','recent'].includes(kind) ? 3 : 4 })),
 ];
-export const ALTAS_DEFAULT_LAYOUT = ['accounts', 'temporary', 'expiring24', 'expired', 'device-total', 'android', 'ios', 'windows', 'top-devices', 'platforms', 'departments', 'profiles'].map(id => { const widget = ALTAS_WIDGET_CATALOG.find(item => item.id === `altas-${id}`); return { id: widget.id, size: widget.size }; });
+export const ALTAS_DEFAULT_LAYOUT = ['accounts', 'inactive-by-crosscheck', 'activity-unverified', 'temporary', 'expiring24', 'expired', 'device-total', 'top-devices', 'platforms', 'departments', 'profiles'].map(id => { const widget = ALTAS_WIDGET_CATALOG.find(item => item.id === `altas-${id}`); return { id: widget.id, size: widget.size }; });
+
+// Resolve retired widgets before the shared layout sanitizer drops unknown IDs.
+// Keep position/width of the first occurrence, and avoid duplicate replacements.
+export function migrateAltasWidgetLayout(value) {
+  if (!Array.isArray(value)) return value;
+  const aliases = { 'altas-five-devices': 'altas-multiple-devices',
+    ...Object.fromEntries(Object.keys(PLATFORM_LABELS).map(key => [`altas-${key}`, 'altas-platforms'])),
+    ...Object.fromEntries([...statusIds].map(key => [`altas-${key}`, 'altas-account-status'])) };
+  const seen = new Set();
+  return value.flatMap(widget => {
+    if (!widget || typeof widget !== 'object') return [widget];
+    const id = aliases[widget.id] || widget.id;
+    if (seen.has(id)) return [];
+    seen.add(id);
+    return [{ ...widget, id }];
+  });
+}
 
 export function filterAltasUsers(users, filter, now = Date.now()) {
   if (!filter) return users;

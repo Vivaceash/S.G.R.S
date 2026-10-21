@@ -209,7 +209,7 @@ async def test_public_health_and_authenticated_dhcp_pool(monkeypatch):
     monkeypatch.setattr("app.routers.network.fortios_client.get_dhcp_leases", fake_leases)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         r_health = await client.get("/api/v1/health")
-        assert r_health.status_code == 401
+        assert r_health.status_code == 200
         assert (await client.get("/api/v1/health", headers={"X-API-Key": VALID_KEY})).status_code == 200
 
         r_pools = await client.get("/api/v1/network/dhcp-pools")

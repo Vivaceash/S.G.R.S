@@ -10,12 +10,12 @@ def test_all_cctv_queries_require_credentials_and_health_is_public(client):
                  'cameras/cam-1/observations', 'cameras/cam-1/changes'):
         assert client.get('/api/v1/cctv/' + path).status_code == 401
     assert client.get('/health').status_code == 200
-    assert client.get('/api/v1/system/health').status_code == 401
+    assert client.get('/api/v1/system/health').status_code == 200
 
 
 def test_scalar_and_openapi_are_independent(client, monkeypatch):
     assert client.get('/health').status_code == 200
-    assert client.get('/api/v1/system/health').status_code == 401
+    assert client.get('/api/v1/system/health').status_code == 200
     assert client.get('/api/v1/cctv/cameras').status_code == 401
     docs = client.get('/docs').text
     assert 'Scalar' in docs

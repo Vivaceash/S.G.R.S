@@ -98,7 +98,7 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
   const principalKeys = chosen ?? segments.slice(0, 3).map(segmentKey);
   const activeSegment = segments.find(s => segmentKey(s) === activeSegmentKey) || null;
   const visibleSegments = all ? segments : segments.filter(s => principalKeys.includes(segmentKey(s)));
-  const networkUsage = segments.map(segment => {
+  const networkUsage = segments.filter(segment => segment.active_leases != null).map(segment => {
     const connected = Number(segment.active_leases) || 0;
     const capacity = Number(segment.capacity) || 0;
     return {
@@ -143,6 +143,7 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
   };
   return <>
     <PageHeading eyebrow="Centro operativo" title="Dashboard Operativo" description="Métricas generales y estado de la infraestructura de red" updatedAt={data.updatedAt} />
+    {data.networksPartial && <Notice title="Consulta de redes incompleta" tone="warning">Una fuente no está disponible. Se muestran las redes confirmadas por las demás fuentes. Usa el botón de actualización para volver a consultar.</Notice>}
     <DashboardWidgets key={`${demo ? 'demo' : 'live'}:${userId}`} data={data} demo={demo} userId={userId} navigate={navigate} loading={loading} errors={errors} refresh={refresh}>
     <section data-widget-id="metrics" className="overview-metrics" aria-label="Indicadores de infraestructura">
       <Metric icon={Network} label={demo ? 'Disponibilidad de red' : 'Direcciones disponibles'} value={demo ? '98.7%' : loading ? '—' : number(available)} caption={demo ? '+2.3% vs. mes anterior · Ejemplo' : 'Sin asignar en el inventario IP'} />
@@ -150,7 +151,7 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
       <Metric icon={Users} label="Concesiones activas" value={loading ? '—' : number(segments.reduce((sum, s) => sum + (s.active_leases || 0), 0))} caption="Asignaciones reportadas por DHCP" />
       <article className="network-pressure"><div className="network-pressure-header"><h3>Redes más cerca del límite</h3><small>uso de IPs</small></div>{pressureSegments.length ? <ol>{pressureSegments.map(segment => <li key={segmentKey(segment)}><span><strong>{segment.name || segment.interface || 'Red sin nombre'}</strong><small>{number(segment.active_leases)} / {number(segment.capacity)}</small></span><i><em style={{ width: `${Math.min(100, Math.max(0, segment.fillPercent))}%` }} /></i><b>{number(segment.fillPercent)}%</b></li>)}</ol> : <p className="muted">Sin datos de utilización por segmento.</p>}</article>
     </section>
-    <section data-widget-id="segments" className="segment-section"><div className="section-heading"><Layers3 className="section-icon" size={31} aria-hidden="true" /><div><h2>Segmentos de Red y VLANs</h2><p>Capacidad y asignación de los principales segmentos de la infraestructura</p></div><div className="section-actions"><span>{number(segments.length)} segmentos</span><Button onClick={editSegments} icon={Plus} disabled={loading || preferenceBusy || !segments.length}>Elegir principales</Button><Button onClick={() => setAll(!all)} icon={ArrowRight}>{all ? 'Ver principales' : 'Ver todos'}</Button></div></div>
+    <section data-widget-id="segments" className="segment-section"><div className="section-heading"><Layers3 className="section-icon" size={31} aria-hidden="true" /><div><h2>Redes, VLANs y perfiles de acceso</h2><p>Redes y perfiles publicados por FortiGate y OmniVista; capacidad cuando el proveedor la informa</p></div><div className="section-actions"><span>{number(segments.length)} segmentos</span><Button onClick={editSegments} icon={Plus} disabled={loading || preferenceBusy || !segments.length}>Elegir principales</Button><Button onClick={() => setAll(!all)} icon={ArrowRight}>{all ? 'Ver principales' : 'Ver todos'}</Button></div></div>
       {preferenceSaved && <Notice title="Preferencia guardada" role="status">{demo ? 'La selección se conserva en este navegador.' : 'La selección se conservará al volver a iniciar sesión.'}</Notice>}
       {preferenceError && !editing && <Notice title="Preferencia no disponible" tone="warning">{preferenceError}</Notice>}
       {segments.length ? <><div className="segment-grid">{visibleSegments.map((segment, index) => {
@@ -162,7 +163,7 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
         <div className="segment-address"><small>{segment.vlan || segment.interface}</small><strong>{segment.subnet || segment.ip_ranges?.[0] || 'Rango no informado'}</strong></div>
         <dl className="segment-details"><div><dt><Router size={16} />Gateway</dt><dd className="font-mono">{segment.default_gateway || '—'}</dd></div><div><dt><Network size={16} />Máscara</dt><dd className="font-mono">{segment.netmask || '—'}</dd></div><div><dt><FileText size={16} />IPs asignadas</dt><dd><strong>{number(segment.active_leases)} / {number(segment.capacity)}</strong></dd></div></dl>
         <dl className="segment-details segment-secondary"><div><dt><Monitor size={16} />{isMeztliSegment(segment) ? 'Concesiones DHCP' : 'Dispositivos en línea'}</dt><dd className="text-success"><strong>{isMeztliSegment(segment) ? number(segment.active_leases) : number(getOverviewSegmentDevices(devices, segment).filter(device => device.status === 'online').length)}</strong></dd></div><div><dt><Clock3 size={16} />{demo ? 'Promedio diario' : 'Duración de concesión'}</dt><dd>{demo ? number(segment.average) : segment.lease_time_seconds ? `${number(segment.lease_time_seconds)} s` : 'No informada'}</dd></div></dl>
-        <div className={`capacity-meter capacity-meter-${meterTone}`} style={{ '--meter-fill': meterColor }}><meter min="0" max="100" value={segment.utilization_percent || 0} className={`meter-${meterTone}`} style={{ '--meter-fill': meterColor }} aria-label={`Utilización de ${segment.interface}`} /><small><span className={`meter-bullet meter-bullet-${meterTone}`} style={{ background: meterColor }} aria-hidden="true" />{number(segment.utilization_percent)}% utilizado</small></div>
+        {segment.utilization_percent != null ? <div className={`capacity-meter capacity-meter-${meterTone}`} style={{ '--meter-fill': meterColor }}><meter min="0" max="100" value={segment.utilization_percent || 0} className={`meter-${meterTone}`} style={{ '--meter-fill': meterColor }} aria-label={`Utilización de ${segment.interface}`} /><small><span className={`meter-bullet meter-bullet-${meterTone}`} style={{ background: meterColor }} aria-hidden="true" />{number(segment.utilization_percent)}% utilizado</small></div> : <p className="muted">Capacidad DHCP no informada</p>}
         <div className="segment-description"><Building2 size={21} aria-hidden="true" /><p>{segment.description || `Pool de direcciones de la interfaz ${segment.interface}. Consulta los equipos asociados a este segmento.`}</p></div>
         <Button variant={isSelected ? 'secondary' : 'primary'} className={`w-full ${isSelected ? 'is-selected' : ''}`} icon={Server} aria-expanded={isSelected} onClick={() => { const key = segmentKey(segment); if (activeSegmentKey === key) { setActiveSegmentKey(null); } else { setActiveSegmentKey(key); setTimeout(() => { devicesPanelRef.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' }); }, 60); } }}>{isSelected ? 'Ocultar dispositivos' : 'Ver dispositivos'} {isSelected ? <ChevronDown size={17} /> : <ArrowRight size={17} />}</Button>
       </article>; })}</div>{!visibleSegments.length && <Empty title="Sin segmentos principales" action={<Button icon={Plus} onClick={editSegments}>Elegir principales</Button>}>Agrega los segmentos que quieres ver en tu dashboard.</Empty>}</> : <div className="panel">{loading ? <Loading label="Consultando segmentos de red…" /> : <Empty title="Sin segmentos disponibles">{loading ? 'Espera mientras se consulta la capacidad DHCP.' : 'La conexión con el servicio DHCP no devolvió segmentos. Puedes revisar el inventario IP o actualizar la consulta.'}</Empty>}</div>}
@@ -486,6 +487,14 @@ export function Requests({ demo, data }) {
           </span>
         );
       }
+    },
+    {
+      key: 'activityAssessment',
+      label: 'Actividad por cotejo',
+      sortable: false,
+      render: row => <span className={`badge ${row.activityAssessment?.status === 'inactive' ? 'badge-warning' : 'badge-neutral'}`} title={row.activityAssessment?.reason || 'Actualiza la información para cotejar las fuentes.'}>
+        {{ inactive: 'Inactiva por cotejo', observed: 'Detectada en Forti', authenticated: 'Con autenticación', unknown: 'Sin verificar' }[row.activityAssessment?.status] || 'Sin verificar'}
+      </span>
     },
     {
       key: 'devices',

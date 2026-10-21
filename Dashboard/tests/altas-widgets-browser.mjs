@@ -38,7 +38,7 @@ try {
     const initialReads = reads;
     await page.getByRole('button', { name: 'Filtrar Total temporales', exact: true }).click();
     await expect(table.locator('tbody tr')).toHaveCount(3);
-    await page.getByRole('button', { name: 'Filtrar Dispositivos Android', exact: true }).click();
+    await page.getByRole('button', { name: 'Filtrar Android', exact: true }).click();
     await expect(table.locator('tbody tr')).toHaveCount(1);
     await expect(table.locator('tbody')).toContainText('ana.temporal');
     await page.getByRole('button', { name: 'Quitar filtro', exact: true }).click();
@@ -55,21 +55,16 @@ try {
     if (width > 1000 && fullWidth < compactWidth * 2.8) throw new Error('El ancho de la lista no respeta la selección');
     await listWidth.selectOption('4');
 
-    await expect(page.locator('.widget-catalog > article')).toHaveCount(30);
-    await page.getByRole('button', { name: 'Agregar Dispositivos macOS', exact: true }).click();
+    await expect(page.locator('.widget-catalog > article')).toHaveCount(23);
     await page.getByRole('button', { name: 'Agregar Dispositivos sin cuenta', exact: true }).click();
-    await page.getByRole('button', { name: 'Agregar Dispositivos Linux', exact: true }).click();
     await page.getByRole('button', { name: 'Guardar diseño', exact: true }).click();
     await expect(page.locator('[data-widget="altas-unassociated"] .altas-widget-value > strong')).toHaveText('—');
-    await page.getByRole('button', { name: 'Filtrar Dispositivos macOS', exact: true }).click();
+    await page.getByRole('button', { name: 'Filtrar macOS', exact: true }).click();
     await expect(table.locator('tbody tr')).toHaveCount(1);
     await expect(table.locator('tbody')).toContainText('bruno.temporal');
-    await page.getByRole('button', { name: 'Filtrar Dispositivos Linux', exact: true }).click();
-    await expect(table.locator('tbody tr')).toHaveCount(0);
-    await expect(table.getByText('No hay cuentas que coincidan con el indicador seleccionado.', { exact: true })).toBeVisible();
     await page.reload();
-    await expect(page.locator('[data-widget="altas-macos"]')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Usuarios próximos a dar de baja (1)', exact: true })).toBeVisible();
+    await expect(page.locator('[data-widget="altas-platforms"]')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Usuarios próximos a dar de baja \(\d+\)$/, exact: true })).toBeVisible();
     await expect(table.locator('tbody tr')).toHaveCount(4);
     await page.waitForLoadState('networkidle');
     await page.clock.fastForward(1000);
@@ -79,7 +74,7 @@ try {
     await expect(table.locator('tbody tr')).toHaveCount(4);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'No page overflow');
     assert.deepEqual(errors, []);
-    console.log(`PASS ${width}px: 30 widgets, counts, filters, customization persistence, partial data and no polling`);
+    console.log(`PASS ${width}px: 23 widgets, counts, filters, customization persistence, partial data and no polling`);
     await page.close();
   }
 } finally { await browser.close(); }

@@ -4,14 +4,16 @@ import { DashboardWidgets, WidgetCard } from './dashboard-widgets.jsx';
 import { Notice } from './components.jsx';
 import { number } from './domain.mjs';
 import { useSession } from './session.jsx';
-import { ALTAS_WIDGET_CATALOG, ALTAS_DEFAULT_LAYOUT, PLATFORM_LABELS, buildAltasAnalytics } from './altas-analytics.mjs';
+import { ALTAS_WIDGET_CATALOG, ALTAS_DEFAULT_LAYOUT, PLATFORM_LABELS, buildAltasAnalytics, migrateAltasWidgetLayout } from './altas-analytics.mjs';
 
-const LIST_KINDS = new Set(['ranking', 'platforms', 'types', 'departments', 'profiles']);
+const LIST_KINDS = new Set(['ranking', 'platforms', 'types', 'departments', 'profiles', 'statuses']);
 const widgetGroup = widget => LIST_KINDS.has(widget.kind) ? 'Listas de gestión de altas' : 'Indicadores de gestión de altas';
 
 const TYPE_LABELS = { mobile: 'Móviles y tabletas', computers: 'Computadoras', printers: 'Impresoras', other: 'Otros / no identificados' };
 
 function widgetTone(widget, stats) {
+  if (widget.metric === 'inactive-by-crosscheck') return 'brand';
+  if (widget.metric === 'activity-unverified') return 'slate';
   if (widget.metric === 'expired') return stats.counts.expired > 0 ? 'danger' : 'success';
   if (widget.metric === 'expiring24') return stats.counts.expiring24 > 0 ? 'orange' : 'success';
   if (['expiring7', 'no-expiry'].includes(widget.metric)) return stats.counts[widget.metric] > 0 ? 'amber' : 'success';
@@ -24,7 +26,7 @@ const METRIC_ICONS = {
   accounts: Users, temporary: CalendarClock, oficios: FileText, valid: CalendarCheck2,
   expiring24: CalendarClock, expiring7: CalendarDays, expired: CalendarX2,
   'no-expiry': CalendarSearch, 'non-temporary': ShieldCheck,
-  active: UserRoundCheck, inactive: UserRoundX, 'unknown-status': UserRoundSearch,
+  active: UserRoundCheck, inactive: UserRoundX, 'inactive-by-crosscheck': UserRoundMinus, 'activity-unverified': ShieldQuestion, 'unknown-status': UserRoundSearch,
   'with-devices': Link2, 'without-devices': UserRoundMinus,
   'multiple-devices': UsersRound, 'five-devices': Network,
 };
@@ -39,6 +41,9 @@ function catalogWidgetIcon(widget) {
     : KIND_ICONS[widget.kind] || Users;
 }
 function catalogWidgetTone(widget) {
+  if (widget.kind === 'statuses') return 'purple';
+  if (['multiple-devices', 'with-devices', 'without-devices'].includes(widget.metric)) return 'blue';
+  if (widget.metric === 'activity-unverified') return 'slate';
   if (widget.kind === 'ranking') return 'amber';
   if (['platform', 'platforms'].includes(widget.kind)) return 'blue';
   if (widget.kind === 'profiles') return 'purple';
@@ -62,6 +67,7 @@ function AnalyticsCard({ widget, stats, sources, loading, error, onFilter, onRef
   if (widget.kind === 'recent') { value = stats.recent; filter = { id: 'recent', label: widget.title }; }
   if (widget.kind === 'ranking') rows = stats.ranking.slice(0, 8).map(user => ({ label: user.username, detail: user.fullName, count: user.count, filter: { id: 'username', value: user.username, label: `Cuenta ${user.username}` } }));
   if (widget.kind === 'platforms') rows = Object.entries(stats.platforms).filter(([, count]) => count > 0).map(([key, count]) => ({ label: PLATFORM_LABELS[key], count, filter: { id: 'platform', value: key, label: `Dispositivos ${PLATFORM_LABELS[key]}` } }));
+  if (widget.kind === 'statuses') rows = [['active', 'Activas'], ['inactive', 'Inactivas'], ['unknown-status', 'Sin estado informado']].map(([id, label]) => ({ label, count: stats.counts[id], filter: { id, label } }));
   if (widget.kind === 'types') rows = Object.entries(stats.types).filter(([, count]) => count > 0).map(([key, count]) => ({ label: TYPE_LABELS[key], count, filter: { id: 'type', value: key, label: TYPE_LABELS[key] } }));
   if (['departments', 'profiles'].includes(widget.kind)) rows = stats[widget.kind].slice(0, 8).map(([key, count]) => ({ label: key || (widget.kind === 'departments' ? 'Sin departamento' : 'Sin perfil'), count, filter: { id: widget.kind === 'departments' ? 'department' : 'accessRoleProfile', value: key, label: key || (widget.kind === 'departments' ? 'Sin departamento' : 'Sin perfil') } }));
   const max = Math.max(1, ...(rows || []).map(row => row.count));
@@ -70,7 +76,7 @@ function AnalyticsCard({ widget, stats, sources, loading, error, onFilter, onRef
     {loading ? <p className="widget-empty">Cargando…</p> : error ? <p className="widget-empty">Consulta no disponible.</p> : rows.length ? <div className="altas-compact-scroll" tabIndex={0} role="region" aria-label={`Listado de ${widget.title}`}><ol>
       {rows.map((row, index) => {
         const RowIcon = widget.kind === 'platforms' ? PLATFORM_ICONS[row.filter.value] || Monitor : widget.kind === 'types' ? MonitorSmartphone : widget.kind === 'departments' ? Building2 : ShieldCheck;
-        return <li key={row.filter.value}><button type="button" disabled={!onFilter} onClick={() => onFilter?.(row.filter)} aria-label={`Filtrar ${row.label}`} title={[row.label, row.detail].filter(Boolean).join(' · ')}>
+        return <li key={row.filter.value || row.filter.id}><button type="button" disabled={!onFilter} onClick={() => onFilter?.(row.filter)} aria-label={`Filtrar ${row.label}`} title={[row.label, row.detail].filter(Boolean).join(' · ')}>
         <span className="altas-row-label">{widget.kind === 'ranking' ? <em className={`altas-rank rank-${index + 1}`}>{String(index + 1).padStart(2, '0')}</em> : <span className="altas-row-symbol"><RowIcon size={15} aria-hidden="true" /></span>}<strong>{row.label}</strong></span><span className="altas-compact-quantity"><i aria-hidden="true"><em style={{ width: `${row.count / max * 100}%` }} /></i><b>{number(row.count)}</b></span>
       </button></li>; })}
     </ol></div> : <p className="widget-empty">Sin datos disponibles.</p>}
@@ -90,7 +96,7 @@ export function AltasWidgets({ users, sources = {}, now, demo, loading, error, o
   const defaultLayout = ALTAS_DEFAULT_LAYOUT.filter(widget => allowed.has(widget.id));
   return <section className="altas-analytics" aria-label="Indicadores de gestión de altas">
     {(sources.users?.complete === false || sources.company_properties?.complete === false) && <Notice title="Consulta parcial" tone="warning">Los indicadores se calculan con los registros recibidos. Los dispositivos sin cuenta solo se muestran cuando la consulta de terminales está completa.</Notice>}
-    <DashboardWidgets groupBy={widgetGroup} catalog={catalog} catalogTone={catalogWidgetTone} catalogIcon={catalogWidgetIcon} defaultLayout={defaultLayout} storagePrefix="sgrs:altas-widgets:v1" title="Indicadores de gestión de altas" personalizeLabel="Personalizar indicadores" demo={demo} userId={`${session.user?.id}:${session.user?.role}`}>
+    <DashboardWidgets migrateLayout={migrateAltasWidgetLayout} groupBy={widgetGroup} catalog={catalog} catalogTone={catalogWidgetTone} catalogIcon={catalogWidgetIcon} defaultLayout={defaultLayout} storagePrefix="sgrs:altas-widgets:v1" title="Indicadores de gestión de altas" personalizeLabel="Personalizar indicadores" demo={demo} userId={`${session.user?.id}:${session.user?.role}`}>
       {catalog.map(widget => <AnalyticsCard key={widget.id} data-widget-id={widget.id} widget={widget} stats={stats} sources={sources} loading={loading} error={error} onFilter={onFilter} onRefresh={onRefresh} updatedAt={updatedAt} demo={demo} />)}
     </DashboardWidgets>
   </section>;

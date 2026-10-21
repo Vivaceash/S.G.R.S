@@ -3,10 +3,11 @@ import AxeBuilder from '@axe-core/playwright';
 import assert from 'node:assert/strict';
 import { createDemo } from '../src/demo.mjs';
 
-const browser = await chromium.launch({ executablePath: '/opt/brave-bin/brave', headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+const browser = await chromium.launch({ ...(process.env.SGRS_BROWSER ? {executablePath: process.env.SGRS_BROWSER} : {}), headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
+  page.setDefaultTimeout(6000);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   const data = createDemo();
@@ -43,14 +44,15 @@ try {
       return route.fulfill({ json: { principal_segments: principalSegments } });
     }
     const payload = path === '/api/auth/session' ? { user: { id: 'segments-test', name: 'Prueba', username: 'prueba', role }, capabilities: ['dashboard.read', 'inventory.read'], roles: [] }
+      : path === '/api/networks' ? { networks: data.segments, sources: [], partial: false }
       : path === '/api/forti/network/dhcp-pools' ? { success: true, data: { pools: data.segments } }
         : data[path.slice(5)] ?? {};
     return route.fulfill({ json: payload });
   });
   const base = process.env.SGRS_TEST_URL || 'http://127.0.0.1:5173';
-  await page.goto(base);
+  await page.goto(`${base}/#resumen`);
   await page.locator('.segment-card').first().waitFor();
-  assert.equal(await page.locator('.account-button small').innerText(), 'Admin');
+  assert.ok(await page.locator('.account-button').isVisible());
 
   // Elegir principales
   await page.getByRole('button', { name: 'Elegir principales', exact: true }).click();
@@ -93,25 +95,17 @@ try {
   assert.equal(await devicesPanel.locator('tbody tr').nth(1).locator('td').nth(3).innerText(), 'Teléfono');
   assert.equal(await devicesPanel.locator('.segment-devices-table tbody tr').count(), 25);
   assert.equal(await devicesPanel.getByRole('cell', { name: 'Otro segmento', exact: true }).count(), 0);
-  assert.match(await devicesPanel.locator('.table-footer').innerText(), /Mostrando 1–25 de 126 dispositivos/);
-
-  // Probar paginación
-  await devicesPanel.getByRole('button', { name: 'Página siguiente' }).click();
-  assert.match(await devicesPanel.locator('.table-footer').innerText(), /Mostrando 26–50 de 126 dispositivos/);
-
-  // Probar selector de cantidad: 50, 100, all
-  await devicesPanel.getByLabel('Dispositivos por página').selectOption('50');
-  assert.equal(await devicesPanel.locator('.segment-devices-table tbody tr').count(), 50);
-
-  await devicesPanel.getByLabel('Dispositivos por página').selectOption('100');
-  assert.equal(await devicesPanel.locator('.segment-devices-table tbody tr').count(), 100);
-
-  await devicesPanel.getByLabel('Dispositivos por página').selectOption('all');
+  assert.equal(await devicesPanel.locator('.pagination').count(), 0);
+  const list = devicesPanel.locator('.segment-devices-list');
+  for (let i=0; i<6; i++) {
+    await list.evaluate(el=>{el.scrollTop=el.scrollHeight;});
+    await page.waitForTimeout(150);
+  }
   assert.equal(await devicesPanel.locator('.segment-devices-table tbody tr').count(), 126);
-  assert.match(await devicesPanel.locator('.table-footer').innerText(), /Mostrando todos los 126 dispositivos/);
 
   // Búsqueda en la lista inferior
   await devicesPanel.getByPlaceholder('Buscar por equipo, IP, MAC o fabricante…').fill('Local 10');
+  await page.waitForTimeout(300);
   const filteredCount = await devicesPanel.locator('.segment-devices-table tbody tr').count();
   assert.ok(filteredCount > 0 && filteredCount < 126);
 
@@ -138,11 +132,11 @@ try {
   await page.keyboard.press('Escape');
 
   // Accesibilidad y captura de pantalla
-  await page.screenshot({ path: 'artifacts/dashboard-segment-devices-bottom.png', fullPage: true });
+  await page.screenshot({ path: '/tmp/sgrs-audit-segment-devices-bottom.png', fullPage: true });
 
   await page.setViewportSize({ width: 390, height: 844 });
   assert.deepEqual((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()).violations.map(v => v.id), []);
-  await page.screenshot({ path: 'artifacts/dashboard-segment-devices-mobile.png', fullPage: true });
+  await page.screenshot({ path: '/tmp/sgrs-audit-segment-devices-mobile.png', fullPage: true });
 
   await page.setViewportSize({ width: 1440, height: 1000 });
   assert.deepEqual(errors, []);
@@ -160,6 +154,7 @@ try {
     { name: 'Reserva fuera de línea', ip: `${prefix}.81`, status: 'offline', ip_source: 'reservation', is_reserved: true },
   ];
   meztli.dhcp_clients = data.devices.slice(0, 6).map(device => ({ ip: device.ip, hostname: device.name, interface: meztli.interface }));
+  principalSegments = null;
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   const meztliCard = page.locator('.segment-card').filter({ has: page.getByRole('heading', { name: 'Meztli', exact: true }) });

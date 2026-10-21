@@ -6,15 +6,18 @@ const browser = await chromium.launch({ ...(process.env.SGRS_BROWSER ? { executa
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
+  await page.clock.install();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   const data = createDemo();
+  data.segments.push({ id: 'omni:profile:__SSID-Mixcoatl', name: 'Mixcoatl', interface: 'Mixcoatl', kind: 'access_profile',
+    capacity: null, active_leases: null, available_ips: null, utilization_percent: null, status: 'unknown' });
 
   let role = 'super-admin';
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
     const payload = path === '/api/auth/session' ? { user: { id: 'test-user', name: 'Israel Garcia', username: 'vivaceash', role }, capabilities: ['dashboard.read', 'inventory.read', 'inventory.write', 'traffic.read'], roles: [] }
-      : path === '/api/forti/network/dhcp-pools' ? { success: true, data: { pools: data.segments } }
+      : path === '/api/networks' ? { networks: data.segments, sources: [], partial: false }
       : data[path.slice(5)] ?? {};
     return route.fulfill({ json: payload });
   });
@@ -46,21 +49,21 @@ try {
 
   // 3. Tarjetas de red con desglose y verificación de 5 redes autorizadas
   const colBadge = await page.locator('.support-column-badge').first().textContent();
-  assert.equal(colBadge.trim(), '5', 'La insignia de columna 1 debe indicar 5 redes');
+  assert.equal(Number(colBadge.trim()), data.segments.length, 'Todas las redes recibidas deben aparecer');
 
   const networkCards = page.locator('.support-network-card');
-  assert.equal(await networkCards.count(), 5, 'Deben renderizarse exactamente las 5 redes de soporte autorizadas');
+  assert.equal(await networkCards.count(), data.segments.length, 'Sin lista fija de nombres');
 
   const networkColText = await page.locator('.support-column').first().textContent();
   for (const name of ['Quetzalcóatl', 'Tonatiuh', 'Ehécatl', 'Tláloc', 'Meztli']) {
     assert.ok(networkColText.includes(name), `Red ${name} debe estar visible en el panel de soporte`);
   }
-  assert.equal(networkColText.includes('CCTV'), false, 'Red CCTV no debe renderizarse en el panel de soporte');
+  assert.ok(networkColText.includes('CCTV') && networkColText.includes('Mixcoatl'), 'Redes nuevas y estáticas deben aparecer');
 
-  const breakdownCount = await page.locator('.support-network-breakdown').count();
-  assert.equal(breakdownCount, 5, 'Las 5 tarjetas de red deben incluir desglose explícito');
+  const breakdownCount = await page.locator('.support-network-stats-grid').count();
+  assert.equal(breakdownCount, data.segments.length, 'Cada red incluye desglose o valores no informados');
 
-  const firstBreakdownText = await page.locator('.support-network-breakdown').first().textContent();
+  const firstBreakdownText = await page.locator('.support-network-stats-grid').first().textContent();
   console.log('First network breakdown text:', firstBreakdownText);
   assert.ok(firstBreakdownText.includes('IPs Ocupadas'), 'Desglose debe mostrar IPs Ocupadas');
   assert.ok(firstBreakdownText.includes('IPs Libres'), 'Desglose debe mostrar IPs Libres');
@@ -102,8 +105,10 @@ try {
   // Restablecer búsqueda
   await networkSearchInput.fill('');
   await page.waitForTimeout(100);
-  assert.equal(await networkCards.count(), 5, 'Limpiar búsqueda restablece las 5 redes');
-
+  assert.equal(await networkCards.count(), data.segments.length, 'Limpiar búsqueda restablece todas las redes');
+  const mixcoatl = networkCards.filter({ hasText: 'Mixcoatl' });
+  assert.ok((await mixcoatl.textContent()).includes('Capacidad DHCP no informada'));
+  assert.equal(await mixcoatl.locator('meter').count(), 0);
   // 4. Botón y Diálogo de exportación Excel con checkboxes
   const exportBtn = page.locator('.support-export-action');
   assert.equal(await exportBtn.isVisible(), true, 'Botón de exportar Excel debe ser visible');

@@ -84,20 +84,20 @@ async def get_dhcp_pools(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-9
     y las direcciones IP libres disponibles en tiempo real.
     """
     # 1. Obtener configuración de DHCP Servers en CMDB
-    servers_raw = await fortios_client.request("GET", "api/v2/cmdb/system.dhcp/server", params={"vdom": vdom or "root"})
+    servers_raw = await fortios_client.request("GET", "api/v2/cmdb/system.dhcp/server", vdom=vdom)
     servers = servers_raw.get("results", [])
     if isinstance(servers, dict):
         servers = servers.get("servers", [])
-    elif not isinstance(servers, list):
-        servers = []
+    if not isinstance(servers, list) or any(not isinstance(row, dict) for row in servers) or servers_raw.get('limit_reached') is True:
+        raise HTTPException(502, 'FortiGate no entregó una colección completa de servidores DHCP.')
 
     # 2. Obtener concesiones activas
     leases_raw = await fortios_client.get_dhcp_leases(vdom=vdom)
     leases = leases_raw.get("results", [])
     if isinstance(leases, dict):
         leases = leases.get("leases", [])
-    elif not isinstance(leases, list):
-        leases = []
+    if not isinstance(leases, list) or any(not isinstance(row, dict) for row in leases):
+        raise HTTPException(502, 'FortiGate no entregó concesiones DHCP válidas.')
 
     leases_by_intf: Dict[str, int] = {}
     for l in leases:
@@ -212,8 +212,8 @@ async def get_dhcp_leases(vdom: Optional[str] = Query(None, pattern=r"^[a-zA-Z0-
     """
     raw, servers_raw, addresses_raw, latest_devices_raw = await asyncio.gather(
         fortios_client.get_dhcp_leases(vdom=vdom),
-        fortios_client.request("GET", "api/v2/cmdb/system.dhcp/server", params={"vdom": vdom or "root"}),
-        fortios_client.request("GET", "api/v2/cmdb/firewall/address", params={"vdom": vdom or "root"}),
+        fortios_client.request("GET", "api/v2/cmdb/system.dhcp/server", vdom=vdom),
+        fortios_client.request("GET", "api/v2/cmdb/firewall/address", vdom=vdom),
         fortios_client.get_connected_devices(params={"query_type": "unified_latest", "count": 5000}, vdom=vdom),
     )
     results = raw.get("results", [])

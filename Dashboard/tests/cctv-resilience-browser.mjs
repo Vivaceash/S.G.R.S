@@ -6,6 +6,7 @@ const base = process.env.SGRS_TEST_URL || 'http://localhost:3000';
 const browser = await chromium.launch({ ...(process.env.SGRS_BROWSER ? { executablePath: process.env.SGRS_BROWSER } : {}) });
 try {
   const page = await browser.newPage();
+  await page.clock.install();
   const fixture = createDemo();
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   let mode = 'valid', conflict = false, posts = 0, catalogReads = 0;
@@ -41,8 +42,9 @@ try {
       catalog.assets = catalog.assets.map(a => a.id === asset.id ? asset : a);
       return route.fulfill({ json: { asset } });
     }
-    return route.fulfill({ json: path.endsWith('dhcp-pools') ? { success: true, data: { pools: fixture.segments } } : fixture[path.slice(5)] ?? {} });
+    return route.fulfill({ json: path === '/api/networks' ? { networks: fixture.segments, sources: [], partial: false } : fixture[path.slice(5)] ?? {} });
   });
+  const clearStoredCatalog = () => page.evaluate(() => { for (const key of Object.keys(sessionStorage)) if (key.startsWith('sgrs:inventory-cache:')) sessionStorage.removeItem(key); });
   const main = page.locator('#main-content');
   const updated = () => main.getByRole('cell', { name: 'Cámara actualizada', exact: true });
   await page.goto(`${base}/?documentos-cctv.filter.dataset=invalid#cctv`);
@@ -50,6 +52,7 @@ try {
   assert.equal(await main.locator('table tbody tr').count(), 2, 'invalid URL filter must not hide valid CCTV');
   await main.getByRole('searchbox').fill('SERIE-2');
   await main.getByRole('cell', { name: 'Segunda cámara', exact: true }).waitFor();
+  await main.locator('table tbody tr').nth(1).waitFor({ state: 'hidden' });
   assert.equal(await main.locator('table tbody tr').count(), 1);
   await main.getByRole('searchbox').fill('');
   await main.getByRole('tab', { name: /Originales/ }).click();
@@ -62,6 +65,7 @@ try {
 
   for (const failure of ['malformed', 'offline', 'credentials']) {
     mode = failure;
+    await clearStoredCatalog();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await main.getByRole('heading', { name: 'No se pudo cargar la información', exact: true }).waitFor();
     assert.equal(await main.locator('.loading-state').count(), 0);
@@ -76,6 +80,7 @@ try {
   assert.equal(await main.getByRole('button', { name: 'Actualizar catálogo', exact: true }).count(), 0);
   // A response from an abandoned module must not replace the current catalogue.
   mode = 'slow';
+  await clearStoredCatalog();
   const staleRead = page.waitForRequest(r => r.url().includes('/api/inventory/catalog'));
   await page.reload({ waitUntil: 'domcontentloaded' });
   await staleRead;
@@ -83,7 +88,6 @@ try {
   await main.getByRole('heading', { name: 'Inventario CCTV', exact: true }).waitFor({ state: 'hidden' });
   mode = 'valid';
   await page.evaluate(() => { location.hash = 'cctv'; });
-  await updated().waitFor();
   await releaseSlow();
   await updated().waitFor();
 
@@ -102,11 +106,13 @@ try {
   conflict = false;
   await detail.getByRole('button', { name: 'Guardar corrección', exact: true }).click();
   await main.getByRole('cell', { name: 'Ubicación corregida', exact: true }).waitFor();
+  const readsBeforeReload = catalogReads;
   await page.reload({ waitUntil: 'domcontentloaded' });
   await main.getByRole('cell', { name: 'Ubicación corregida', exact: true }).waitFor();
+  assert.equal(catalogReads, readsBeforeReload, 'la corrección confirmada debe persistir en la caché del navegador');
 
-  await page.clock.install();
   mode = 'hang';
+  await clearStoredCatalog();
   const reads = catalogReads;
   const pendingRequest = page.waitForRequest(r => r.url().includes('/api/inventory/catalog'));
   await page.reload({ waitUntil: 'domcontentloaded' });

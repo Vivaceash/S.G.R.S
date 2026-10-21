@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { csvCell, makeCsv, paginate, selectRows, inventoryFromIdfs, reportsFromData, roleLabel, AVAILABLE_PAGES, ROLE_PAGE_DEFAULTS, formatDeviceType, BASE_ROLE_CATALOG, getEffectiveRoles, formatUptime, getSaturationStatus, getSaturationLabel, makeExcelWorkbook, SUPPORT_EXPORT_COLUMNS, SUPPORT_NETWORK_EXPORT_COLUMNS, buildSupportSheets, escapeXml, sanitizeWorksheetName, EXCEL_MIME_TYPE, SUPPORT_ALLOWED_NETWORKS, isSupportSegment, getSupportSegments, normalizeText, usersForDemo, projectUsersForActor, getCardRoles, getUserFilterRoles, countUsersForRoleCard, canViewPageId } from '../src/domain.mjs';
+import { csvCell, makeCsv, paginate, selectRows, inventoryFromIdfs, reportsFromData, roleLabel, AVAILABLE_PAGES, ROLE_PAGE_DEFAULTS, formatDeviceType, BASE_ROLE_CATALOG, getEffectiveRoles, formatUptime, getSaturationStatus, getSaturationLabel, makeExcelWorkbook, SUPPORT_EXPORT_COLUMNS, SUPPORT_NETWORK_EXPORT_COLUMNS, buildSupportSheets, escapeXml, sanitizeWorksheetName, EXCEL_MIME_TYPE, isSupportSegment, getSupportSegments, normalizeText, usersForDemo, projectUsersForActor, getCardRoles, getUserFilterRoles, countUsersForRoleCard, canViewPageId } from '../src/domain.mjs';
 import { createDemo } from '../src/demo.mjs';
 
 test('Incidencias sin ID conservan su identidad y la resolución sustituye solo su origen', () => {
@@ -651,103 +651,25 @@ test('makeCsv genera exportación de soporte alineada a las 8 columnas requerida
   assert.ok(!csv.includes('FortiGate de Procedencia'));
 });
 
-test('SUPPORT_ALLOWED_NETWORKS exporta los 5 identificadores autorizados para soporte', () => {
-  assert.deepEqual(SUPPORT_ALLOWED_NETWORKS, ['meztli', 'tona', 'tlalo', 'quetzal', 'ehecatl']);
-});
-
-test('isSupportSegment acepta las 5 redes autorizadas con y sin acentos, interfaces y VLANs', () => {
-  // Variantes solicitadas explícitamente en el requerimiento
-  assert.equal(isSupportSegment({ name: 'Quetzalcóatl' }), true);
-  assert.equal(isSupportSegment({ interface: 'SSID-Quetzacoatl' }), true);
-  assert.equal(isSupportSegment({ name: 'Tonatiuh' }), true);
-  assert.equal(isSupportSegment({ interface: 'SSID-Tonatiuh' }), true);
-  assert.equal(isSupportSegment({ name: 'Tláloc' }), true);
-  assert.equal(isSupportSegment({ interface: 'SSID-Tlaloc' }), true);
-  assert.equal(isSupportSegment({ name: 'Ehécatl' }), true);
-  assert.equal(isSupportSegment({ interface: 'SSID-Ehecatl' }), true);
-  assert.equal(isSupportSegment({ name: 'Meztli' }), true);
-  assert.equal(isSupportSegment({ interface: 'SSID-Meztli' }), true);
-
-  // Insensibilidad a mayúsculas/minúsculas y acentos
-  assert.equal(isSupportSegment({ name: 'quetzalcoatl' }), true);
-  assert.equal(isSupportSegment({ name: 'QUETZALCÓATL' }), true);
-  assert.equal(isSupportSegment({ interface: 'ssid-tonatiuh' }), true);
-  assert.equal(isSupportSegment({ name: 'TONATIUH' }), true);
-  assert.equal(isSupportSegment({ name: 'tlaloc' }), true);
-  assert.equal(isSupportSegment({ name: 'TLÁLOC' }), true);
-  assert.equal(isSupportSegment({ name: 'ehecatl' }), true);
-  assert.equal(isSupportSegment({ name: 'EHÉCATL' }), true);
-  assert.equal(isSupportSegment({ name: 'meztli' }), true);
-  assert.equal(isSupportSegment({ name: 'MEZTLI' }), true);
-
-  // Búsqueda en description y en VLAN
-  assert.equal(isSupportSegment({ description: 'Red WiFi Meztli piso 2' }), true);
-  assert.equal(isSupportSegment({ description: 'Cobertura SSID Tonatiuh hospitalización' }), true);
-  assert.equal(isSupportSegment({ vlan: 'VLAN 90' }), true);
-  assert.equal(isSupportSegment({ vlan: 'VLAN 91' }), true);
-  assert.equal(isSupportSegment({ vlan: 'VLAN 92' }), true);
-  assert.equal(isSupportSegment({ vlan: 'VLAN 93' }), true);
-  assert.equal(isSupportSegment({ vlan: 'VLAN 94' }), true);
-  assert.equal(isSupportSegment({ vlan: 94 }), true);
-});
-
-test('isSupportSegment rechaza redes no permitidas y casos nulos o vacíos', () => {
-  // Redes que deben quedar expresamente excluidas
-  assert.equal(isSupportSegment({ name: 'CCTV' }), false);
-  assert.equal(isSupportSegment({ name: 'Administración' }), false);
-  assert.equal(isSupportSegment({ name: 'Huitzilopo' }), false);
-  assert.equal(isSupportSegment({ name: 'VLAN-Servidores' }), false);
-  assert.equal(isSupportSegment({ name: 'Invitados' }), false);
-  assert.equal(isSupportSegment({ name: 'DMZ Forti' }), false);
-  assert.equal(isSupportSegment({ vlan: 'VLAN 80' }), false);
-  assert.equal(isSupportSegment({ description: 'Red administrativa general' }), false);
-
-  // Casos nulos, indefinidos y tipos no válidos
-  assert.equal(isSupportSegment(null), false);
-  assert.equal(isSupportSegment(undefined), false);
-  assert.equal(isSupportSegment({}), false);
-  assert.equal(isSupportSegment('cadena'), false);
-  assert.equal(isSupportSegment(123), false);
-});
-
-test('getSupportSegments filtra exclusivamente las redes de soporte en listas mixtas y datos demo', () => {
-  const mixedSegments = [
-    { id: 1, name: 'CCTV', vlan: 'VLAN 80' },
-    { id: 2, name: 'Quetzalcóatl', vlan: 'VLAN 90' },
-    { id: 3, name: 'Administración', vlan: 'VLAN 100' },
-    { id: 4, name: 'Tonatiuh', vlan: 'VLAN 93' },
-    { id: 5, name: 'Huitzilopo', vlan: 'VLAN 85' },
-    { id: 6, name: 'Ehécatl', vlan: 'VLAN 92' },
-    { id: 7, name: 'VLAN-Servidores', vlan: 'VLAN 70' },
-    { id: 8, name: 'Tláloc', vlan: 'VLAN 91' },
-    { id: 9, name: 'Meztli', vlan: 'VLAN 94' },
-    { id: 10, name: 'Red Biomédica', vlan: 'VLAN 65' },
+test('support discovers every published network without a name or VLAN allowlist', () => {
+  const rows = [
+    { name: 'Mixcoatl' }, { interface: 'SSID-Una-Red-Futura' }, { name: 'CCTV', vlan: 110 },
+    { name: 'Laboratorio' }, { vlan: 777 }, { subnet: '10.77.0.0/24' },
   ];
-
-  const supportOnly = getSupportSegments(mixedSegments);
-  assert.equal(supportOnly.length, 5);
-  assert.deepEqual(
-    supportOnly.map(s => s.name),
-    ['Quetzalcóatl', 'Tonatiuh', 'Ehécatl', 'Tláloc', 'Meztli']
-  );
-
-  // Verificación sobre datos de demo de desarrollo y pruebas locales
-  const demoData = createDemo();
-  assert.ok(Array.isArray(demoData.segments));
-  assert.equal(demoData.segments.length, 6, 'Demo debe incluir las 5 redes de soporte más CCTV');
-
-  const demoSupport = getSupportSegments(demoData.segments);
-  assert.equal(demoSupport.length, 5, 'Solo deben pasar las 5 redes de soporte');
-  assert.deepEqual(
-    demoSupport.map(s => s.name),
-    ['Quetzalcóatl', 'Tonatiuh', 'Ehécatl', 'Tláloc', 'Meztli']
-  );
-  assert.ok(!demoSupport.some(s => s.name.includes('CCTV')), 'CCTV debe quedar excluida de soporte');
-
-  // Comportamiento con listas vacías o valores inválidos
-  assert.deepEqual(getSupportSegments([]), []);
+  for (const row of rows) assert.equal(isSupportSegment(row), true);
+  for (const row of [null, undefined, {}, '', 123, []]) assert.equal(isSupportSegment(row), false);
+  assert.deepEqual(getSupportSegments([...rows, null, {}]), rows);
+  assert.deepEqual(getSupportSegments(createDemo().segments), createDemo().segments);
   assert.deepEqual(getSupportSegments(null), []);
-  assert.deepEqual(getSupportSegments(undefined), []);
+});
+
+test('missing DHCP metrics remain unknown in saturation and exports', () => {
+  assert.equal(getSaturationStatus({ capacity: null, utilization_percent: null }), 'unknown');
+  assert.equal(getSaturationLabel('unknown'), 'No informado');
+  const row = { name: 'Mixcoatl', capacity: null, utilization_percent: null, active_leases: null, available_ips: null };
+  for (const key of ['capacity', 'active_leases', 'available_ips', 'utilization']) {
+    assert.equal(SUPPORT_NETWORK_EXPORT_COLUMNS.find(c => c.key === key).value(row), '—');
+  }
 });
 
 test('normalizeText normaliza diacríticos, mayúsculas y variantes fonéticas para búsquedas', () => {

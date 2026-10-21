@@ -34,6 +34,36 @@ def test_vlan_response_matches_declared_catalog():
     assert response.data.vlans[0]["vlanId"] == 10
 
 
+def test_vlan_query_uses_installed_omnivista_route_and_completed_response():
+    service = OmniVistaService()
+    response = Mock(status_code=200)
+    response.json.return_value = {'status': 'SUCCESS', 'response': {
+        'status': 'SUCCESS', 'finalResponse': True,
+        'data': [{'number': 110, 'description': 'CCTV', 'type': 'standard'},
+                 {'number': 707, 'description': ''}],
+    }}
+    service.request = Mock(return_value=response)
+    result = service.get_vlans()
+    service.request.assert_called_once_with('GET', '/api/vlanservice/vlans/view', timeout=10, allow_redirects=False)
+    assert [(row['vlanId'], row['vlanName']) for row in result] == [(110, 'CCTV'), (707, 'VLAN 707')]
+    assert result[0]['vlanType'] == 'standard'
+
+
+@pytest.mark.parametrize('change', [
+    {'finalResponse': False}, {'status': 'FAIL'}, {'data': None},
+    {'data': [{'description': 'Sin identificador'}]},
+])
+def test_vlan_query_does_not_publish_failed_incomplete_or_invalid_results(change):
+    service = OmniVistaService()
+    response = Mock(status_code=200)
+    response.json.return_value = {'status': 'SUCCESS', 'response': {
+        'status': 'SUCCESS', 'finalResponse': True, 'data': [], **change,
+    }}
+    service.request = Mock(return_value=response)
+    with pytest.raises(OmniVistaResponseError):
+        service.get_vlans()
+
+
 def test_omnivista_login_is_required_even_with_legacy_provider_key(monkeypatch):
     """La API upstream solo acepta la sesión obtenida con usuario y contraseña."""
     session = Mock()
@@ -158,3 +188,16 @@ def test_second_page_fetches_sufficient_prefix_without_inventing_total(operation
     assert [row[field] for row in result["items"]] == [str(index) for index in range(5, 10)]
     assert result["total"] is None and result["complete"] is False
     assert result["has_more"] is True and result["returned_count"] == 5
+
+
+def test_access_profiles_fetch_new_networks_each_call_and_fail_explicitly():
+    service = OmniVistaService()
+    response = Mock(status_code=200)
+    response.json.return_value = {'response': [{'name': '__SSID-Mixcoatl'}]}
+    service.request = Mock(return_value=response)
+    assert service.get_access_role_profiles() == ['__SSID-Mixcoatl']
+    response.json.return_value['response'].append({'name': '__SSID-NewTomorrow'})
+    assert '__SSID-NewTomorrow' in service.get_access_role_profiles()
+    response.status_code = 503
+    with pytest.raises(OmniVistaResponseError):
+        service.get_access_role_profiles()

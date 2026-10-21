@@ -220,7 +220,7 @@ export function SupportDashboard({ data = {}, openEditor, loading, errors, refre
     const status = getSaturationStatus(s);
     if (status === 'critical') acc.critical++;
     else if (status === 'warning') acc.warning++;
-    else acc.normal++;
+    else if (status === 'normal') acc.normal++;
 
     const cap = Number(s.capacity) || 0;
     const occ = Number(s.active_leases) || 0;
@@ -382,6 +382,7 @@ export function SupportDashboard({ data = {}, openEditor, loading, errors, refre
 
   return (
     <>
+      {data.networksPartial && <Notice title="Consulta de redes incompleta" tone="warning">Una fuente no está disponible. Usa el botón de actualización para volver a consultar.</Notice>}
       <PageHeading
         eyebrow="Atención y diagnóstico técnico"
         title="Dashboard de Soporte"
@@ -396,7 +397,7 @@ export function SupportDashboard({ data = {}, openEditor, loading, errors, refre
             <div className="support-kpi-icon"><Network size={18} aria-hidden="true" /></div>
             <div className="support-kpi-info">
               <span className="support-kpi-count">{number(supportSegments.length)}</span>
-              <span className="support-kpi-label">Redes de soporte</span>
+              <span className="support-kpi-label">Redes y perfiles</span>
             </div>
           </div>
 
@@ -618,7 +619,7 @@ export function SupportDashboard({ data = {}, openEditor, loading, errors, refre
                       const satLabel = getSaturationLabel(satStatus);
                       const meterTone = getUtilizationTone(segment.utilization_percent);
                       const meterColor = getUtilizationColor(segment.utilization_percent);
-                      const freeIps = segment.available_ips ?? Math.max(0, (Number(segment.capacity) || 0) - (Number(segment.active_leases) || 0));
+                      const freeIps = segment.available_ips ?? (segment.capacity != null && segment.active_leases != null ? Math.max(0, Number(segment.capacity) - Number(segment.active_leases)) : null);
 
                       return (
                         <article key={segmentKey(segment)} className="support-item-card support-network-card">
@@ -641,7 +642,7 @@ export function SupportDashboard({ data = {}, openEditor, loading, errors, refre
                           <div className="support-network-stats-grid">
                             <div className="support-stat-cell stat-danger">
                               <span className="support-stat-lbl">IPs Ocupadas</span>
-                              <strong className="support-stat-num text-danger">{number(segment.active_leases || 0)}</strong>
+                              <strong className="support-stat-num text-danger">{number(segment.active_leases)}</strong>
                             </div>
                             <div className="support-stat-cell stat-success">
                               <span className="support-stat-lbl">IPs Libres</span>
@@ -649,7 +650,7 @@ export function SupportDashboard({ data = {}, openEditor, loading, errors, refre
                             </div>
                             <div className="support-stat-cell stat-total">
                               <span className="support-stat-lbl">Capacidad</span>
-                              <strong className="support-stat-num">{number(segment.capacity || 0)}</strong>
+                              <strong className="support-stat-num">{number(segment.capacity)}</strong>
                             </div>
                           </div>
 
@@ -659,12 +660,12 @@ export function SupportDashboard({ data = {}, openEditor, loading, errors, refre
                                 <Router size={13} aria-hidden="true" /> {segment.default_gateway || 'Sin gateway'}
                               </span>
                               <span className={`support-sat-indicator sat-${satStatus}`}>
-                                <strong>{number(segment.utilization_percent)}%</strong> utilizado ({satLabel})
+                                {segment.utilization_percent == null ? 'Capacidad DHCP no informada' : <><strong>{number(segment.utilization_percent)}%</strong> utilizado ({satLabel})</>}
                               </span>
                             </div>
-                            <div className={`capacity-meter capacity-meter-${meterTone}`} style={{ '--meter-fill': meterColor }}>
+                            {segment.utilization_percent != null && <div className={`capacity-meter capacity-meter-${meterTone}`} style={{ '--meter-fill': meterColor }}>
                               <meter min="0" max="100" value={segment.utilization_percent || 0} aria-label={`Utilización de ${segment.name || segment.interface}`} />
-                            </div>
+                            </div>}
                           </div>
                         </article>
                       );

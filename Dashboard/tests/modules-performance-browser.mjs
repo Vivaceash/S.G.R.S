@@ -19,6 +19,7 @@ const base=process.env.SGRS_TEST_URL || 'http://localhost:3000';
 const results = [];
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  page.setDefaultTimeout(6000);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   let apRequests = 0, altasRequests = 0, documentaryRequests = 0, healthFinished = false;
@@ -36,6 +37,7 @@ try {
     else if (path === '/api/altas/omnivista') { altasRequests++; response = { success:true, data:{ users, sources:{} } }; }
     else if (path === '/api/support/movements') response = { movements };
     else if (path === '/api/support/inventory') response = { items:Array.from({length:50},(_,i)=>({id:`stock-${i}`,description:`Tóner ${i}`,quantity:10,unit:'pza'})) };
+    else if (path === '/api/networks') response = { networks: data.segments, sources: [], partial: false };
     else if (path === '/api/forti/network/dhcp-pools') response = { success:true,data:{pools:data.segments} };
     else if (path === '/api/forti/network/dhcp-leases') response = { success:true,data:data.devices.filter((_,i)=>i%8===0).map(d=>({...d,interface:'SSID-Meztli',is_reserved:false})) };
     else if (path === '/api/audit') response = { events: users.slice(0,300).map((u,i)=>({id:i,created_at:Date.now()/1000,action:'session.login',actor_name:u.name,target_label:u.username})) };
@@ -78,11 +80,13 @@ try {
       await main.getByRole('button',{name:/Matriz$/}).click();visited.push('Matriz');
     }
     if(module.id==='dispositivos') {
-      await main.getByLabel('Por página',{exact:true}).selectOption('all');
-      await page.waitForFunction(()=>document.querySelectorAll('#main-content table tbody tr').length===100);
-      await main.getByRole('button',{name:/Mostrar más filas/}).click();
-      assert.equal(await main.locator('table tbody tr').count(),200);
-      await main.getByLabel('Por página',{exact:true}).selectOption('25');
+      const scroll = main.locator('.table-scroll').first();
+      assert.ok(await main.locator('table tbody tr').count() <= 100, 'Device table must keep a bounded DOM window');
+      const first = await main.locator('table tbody tr').first().textContent();
+      await scroll.evaluate(el => { el.scrollTop = el.scrollHeight; });
+      await page.waitForTimeout(300);
+      assert.notEqual(await main.locator('table tbody tr').first().textContent(), first, 'Scrolling must advance the device window');
+      assert.ok(await main.locator('table tbody tr').count() <= 100);
       await main.locator('table tbody tr').first().getByRole('button',{name:'Ver',exact:true}).click();
       assert.ok(await page.locator('dialog[open]').count());await page.keyboard.press('Escape');
     }
@@ -93,7 +97,7 @@ try {
     if(module.id==='soporte'){
       await main.getByRole('tab',{name:'En vivo',exact:true}).click();
       assert.ok(await main.locator('.support-device-card').count()<=50,'Support must not mount 1200 cards');
-      const more=main.getByRole('button',{name:/Mostrar más computadoras/});assert.ok(await more.count());await more.click();
+      const column=main.locator('.support-device-card').first().locator('..'); await column.evaluate(el=>{el.scrollTop=el.scrollHeight;});
     }
     if(module.id==='aps'){
       await main.getByRole('tab',{name:/En vivo/}).click();const before=apRequests;

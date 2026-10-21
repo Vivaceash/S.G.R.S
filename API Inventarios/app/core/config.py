@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     CA_BUNDLE: str | None = None
     TIMEOUT_SECONDS: float = Field(8, ge=1, le=60)
     STALE_SECONDS: int = Field(120, ge=15)
-    REFRESH_SECONDS: int = Field(0, ge=0, description='0 desactiva el cotejo periódico')
+    REFRESH_SECONDS: int = Field(0, ge=0, description='Intervalo de cotejo; 0 deja la actualización bajo demanda')
     RETENTION_DAYS: int = Field(90, ge=1)
 
     @property

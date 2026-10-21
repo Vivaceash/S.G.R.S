@@ -28,3 +28,32 @@ def test_invalid_or_partial_configuration_is_not_empty_success(monkeypatch, payl
     with pytest.raises(HTTPException) as error:
         asyncio.run(get_interface_config('root'))
     assert error.value.status_code == 502
+
+
+def test_dhcp_discovery_uses_client_default_vdom_and_reads_new_servers(monkeypatch):
+    from app.routers.network import get_dhcp_pools
+    servers = [{'id': 70, 'interface': 'SSID-Future', 'status': 'enable',
+                'ip-range': [{'start-ip': '10.77.0.10', 'end-ip': '10.77.0.20'}]}]
+    calls = []
+    async def request(method, path, **kwargs):
+        calls.append(kwargs)
+        return {'results': list(servers), 'vdom': 'campus'}
+    async def leases(**kwargs):
+        return {'results': []}
+    monkeypatch.setattr(fortios_client, 'request', request)
+    monkeypatch.setattr(fortios_client, 'get_dhcp_leases', leases)
+    result = asyncio.run(get_dhcp_pools(None))
+    assert result.data.pools[0].interface == 'SSID-Future'
+    assert calls[0] == {'vdom': None}, 'the client must supply configured VDOM, not hardcoded root'
+    servers.append({'id': 71, 'interface': 'NewTomorrow', 'status': 'enable'})
+    assert asyncio.run(get_dhcp_pools(None)).data.total_pools == 2
+
+
+def test_truncated_dhcp_catalog_is_not_success(monkeypatch):
+    from app.routers.network import get_dhcp_pools
+    async def request(*args, **kwargs):
+        return {'results': [], 'limit_reached': True}
+    monkeypatch.setattr(fortios_client, 'request', request)
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(get_dhcp_pools(None))
+    assert error.value.status_code == 502

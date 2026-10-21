@@ -209,14 +209,14 @@ function AssetForm({ asset, cabinets, onSave, onDirty, onBusy, onCancel }) {
 }
 
 export function DocumentaryInventory({ route, demo, navigate, canWrite, canExport, canViewActivity, mutate, notify, onDirty, openEditor, data }) {
-  const { canViewSubmodule } = useSession();
+  const { canViewSubmodule, inventoryCache } = useSession();
   const apLive = canViewSubmodule('aps', 'live');
   const apDocumentary = canViewSubmodule('aps', 'documentary');
   const apMap = canViewSubmodule('aps', 'map');
   const cctvUpdated = canViewSubmodule('cctv', 'updated');
   const cctvOriginal = canViewSubmodule('cctv', 'original');
-  const [catalog, setCatalog] = useState(emptyCatalog);
-  const [loading, setLoading] = useState(!demo);
+  const [catalog, setCatalog] = useState(() => inventoryCache.peek('catalog')?.value || emptyCatalog());
+  const [loading, setLoading] = useState(!demo && !inventoryCache.peek('catalog'));
   const [error, setError] = useState('');
   const [network, setNetwork] = useState(null);
   const [checking, setChecking] = useState(false);
@@ -227,7 +227,6 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
   const requestRef = useRef(null);
-  const catalogController = useRef(null);
   const cameraWriteLock = useRef(false);
   const [pendingCamera, setPendingCamera] = useState(null);
   const generation = useRef(0);
@@ -239,19 +238,20 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   const [activeTab, setActiveTab] = useState('omnivista');
   const visibleActiveTab = (activeTab === 'omnivista' && apLive) || (activeTab === 'documentary' && apDocumentary) || (activeTab === 'map' && apMap)
     ? activeTab : apLive ? 'omnivista' : apDocumentary ? 'documentary' : 'map';
-  const [omniAps, setOmniAps] = useState([]);
-  const [omniSummary, setOmniSummary] = useState({ total: 0, online: 0, offline: 0, clients: 0 });
+  const [omniAps, setOmniAps] = useState(() => inventoryCache.peek('aps')?.value.aps || []);
+  const [omniSummary, setOmniSummary] = useState(() => inventoryCache.peek('aps')?.value.summary || { total: 0, online: 0, offline: 0, clients: 0 });
   const [omniLoading, setOmniLoading] = useState(false);
   const [omniError, setOmniError] = useState('');
   const [omniRevision, setOmniRevision] = useState(0);
-  const [omniUpdatedAt, setOmniUpdatedAt] = useState(null);
+  const [omniUpdatedAt, setOmniUpdatedAt] = useState(() => inventoryCache.peek('aps')?.updatedAt || null);
   const [selectedAp, setSelectedAp] = useState(null);
-  const [mapPositions, setMapPositions] = useState([]);
+  const [mapPositions, setMapPositions] = useState(() => inventoryCache.peek('map')?.value || []);
   const [mapLoading, setMapLoading] = useState(false);
   const [mapError, setMapError] = useState('');
   const [mapRevision, setMapRevision] = useState(0);
   const omniState = useListState('omnivista-aps');
   const demoAps = demo ? data?.aps : null;
+  const consumedRefresh = useRef({ aps: 0, map: 0, catalog: 0 });
 
   // Compatibilidad con URLs abiertas antes de retirar el estado Warning.
   // Sin esta limpieza, un filtro guardado en la URL dejaría la tabla vacía.
@@ -278,57 +278,54 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
     }
 
     let active = true;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
-    const fetchOmniAps = async () => {
-      setOmniLoading(true);
-      setOmniError('');
-      try {
-        const res = await request('/api/aps/omnivista', { signal: controller.signal });
-        if (!active) return;
-        const aps = res.aps || [];
-        setOmniAps(aps);
-        setOmniSummary(res.summary || {
-          total: aps.length,
-          online: aps.filter(a => a.status !== 'offline').length,
-          offline: aps.filter(a => a.status === 'offline').length,
-          clients: aps.reduce((acc, a) => acc + (a.clients || 0), 0),
-        });
-        setOmniUpdatedAt(new Date().toISOString());
-        setOmniError('');
-      } catch (err) {
-        if (active) {
-          setOmniError(err.name === 'AbortError' ? 'La consulta a OmniVista tardó demasiado.' : err.message);
-        }
-      } finally {
-        clearTimeout(timeout);
-        if (active) setOmniLoading(false);
-      }
-    };
-
-    fetchOmniAps();
-
-    return () => {
-      active = false;
-      clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [route, demo, demoAps, omniRevision, apLive]);
+    const force = consumedRefresh.current.aps !== omniRevision;
+    consumedRefresh.current.aps = omniRevision;
+    const saved = inventoryCache.peek('aps');
+    if (saved) {
+      setOmniAps(saved.value.aps); setOmniSummary(saved.value.summary); setOmniUpdatedAt(saved.updatedAt);
+    }
+    setOmniLoading(!saved); setOmniError('');
+    inventoryCache.load('aps', async signal => {
+      const res = await request('/api/aps/omnivista', { signal });
+      if (!Array.isArray(res.aps)) throw new Error('OmniVista no devolvió una lista de AP válida.');
+      const aps = res.aps;
+      return { aps, summary: res.summary || {
+        total: aps.length, online: aps.filter(a => a.status !== 'offline').length,
+        offline: aps.filter(a => a.status === 'offline').length,
+        clients: aps.reduce((acc, a) => acc + (a.clients || 0), 0),
+      } };
+    }, force, QUERY_TIMEOUT_MS).then(snapshot => {
+      if (!active || !snapshot) return;
+      setOmniAps(snapshot.value.aps); setOmniSummary(snapshot.value.summary); setOmniUpdatedAt(snapshot.updatedAt);
+    }).catch(err => {
+      if (active) setOmniError(err.name === 'AbortError' ? 'La consulta a OmniVista tardó demasiado.' : err.message);
+    }).finally(() => { if (active) setOmniLoading(false); });
+    return () => { active = false; };
+  }, [route, demo, demoAps, omniRevision, apLive, inventoryCache]);
   useEffect(() => {
     if (route !== 'aps' || visibleActiveTab !== 'map') return;
     if (demo) { setMapLoading(false); setMapError(''); return; }
     let active = true;
-    setMapLoading(true); setMapError('');
-    request('/api/aps/map').then(result => {
-      if (active) setMapPositions(Array.isArray(result.positions) ? result.positions : []);
-    }).catch(err => { if (active) setMapError(err.message || 'No se pudieron cargar las ubicaciones del mapa.'); })
+    const force = consumedRefresh.current.map !== mapRevision;
+    consumedRefresh.current.map = mapRevision;
+    const saved = inventoryCache.peek('map');
+    if (saved) setMapPositions(saved.value);
+    setMapLoading(!saved); setMapError('');
+    inventoryCache.load('map', async signal => {
+      const result = await request('/api/aps/map', { signal });
+      if (!Array.isArray(result.positions)) throw new Error('El mapa no devolvió ubicaciones válidas.');
+      return result.positions;
+    }, force).then(snapshot => { if (active && snapshot) setMapPositions(snapshot.value); })
+      .catch(err => { if (active) setMapError(err.message || 'No se pudieron cargar las ubicaciones del mapa.'); })
       .finally(() => { if (active) setMapLoading(false); });
     return () => { active = false; };
-  }, [route, visibleActiveTab, demo, mapRevision]);
+  }, [route, visibleActiveTab, demo, mapRevision, inventoryCache]);
   useEffect(() => {
     const refreshCurrentInventory = () => {
       if (route === 'aps' && visibleActiveTab === 'omnivista') setOmniRevision(value => value + 1);
-      else if (route === 'aps' && visibleActiveTab === 'map') setMapRevision(value => value + 1);
+      else if (route === 'aps' && visibleActiveTab === 'map') {
+        setMapRevision(value => value + 1); setOmniRevision(value => value + 1);
+      }
       else setRevision(value => value + 1);
     };
     window.addEventListener('sgrs:refresh-current-module', refreshCurrentInventory);
@@ -338,22 +335,21 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
     setNetwork(null); setNetworkError('');
     if (demo) { setCatalog(demoCatalog()); setError(''); setLoading(false); return; }
     if (route === 'aps' && visibleActiveTab !== 'documentary') { setLoading(false); return; }
-    const controller = new AbortController(); let active = true;
-    catalogController.current = controller;
-    setLoading(true); setError('');
-    // Allow the backend's 15-second provider timeout to return its diagnosis.
-    // Settle the UI here as well: abort alone depends on fetch rejecting.
-    const timer = setTimeout(() => {
-      if (!active) return;
-      controller.abort();
-      setError('La consulta al inventario tardó demasiado. Vuelve a intentar; si persiste, revisa la conexión de API Inventarios.');
-      setLoading(false);
-    }, 25000);
-    request('/api/inventory/catalog', { signal: controller.signal }).then(result => {
-      if (active && !controller.signal.aborted) setCatalog(normalizeInventoryCatalog(result));
-    }).catch(e => { if (active && !controller.signal.aborted) setError(e.message || 'No se pudo consultar API Inventarios.'); }).finally(() => { clearTimeout(timer); if (active) setLoading(false); });
-    return () => { active = false; controller.abort(); clearTimeout(timer); };
-  }, [demo, revision, route, visibleActiveTab]);
+    let active = true;
+    const force = consumedRefresh.current.catalog !== revision;
+    consumedRefresh.current.catalog = revision;
+    const saved = inventoryCache.peek('catalog');
+    if (saved) setCatalog(saved.value);
+    setLoading(!saved); setError('');
+    inventoryCache.load('catalog', async signal => normalizeInventoryCatalog(
+      await request('/api/inventory/catalog', { signal })
+    ), force, 25000).then(snapshot => {
+      if (active && snapshot) setCatalog(snapshot.value);
+    }).catch(e => {
+      if (active) setError(e.name === 'AbortError' ? 'La consulta al inventario tardó demasiado. Vuelve a intentar.' : e.message);
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [demo, revision, route, visibleActiveTab, inventoryCache]);
   useEffect(() => () => { generation.current++; requestRef.current?.abort(); }, []);
   const markDirty = value => { setDirty(value); onDirty(value); };
   const close = () => { if (busy) return; if (dirty) setDiscard(true); else setModal(null); };
@@ -374,20 +370,22 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
     finally { clearTimeout(timer); if (version === generation.current) setChecking(false); }
   };
   const cabinetNames = useMemo(() => new Map(catalog.cabinets.map(c => [c.id, c.name])), [catalog.cabinets]);
-  const rows = useMemo(() => catalog.assets.filter(a => a.dataset === dataset).map(a => ({ ...a,
+  const rows = useMemo(() => catalog.assets.filter(a => a.dataset === dataset).map(a => {
+    const observed = a.network && (!network || Date.parse(a.network.observed_at) > Date.parse(network.observed_at))
+      ? a.network : network?.assets[a.id] || a.network;
+    return { ...a,
     idf: cabinetNames.get(a.idf_id) || 'Sin asignar',
     kindLabel: a.kind === 'rack' ? 'Rack / Contenedor' : 'Equipo / Componente',
-    comparison: comparisonLabels[network?.assets[a.id]?.comparison || 'pending'],
-    current_ip: network?.assets[a.id]?.ip || '', status: network?.assets[a.id]?.status || 'unknown',
+    comparison: comparisonLabels[observed?.comparison || 'pending'],
+    current_ip: observed?.ip || '', status: observed?.status || 'unknown',
     relocation: a.destination && !a.relocated ? 'Por confirmar' : a.relocated ? 'Reubicada' : 'Sin reubicación',
     lifecycle: a.decommissioned ? 'Retirada / desactivada' : 'Activa',
     issuesText: (a.issues || []).join(' · '), sourceText: sourceLabel(a.source),
-  })), [catalog.assets, dataset, cabinetNames, network]);
+  }; }), [catalog.assets, dataset, cabinetNames, network]);
   const toggleCamera = async asset => {
     if (cameraWriteLock.current) return;
     cameraWriteLock.current = true;
     setPendingCamera(asset.id);
-    catalogController.current?.abort();
     const next = !asset.decommissioned;
     generation.current++; requestRef.current?.abort(); setChecking(false);
     try {
@@ -396,6 +394,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
         : await mutate('/api/inventory/asset', { id: asset.id, version: asset.version, fields: { decommissioned: next } });
       if (result.asset?.id !== asset.id || (!demo && typeof result.asset.version !== 'string')) throw new Error('No se pudo confirmar la cámara actualizada. Recarga el catálogo.');
       normalizeInventoryCatalog({ ...catalog, assets: [result.asset] });
+      inventoryCache.update('catalog', old => ({ ...old, assets: old.assets.map(a => a.id === asset.id ? result.asset : a) }));
       setCatalog(old => ({ ...old, assets: old.assets.map(a => a.id === asset.id ? result.asset : a) }));
       setModal(current => current?.type === 'detail' && current.asset.id === asset.id ? { ...current, asset: { ...current.asset, ...result.asset, lifecycle: next ? 'Retirada / desactivada' : 'Activa' } } : current);
       setNetwork(null);
@@ -430,11 +429,11 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
   ];
   const save = async fields => {
     const asset = modal.asset;
-    catalogController.current?.abort();
     generation.current++; requestRef.current?.abort(); setChecking(false);
     const result = demo ? { asset: { ...asset, ...fields, documented: asset.documented || asset, corrected_at: new Date().toISOString() } } : await mutate('/api/inventory/asset', { id: asset.id, version: asset.version, fields });
     if (result.asset?.id !== asset.id || (!demo && typeof result.asset.version !== 'string')) throw new Error('No se pudo confirmar la cámara actualizada. Recarga el catálogo.');
     normalizeInventoryCatalog({ ...catalog, assets: [result.asset] });
+    inventoryCache.update('catalog', old => ({ ...old, assets: old.assets.map(a => a.id === asset.id ? result.asset : a) }));
     setCatalog(old => ({ ...old, assets: old.assets.map(a => a.id === asset.id ? result.asset : a) }));
     setNetwork(null); markDirty(false); setModal(null);
     notify(demo ? 'Corrección de ejemplo guardada en esta sesión.' : 'Corrección física guardada. La fuente original se conserva.');
@@ -580,7 +579,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
         )}
       </>
     ) : route === 'aps' && visibleActiveTab === 'map' ? (
-      mapLoading ? <Loading /> : <><PhysicalApMap aps={omniAps} positions={mapPositions} setPositions={setMapPositions} canWrite={canWrite} demo={demo} notify={notify} />{mapError && <Notice title="No se pudieron cargar las ubicaciones" tone="danger" action={<Button onClick={() => setActiveTab('omnivista')}>Volver a la consulta en vivo</Button>}>{mapError}</Notice>}</>
+      mapLoading ? <Loading /> : <><PhysicalApMap aps={omniAps} positions={mapPositions} setPositions={update => { const next = typeof update === 'function' ? update(mapPositions) : update; if (!demo) inventoryCache.set('map', next); setMapPositions(next); }} canWrite={canWrite} demo={demo} notify={notify} />{mapError && <Notice title="No se pudieron cargar las ubicaciones" tone="danger" action={<Button onClick={() => setActiveTab('omnivista')}>Volver a la consulta en vivo</Button>}>{mapError}</Notice>}</>
     ) : (
       <>
         <PageHeading eyebrow={route === 'cctv' ? 'Inventario físico y cámaras' : 'Inventario físico y cotejo de red'} title={title} description={route === 'cctv' ? 'Datos documentados, estado operativo y correcciones físicas del sistema de videovigilancia' : 'Datos documentados, correcciones físicas y observaciones actuales de las APIs'} updatedAt={catalog.imported_at} />

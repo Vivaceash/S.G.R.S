@@ -210,13 +210,13 @@ function DataWidget({ id, data, loading, errors, demo, navigate, refresh }) {
   </WidgetCard>;
 }
 
-export function DashboardWidgets({ children, data, demo, userId, loading, errors = {}, navigate, refresh, catalog: customCatalog, catalogTone, catalogIcon, defaultLayout = DEFAULT_WIDGET_LAYOUT, storagePrefix = 'sgrs:dashboard-widgets:v1', title = 'Tu dashboard', personalizeLabel = 'Personalizar dashboard', quickHide = false, groupBy }) {
+export function DashboardWidgets({ children, data, demo, userId, loading, errors = {}, navigate, refresh, catalog: customCatalog, catalogTone, catalogIcon, defaultLayout = DEFAULT_WIDGET_LAYOUT, storagePrefix = 'sgrs:dashboard-widgets:v1', title = 'Tu dashboard', personalizeLabel = 'Personalizar dashboard', quickHide = false, groupBy, migrateLayout }) {
   const session = useSession();
   const key = `${storagePrefix}:${demo ? 'demo:' : ''}${userId}`;
   const catalog = customCatalog || WIDGET_CATALOG.filter(widget => widgetAllowed(widget.id, session));
   const allowed = new Set(catalog.map(widget => widget.id));
   const [layout, setLayout] = useState(() => {
-    try { return sanitizeWidgetLayout(JSON.parse(localStorage.getItem(key)), catalog) ?? defaultLayout; }
+    try { const saved = JSON.parse(localStorage.getItem(key)); return sanitizeWidgetLayout(migrateLayout ? migrateLayout(saved) : saved, catalog) ?? defaultLayout; }
     catch { return defaultLayout; }
   });
   const [editing, setEditing] = useState(false);

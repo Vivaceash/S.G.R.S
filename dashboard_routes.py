@@ -468,7 +468,7 @@ class AccessRoutes:
                 devices = get_longest_connected_devices(device_type=dtype, limit=limit, only_online=only_online)
                 self._send_json(devices)
                 return True
-            normal = {"/api/idfs", "/api/reports", "/api/ips", "/api/devices", "/api/devices/summary", "/api/devices/export", "/api/health", "/api/ip", "/api/forti/network/dhcp-pools", "/api/forti/network/dhcp-leases", "/api/altas/omnivista", "/api/aps/omnivista"}
+            normal = {"/api/idfs", "/api/reports", "/api/ips", "/api/devices", "/api/devices/summary", "/api/devices/export", "/api/health", "/api/ip", "/api/networks", "/api/forti/network/dhcp-pools", "/api/forti/network/dhcp-leases", "/api/altas/omnivista", "/api/aps/omnivista"}
             if path in normal:
                 if path == '/api/aps/omnivista':
                     self._require_submodule('aps', 'live', 'inventory.read')

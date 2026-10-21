@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { createAltasCache } from './altas-cache.mjs';
+import { createInventoryCache, clearInventoryCache } from './inventory-cache.mjs';
 import { LogIn, ShieldCheck } from 'lucide-react';
 import { Button, Field, Loading, Notice, SecretInput } from './components.jsx';
 import { useForm } from './forms.jsx';
@@ -111,7 +112,7 @@ export function SessionProvider({ children }) {
       setCsrfToken(value.csrf); setSetup(Boolean(value.setup_required));
       setSetupAllowed(Boolean(value.web_bootstrap_allowed));
       if (value.user) { setIdentity(value); setExpired(false); }
-      else { setExpired(true); window.dispatchEvent(new Event('sgrs-session-expired')); }
+      else { clearInventoryCache(); setExpired(true); window.dispatchEvent(new Event('sgrs-session-expired')); }
     }).catch(() => { if (alive) setError('Inicia el servidor local del dashboard para acceder con una cuenta.'); })
       .finally(() => { clearTimeout(timeout); if (alive) setReady(true); });
     // Timeout must terminate the initial loading state too.
@@ -119,7 +120,7 @@ export function SessionProvider({ children }) {
   }, [demo, revision]);
   useEffect(() => {
     const onExpired = () => {
-      if (!demo) { clearIdfViewSession(identity?.user?.id); setExpired(true); }
+      if (!demo) { clearIdfViewSession(identity?.user?.id); clearInventoryCache(); setExpired(true); }
     };
     const check = () => { if (!demo && !expired) setRevision(value => value+1); };
     window.addEventListener('sgrs-session-expired', onExpired);
@@ -132,18 +133,21 @@ export function SessionProvider({ children }) {
     };
   }, [demo, expired, identity?.user?.id, identity?.user?.keep_session]);
   const setDemo = value => {
+    clearInventoryCache();
     setCsrfToken(''); setDemoState(value); setError(''); setExpired(false); setIdentity(null); setReady(value);
     const url = new URL(location.href); if (value) url.searchParams.set('demo', '1'); else url.searchParams.delete('demo');
     history.replaceState(null, '', url);
   };
   const signIn = async values => {
+    clearInventoryCache();
     const result = await request('/api/auth/login', { body: values }); setCsrfToken(result.csrf); setIdentity(result); setExpired(false); setReady(true); setError('');
   };
-  const bootstrap = async values => { const result = await request('/api/auth/bootstrap', { body: values }); setCsrfToken(result.csrf); setIdentity(result); setSetup(false); setExpired(false); setReady(true); setError(''); };
+  const bootstrap = async values => { clearInventoryCache(); const result = await request('/api/auth/bootstrap', { body: values }); setCsrfToken(result.csrf); setIdentity(result); setSetup(false); setExpired(false); setReady(true); setError(''); };
   const signOut = async () => {
     const userId = identity?.user?.id;
     if (!demo) await request('/api/auth/logout', { body: {} });
     clearIdfViewSession(userId);
+    clearInventoryCache();
     setCsrfToken(''); setIdentity(null); setExpired(false);
   };
   const [demoRole, setDemoRole] = useState(() => new URLSearchParams(location.search).get('role') || 'super-admin');
@@ -188,9 +192,12 @@ export function SessionProvider({ children }) {
   const canViewSubmodule = (page, tab) => canViewSubmoduleId(page, tab, allowedPages, allowedSubmodules);
 
   const sessionRoles = getEffectiveRoles(current?.roles);
+  const inventoryScope = JSON.stringify([demo, current?.user?.id, userRole, allowedPages, allowedSubmodules, current?.capabilities]);
+  const inventoryCache = useMemo(() => createInventoryCache(inventoryScope), [inventoryScope, expired]);
 
   return <SessionContext.Provider value={{
     altasCache,
+    inventoryCache,
     ...current,
     user: current?.user,
     allowedPages,

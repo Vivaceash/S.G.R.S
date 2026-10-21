@@ -268,12 +268,11 @@ class OmniVistaService:
     def get_access_role_profiles(self) -> List[str]:
         """Obtiene la lista de nombres de perfiles de red / SSIDs configurados en OmniVista"""
         res = self.request("GET", "/api/ag/uatemplate/AccessRoleProfile", timeout=8)
-        if res.status_code == 200:
-            data = res.json()
-            items = data.get("response", [])
-            profiles = [p.get("name") for p in items if p.get("name")]
-            return sorted(profiles)
-        return []
+        data = self._required_json(res)
+        items = data.get('response') if isinstance(data, dict) else None
+        if not isinstance(items, list) or any(not isinstance(p, dict) or not isinstance(p.get('name'), str) for p in items):
+            raise OmniVistaResponseError('El proveedor no entregó un catálogo de perfiles válido.')
+        return sorted({p['name'] for p in items if p['name'].strip()})
 
     def get_device_options(self) -> Dict[str, List[Dict[str, str]]]:
         """Devuelve las opciones estándar de categorías, familias y sistemas operativos"""
@@ -307,13 +306,30 @@ class OmniVistaService:
 
     def get_vlans(self) -> List[Dict[str, Any]]:
         """Obtiene la lista de VLANs configuradas en la infraestructura"""
-        res = self.request("GET", "/api/vlan", timeout=10)
+        res = self.request("GET", "/api/vlanservice/vlans/view", timeout=10, allow_redirects=False)
         data = self._required_json(res)
         if isinstance(data, dict):
+            if 'status' in data and data['status'] != 'SUCCESS':
+                raise OmniVistaResponseError("El proveedor rechazó la consulta de VLANs.")
             data = data.get("response", data.get("data"))
+        if isinstance(data, dict):
+            # OmniVista 2500 4.8R2 wraps the completed query in response.data.
+            if data.get('status') != 'SUCCESS' or data.get('finalResponse') is not True:
+                raise OmniVistaResponseError("El proveedor no completó la consulta de VLANs.")
+            data = data.get('data')
         if not isinstance(data, list) or any(not isinstance(row, dict) for row in data):
             raise OmniVistaResponseError("El proveedor no entregó un catálogo de VLANs válido.")
-        return sanitize_data(data)
+        vlans = []
+        for row in data:
+            identifier = row.get('vlanId', row.get('number'))
+            if isinstance(identifier, bool) or not str(identifier).isdigit() or not 0 <= int(identifier) <= 4094:
+                raise OmniVistaResponseError("El proveedor entregó una VLAN sin identificador válido.")
+            name = row.get('vlanName') or row.get('description') or f'VLAN {identifier}'
+            if not isinstance(name, str):
+                raise OmniVistaResponseError("El proveedor entregó una VLAN sin nombre válido.")
+            vlans.append({**row, 'vlanId': int(identifier), 'vlanName': name,
+                          'vlanType': row.get('vlanType', row.get('type'))})
+        return sanitize_data(vlans)
 
     @staticmethod
     def _required_json(response):

@@ -1,5 +1,6 @@
 import pytest
 import httpx
+from app.clients.fortios import fortios_client
 from app.main import app
 from app.core.config import settings
 
@@ -38,7 +39,11 @@ async def test_fortigate_live_endpoint(endpoint):
     transport = httpx.ASGITransport(app=app)
     headers = {"X-API-Key": VALID_KEY}
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get(endpoint, headers=headers)
+        try:
+            response = await client.get(endpoint, headers=headers)
+        finally:
+            # Each parametrized async test owns a different event loop.
+            await fortios_client.close()
         # 200 si el hardware FortiGate responde; 503 si el hardware está inalcanzable (manejador controlado, sin HTTP 500)
         assert response.status_code in (200, 503)
         data = response.json()

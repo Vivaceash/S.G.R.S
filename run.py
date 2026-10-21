@@ -532,9 +532,7 @@ def wait_for_services(services, processes, timeout=30):
 
 def ensure_inventory_config(py_exe):
     script = ROOT_DIR / "API Inventarios" / "scripts" / "configure_local.py"
-    private_env = ROOT_DIR / "API Inventarios" / ".private" / ".env"
-    if not private_env.exists():
-        subprocess.run([py_exe, str(script)], cwd=str(ROOT_DIR), check=True)
+    subprocess.run([py_exe, str(script)], cwd=str(ROOT_DIR), check=True)
 
 
 def configured_env_value(env_file, key):

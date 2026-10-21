@@ -45,14 +45,10 @@ try {
   await button.click();
   await expect.poll(() => deviceReads).toBe(initial + 1);
   await page.waitForLoadState('networkidle');
-  await expect(button).toBeDisabled();
-  await expect(button).toHaveAttribute('data-remaining', '15');
-  await page.clock.fastForward(14000);
-  await expect(button).toBeDisabled();
-  await expect(button).toHaveAttribute('data-remaining', '1');
-  await page.clock.fastForward(1000);
   await expect(button).toBeEnabled();
-  assert.equal(deviceReads, initial + 1, 'Cooldown expiry must not query APIs');
+  await expect(button).not.toHaveAttribute('data-remaining', /.+/);
+  await page.clock.fastForward(15000);
+  assert.equal(deviceReads, initial + 1, 'Elapsed time must not query APIs');
   await button.click();
   await expect.poll(() => deviceReads).toBe(initial + 2);
   await page.waitForLoadState('networkidle');
@@ -81,5 +77,5 @@ try {
     }
     assert.deepEqual(pageErrors, [], `No browser errors in ${route}`);
   }
-  console.log('PASS: actualización manual, cooldown de 15 segundos, icono estático y sin consultas periódicas en dashboard, widgets, soporte, DHCP, APs e IDF');
+  console.log('PASS: actualización manual, sin temporizador automático, icono estático y sin consultas periódicas en dashboard, widgets, soporte, DHCP, APs e IDF');
 } finally { await browser.close(); }

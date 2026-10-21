@@ -105,5 +105,5 @@ def docs_alias():
     return RedirectResponse('/docs')
 
 
-for router in (auth.router, cctv.router, cctv.reports_router, catalogs.router):
+for router in (auth.router, cctv.router, cctv.reports_router, catalogs.router, catalogs.health_router):
     app.include_router(router, prefix='/api/v1')

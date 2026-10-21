@@ -28,11 +28,13 @@ from dashboard_access import connection, connection_headers, AccessError, ensure
 from dashboard_routes import AccessRoutes
 from dashboard_reports import ReportRoutes, report_key, tagged_reports, idf_overview
 from integration_health import upstream_healthy
+from dashboard_account_activity import assess_activity
 from dashboard_history import start_collector
 from dashboard_inventory import cabinets_with_documentary
 from dashboard_device_history import normalize_mac, format_device_type, format_uptime
 from dashboard_presence_collector import presence_snapshot, start_presence_collector
 from dashboard_security import sanitize_upstream
+from dashboard_networks import catalog as network_catalog
 
 # Lock global para proteger lecturas/escrituras concurrentes a archivos JSON
 _file_lock = threading.Lock()
@@ -398,11 +400,17 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
             # Cotejo de Company Property contra el inventario observado por FortiGate.
             forti_by_mac, forti_by_ip = {}, {}
             forti_status = 502
+            forti_complete = False
             try:
                 code, body, _ = _fetch_upstream(f"{FORTI_API_URL}/devices?status=all&active_window=3600", timeout=30.0)
                 forti_status = code
                 payload = json.loads(body.decode('utf-8'))
-                for item in ((payload.get('data') or {}).get('devices') or []):
+                forti_devices = (payload.get('data') or {}).get('devices') if isinstance(payload, dict) and isinstance(payload.get('data'), dict) else None
+                forti_complete = code == 200 and isinstance(forti_devices, list) and payload.get('success') is not False and all(isinstance(item, dict) for item in forti_devices)
+                if forti_complete:
+                    summary = payload['data']
+                    forti_complete = all(summary.get(key, len(forti_devices)) == len(forti_devices) for key in ('returned_count', 'total_inventory'))
+                for item in forti_devices if forti_complete else []:
                     if not isinstance(item, dict):
                         continue
                     projected = {"name": item.get("hostname") or item.get("ip") or item.get("mac"), "ip": item.get("ip"), "mac": item.get("mac"), "type": item.get("device_type") or item.get("hardware_family"), "vendor": item.get("hardware_vendor"), "interface": item.get("interface"), "status": "online" if item.get("is_online") else "offline", "last_seen": item.get("last_seen")}
@@ -488,6 +496,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 account = str(user.get("username") or '').strip().lower()
                 user_devices = grouped.get(account, [])
                 user["devices"] = user_devices
+                user["activityAssessment"] = assess_activity(user_devices, users_complete=users_complete, devices_complete=devices_complete, forti_complete=forti_complete)
                 # Preserve the OmniVista date for the account table; concession
                 # overrides and device authentication dates have different meanings.
                 user["omnivistaEffectiveDate"] = user.get("dateOfEffective")
@@ -505,7 +514,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                     if dev_times:
                         reg_date = min(dev_times)
                 user["registeredAt"] = reg_date
-            self._send_json({"success": users_status == 200, "data": {"users": users, "sources": {"users": {"status": users_status, "complete": users_complete, "count": len(users)}, "company_properties": {"status": devices_status, "complete": devices_complete, "count": len(devices), "associated": associated_devices, "unassociated": max(0, len(devices) - associated_devices)}, "fortigate": {"status": forti_status, "count": len(forti_by_mac), "matches": forti_matches} }}, "message": "Cotejo completo de cuentas, dispositivos y FortiGate en modo lectura."})
+            self._send_json({"success": users_status == 200, "data": {"users": users, "sources": {"users": {"status": users_status, "complete": users_complete, "count": len(users)}, "company_properties": {"status": devices_status, "complete": devices_complete, "count": len(devices), "associated": associated_devices, "unassociated": max(0, len(devices) - associated_devices)}, "fortigate": {"status": forti_status, "complete": forti_complete, "count": len(forti_by_mac), "matches": forti_matches} }}, "message": "Cotejo completo de cuentas, dispositivos y FortiGate en modo lectura."})
 
         # 3c. Consulta de Access Points en tiempo real desde OmniVista
         elif path == '/api/aps/omnivista':
@@ -811,6 +820,13 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
             target_url = f"{FORTI_API_URL}/traffic/ip/{subpath}"
             status_code, body, ctype = _fetch_upstream(target_url, timeout=12.0)
             self._send_raw(body, status=status_code, content_type=ctype)
+
+        elif path == '/api/networks':
+            try:
+                self._send_json(network_catalog(lambda service, endpoint: _fetch_upstream(
+                    f"{FORTI_API_URL if service == 'forti' else OMNI_API_URL}{endpoint}", timeout=12.0)))
+            except AccessError as exc:
+                self._send_json({'error': str(exc)}, exc.status)
 
         # 6a. Métricas completas de saturación de redes DHCP
         elif path == '/api/forti/network/dhcp-pools' or path.startswith('/api/forti/network/dhcp-pools'):

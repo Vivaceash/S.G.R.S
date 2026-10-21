@@ -22,3 +22,30 @@ def test_job_persists_observations_without_contacting_providers(client, monkeypa
     assert camera['network']['vlan']['vlan_id'] == 222
     assert camera['network']['stale'] is False
     assert client.get('/api/v1/cctv/cameras/cam-1/observations', headers=headers).json()['data']['total'] == 1
+
+
+def test_periodic_refresh_runs_immediately_and_recovers_next_cycle(monkeypatch):
+    import asyncio
+    from app.services import reconciliation
+    calls = []
+    sleeps = []
+    reconciler = reconciliation.Reconciler(None)
+    def start():
+        calls.append('refresh')
+        if len(calls) == 1:
+            raise RuntimeError('Temporary storage failure')
+    async def sleep(seconds):
+        assert calls, 'first refresh must run before sleeping'
+        sleeps.append(seconds)
+        if len(sleeps) == 2:
+            raise asyncio.CancelledError()
+    monkeypatch.setattr(reconciler, 'start', start)
+    monkeypatch.setattr(reconciliation.asyncio, 'sleep', sleep)
+    monkeypatch.setattr(reconciliation.settings, 'REFRESH_SECONDS', 60)
+    async def run():
+        try:
+            await reconciler.periodic()
+        except asyncio.CancelledError:
+            pass
+    asyncio.run(run())
+    assert calls == ['refresh', 'refresh'] and sleeps == [60, 60]

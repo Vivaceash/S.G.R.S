@@ -18,9 +18,15 @@ Desde la raíz, `python run.py` inicia OmniVista en `8000`, FortiGate en `8001`,
 
 Entra a `http://192.168.38.250:8002/scalar` para explorar los contratos desde la LAN; `/docs`, `/scalar`, `/` y `/swagger` conservan el mismo contrato Scalar. La clave de lectura, escritura y exportación se puede obtener localmente de `.private/.env` para herramientas autorizadas. Mantén ese archivo protegido y no lo compartas. Para producción, proporciona el conjunto completo `INVENTARIOS_*` desde el gestor de secretos y reemplaza las claves locales. El servidor escucha en todas las interfaces LAN mediante `INVENTARIOS_HOST=0.0.0.0`; `ALLOWED_HOSTS` y CORS limitan el acceso al host/origen institucional.
 
-El dashboard administra la credencial de su conexión Inventarios en **Conexiones API**. La API obtiene las credenciales guardadas de Forti/Omni durante el aprovisionamiento y las usa únicamente en el backend. Si cambian, vuelve a ejecutar `python "API Inventarios/scripts/configure_local.py"` después de actualizar Conexiones API y reinicia el servicio.
+El dashboard administra la credencial de su conexión Inventarios en **Conexiones API**. La API obtiene las credenciales guardadas de Forti/Omni durante el aprovisionamiento y las usa únicamente en el backend. Cada inicio desde el runner raíz sincroniza las credenciales de los proveedores y la identidad local del dashboard, conservando conexiones remotas personalizadas. Los cambios de credenciales de proveedores se aplican al reiniciar la plataforma; la detección de redes nuevas no requiere cambiar configuración.
 
 Las claves de lectura, escritura, exportación y dashboard no tienen longitud mínima. En producción debe existir al menos una clave, `DEBUG` debe estar desactivado y los hosts/orígenes deben ser explícitos. `.private/.env` tiene prioridad sobre el `.env` de esta carpeta; las variables del sistema tienen prioridad sobre ambos archivos. El aprovisionamiento conserva las claves y la configuración existentes al actualizar los proveedores.
+
+## Actualización bajo demanda
+
+La adquisición y lectura de redes y CCTV se ejecutan solo al usar los botones de actualización. El cotejo periódico está desactivado por defecto (`INVENTARIOS_REFRESH_SECONDS=0`). El botón de actualización del dashboard vuelve a consultar Forti/Omni; el botón del inventario consulta el catálogo CCTV. Una ficha en edición conserva los cambios pendientes.
+
+Las redes operativas se consultan mediante `/api/networks` al actualizar el dashboard. Véase [el contrato de actualización](../docs/ACTUALIZACION_AUTOMATICA_RED.md).
 
 ## Carga del catálogo y corte compatible
 

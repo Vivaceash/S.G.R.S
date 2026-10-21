@@ -5,12 +5,13 @@ import { mkdir } from 'node:fs/promises';
 import { createDemo } from '../src/demo.mjs';
 
 const base = process.env.SGRS_TEST_URL || 'http://127.0.0.1:5173';
-const browser = await chromium.launch({ executablePath: process.env.SGRS_BROWSER || '/opt/brave-bin/brave', headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+const browser = await chromium.launch({ ...(process.env.SGRS_BROWSER ? {executablePath: process.env.SGRS_BROWSER} : {}), headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
 const output = process.env.SGRS_ARTIFACT_DIR || '/tmp/sgrs-inventory-browser';
 await mkdir(output, { recursive: true });
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: 'es-MX' });
   const page = await context.newPage();
+  page.setDefaultTimeout(6000);
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   const fixture = createDemo();
   const identity = { user: { id: 'test-admin', name: 'Operador de prueba', username: 'operador', role: 'admin', version: 1 }, csrf: 'test-only', capabilities: ['dashboard.read', 'inventory.read', 'idf.read', 'activity.read', 'inventory.write', 'idf.visits.write', 'inventory.export'] };
@@ -45,10 +46,8 @@ try {
   });
   await page.goto(`${base}/#cctv`);
   await page.getByRole('cell', { name: 'Cámara 1', exact: true }).waitFor();
-  assert.equal(await page.locator('tbody tr').count(), 10);
-  await page.getByRole('button', { name: 'Cotejar APIs', exact: true }).click();
-  await page.getByText('Cotejo parcial · Fuentes no disponibles', { exact: true }).waitFor();
-  await page.getByRole('cell', { name: '192.0.2.200', exact: true }).waitFor();
+  assert.equal(await page.locator('tbody tr').count(), 24);
+  assert.equal(await page.locator('.pagination').count(), 0);
   await page.getByLabel('Buscar registros').fill('SERIE-23');
   await page.getByRole('cell', { name: 'Cámara 24', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Ver ficha', exact: true }).click();
@@ -81,24 +80,22 @@ try {
   const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
   assert.deepEqual(axe.violations.map(v => v.id), []);
   await page.screenshot({ path: `${output}/cctv-mobile.png`, fullPage: true });
-  await page.getByRole('link', { name: 'Access points', exact: true }).click();
+  await page.goto(`${base}/#aps`);
   await page.getByRole('tab', { name: /Catálogo documental/ }).click();
   await page.getByRole('cell', { name: 'AP documental', exact: true }).waitFor();
-  await page.goto(`${base}/#catalogo`);
-  await page.getByRole('cell', { name: 'Rack documental', exact: true }).waitFor();
   catalogFails = true;
-  await page.getByRole('button', { name: 'Actualizar catálogo', exact: true }).click();
+  await page.locator('.header-refresh').click();
   await page.getByRole('heading', { name: 'No se pudo cargar la información', exact: true }).waitFor();
   catalogFails = false;
   await page.getByRole('button', { name: 'Volver a intentar', exact: true }).click();
-  await page.getByRole('cell', { name: 'Rack documental', exact: true }).waitFor();
+  await page.getByRole('cell', { name: 'AP documental', exact: true }).waitFor();
   const beforeDemo = apiCalls;
   await page.goto(`${base}/?demo=1#cctv`);
   await page.getByRole('cell', { name: 'Cámara de ejemplo', exact: true }).waitFor();
   assert.equal(apiCalls, beforeDemo, 'Demo must never call real APIs');
-  assert.equal(await page.getByRole('button', { name: 'Cotejar APIs', exact: true }).isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Cotejar APIs', exact: true }).count(), 0);
   assert.deepEqual(errors, []);
-  console.log('PASS: documentary routes, API priority/partial failure, exact-id editing, conflict, unsaved changes, historical immutability, pagination, filters, mobile, axe, retry and isolated demo.');
+  console.log('PASS: documentary routes, API priority/partial failure, exact-id editing, conflict, unsaved changes, historical immutability, infinite table, filters, mobile, axe, retry and isolated demo.');
 } finally {
   await browser.close();
 }

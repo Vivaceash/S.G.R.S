@@ -5,6 +5,7 @@ from pathlib import Path
 import secrets
 import sys
 import tempfile
+import time
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -66,7 +67,18 @@ def main():
             'INVENTARIOS_RETENTION_DAYS': old_env.get('INVENTARIOS_RETENTION_DAYS', '90'),
         }
         atomic_private(service_env, ''.join(f'{key}={value}\n' for key, value in values.items()))
-        atomic_private(shared, json.dumps({'url': 'http://127.0.0.1:8002/api/v1', 'secret': dashboard_key}))
+        local_url = f"http://127.0.0.1:{values['INVENTARIOS_PORT']}/api/v1"
+        atomic_private(shared, json.dumps({'url': local_url, 'secret': dashboard_key}))
+        # Saved connections override the shared file. Keep the managed local
+        # identity synchronized, while preserving custom remote connections.
+        with dashboard_access.database(write=True) as db:
+            changed = db.execute(
+                "UPDATE connections SET secret=?,version=version+1,updated_at=? "
+                "WHERE id='inventarios' AND url=? AND auth_mode='api-key' AND secret<>?",
+                (dashboard_key, int(time.time()), local_url, dashboard_key),
+            ).rowcount
+            if changed:
+                dashboard_access.audit(db, 'system', 'connection.synchronized', 'inventarios')
         print('API Inventarios configurada con credenciales aleatorias. Secreto de Forti:', 'disponible' if forti_key else 'por configurar',
               '· Secreto de Omni:', 'disponible' if omni_key else 'por configurar')
     except Exception as exc:

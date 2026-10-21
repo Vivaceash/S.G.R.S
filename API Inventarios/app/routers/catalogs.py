@@ -6,6 +6,7 @@ from app.schemas.common import Response
 from app.services import inventory, reconciliation
 
 router = APIRouter(dependencies=[Depends(require('read'))])
+health_router = APIRouter()
 
 
 @router.get('/catalogs/cabinets', tags=['Catálogos'], response_model=Response[list[dict]], summary='Listar gabinetes e IDF',
@@ -49,8 +50,8 @@ def job(job_id: str):
     return {'data': reconciliation.job(job_id)}
 
 
-@router.get('/system/health', tags=['Salud'], response_model=Response[dict], summary='Diagnóstico interno del servicio',
-            description='Comprueba almacenamiento, importación del catálogo y último cotejo. Este endpoint requiere autenticación.')
+@health_router.get('/system/health', tags=['Salud'], response_model=Response[dict], summary='Diagnóstico interno del servicio',
+            description='Comprueba almacenamiento, importación del catálogo y último cotejo sin autenticación.')
 def health():
     with database() as db:
         imported = db.execute('SELECT COUNT(*) FROM catalog').fetchone()[0] == 1

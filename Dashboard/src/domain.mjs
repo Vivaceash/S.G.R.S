@@ -149,6 +149,8 @@ export function ipInSegment(address, segment) {
 }
 export function deviceInSegment(device, segment) {
   if (!segment) return false;
+  if ((segment.profiles || []).includes(device.omnivista?.profile)) return true;
+  if ((segment.subnets || []).some(subnet => ipInSegment(device.ip, { subnet }))) return true;
   if (ipInSegment(device.ip, segment)) return true;
   if (device.is_reserved && !device.ip && ipInSegment(device.reserved_ip, segment)) return true;
   return device.ip_source === 'unconfirmed' && Boolean(device.interface) && device.interface === segment.interface;
@@ -173,16 +175,6 @@ export function getOverviewSegmentDevices(devices, segment) {
   });
 }
 
-export const SUPPORT_ALLOWED_NETWORKS = ['meztli', 'tona', 'tlalo', 'quetzal', 'ehecatl'];
-
-const SUPPORT_VLAN_MAP = {
-  '90': 'quetzal',
-  '91': 'tlalo',
-  '92': 'ehecatl',
-  '93': 'tona',
-  '94': 'meztli',
-};
-
 export function normalizeText(str) {
   return String(str ?? '')
     .normalize('NFD')
@@ -192,24 +184,8 @@ export function normalizeText(str) {
 }
 
 export function isSupportSegment(segment) {
-  if (!segment || typeof segment !== 'object') return false;
-
-  let text = [
-    segment.name,
-    segment.interface,
-    segment.vlan,
-    segment.description,
-  ].map(normalizeText).join(' ');
-
-  const vlanStr = String(segment.vlan ?? '');
-  for (const [vlanNum, alias] of Object.entries(SUPPORT_VLAN_MAP)) {
-    if (new RegExp(`(?:^|\\bvlan[\\s-_]*|\\b)${vlanNum}\\b`, 'i').test(vlanStr) ||
-        new RegExp(`\\bvlan[\\s-_]*${vlanNum}\\b`, 'i').test(text)) {
-      text += ` ${alias}`;
-    }
-  }
-
-  return SUPPORT_ALLOWED_NETWORKS.some(pattern => text.includes(pattern));
+  return Boolean(segment && typeof segment === 'object' && !Array.isArray(segment)
+    && ['name', 'interface', 'vlan', 'subnet'].some(key => segment[key] != null && String(segment[key]).trim()));
 }
 
 export function getSupportSegments(segments) {
@@ -357,7 +333,8 @@ export function getSaturationStatus(segmentOrPercent) {
     if (segmentOrPercent.saturation_status) return segmentOrPercent.saturation_status;
     return getSaturationStatus(segmentOrPercent.utilization_percent);
   }
-  const p = Number(segmentOrPercent) || 0;
+  if (segmentOrPercent == null || !Number.isFinite(Number(segmentOrPercent))) return 'unknown';
+  const p = Number(segmentOrPercent);
   if (p >= 80) return 'critical';
   if (p >= 50) return 'warning';
   return 'normal';
@@ -367,8 +344,8 @@ export function getSaturationLabel(status) {
   switch (status) {
     case 'critical': return 'Saturada';
     case 'warning': return 'Uso medio';
-    case 'normal':
-    default: return 'Disponible';
+    case 'normal': return 'Disponible';
+    default: return 'No informado';
   }
 }
 
@@ -473,25 +450,26 @@ export const SUPPORT_NETWORK_EXPORT_COLUMNS = [
   {
     key: 'active_leases',
     label: 'IPs Ocupadas',
-    value: s => s.active_leases != null ? String(s.active_leases) : '0',
+    value: s => s.active_leases != null ? String(s.active_leases) : '—',
   },
   {
     key: 'available_ips',
     label: 'IPs Libres',
     value: s => {
-      const free = s.available_ips != null ? s.available_ips : Math.max(0, (Number(s.capacity) || 0) - (Number(s.active_leases) || 0));
+      if (s.capacity == null || s.active_leases == null) return '—';
+      const free = s.available_ips != null ? s.available_ips : Math.max(0, Number(s.capacity) - Number(s.active_leases));
       return String(free);
     },
   },
   {
     key: 'capacity',
     label: 'Capacidad Total',
-    value: s => s.capacity != null ? String(s.capacity) : '0',
+    value: s => s.capacity != null ? String(s.capacity) : '—',
   },
   {
     key: 'utilization',
     label: 'Uso (%)',
-    value: s => `${number(s.utilization_percent || 0)}%`,
+    value: s => s.utilization_percent == null ? '—' : `${number(s.utilization_percent)}%`,
   },
   {
     key: 'status',

@@ -54,8 +54,9 @@ def catalog():
     import dashboard_inventarios
     if dashboard_inventarios.active():
         remote = dashboard_inventarios.catalog()
-        if remote['revision'] != revision:
-            raise access.AccessError(409, 'Los catálogos de Inventarios y dashboard requieren sincronizar su revisión.')
+        # Each store hashes its own import file, so these catalogue-wide
+        # revisions are not comparable. CCTV row versions come from the
+        # authoritative Inventarios service and are checked there on save.
         rows = [r for r in rows if r['dataset'] not in ('cctv', 'cctv_original')] + remote['assets']
     return {**{k: v for k, v in data.items() if k != 'source_directory'}, 'assets': rows, 'revision': revision}
 

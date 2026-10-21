@@ -4664,12 +4664,12 @@
   {
     "ip": "192.168.40.252",
     "vlan": "Segmento 40",
-    "status": "available",
-    "hostname": "—",
+    "status": "occupied",
+    "hostname": "SICAT",
     "type": "—",
     "mac": "—",
     "location": "Hospital Central",
-    "notes": "Disponible"
+    "notes": "IP utilizada por el equipo de desarrollo para el area de SICAT"
   },
   {
     "ip": "192.168.40.253",

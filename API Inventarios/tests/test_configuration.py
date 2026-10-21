@@ -123,3 +123,23 @@ def test_provider_refresh_preserves_production_settings_and_inventory_keys(tmp_p
         assert updated[key] == value
     assert updated['INVENTARIOS_FORTI_KEY'] == 'new-forti-gateway-key'
     assert updated['INVENTARIOS_OMNI_KEY'] == 'new-omni-gateway-key'
+
+
+@pytest.mark.parametrize('url,expected', [('http://127.0.0.1:8002/api/v1', 'd' * 43), ('https://inventory.example/api/v1', 'saved-key')])
+def test_provisioning_synchronizes_only_managed_local_dashboard_connection(tmp_path, monkeypatch, url, expected):
+    module = configure_module()
+    service = tmp_path / 'API Inventarios'
+    private = service / '.private'
+    private.mkdir(parents=True)
+    (private / '.env').write_text('INVENTARIOS_DASHBOARD_KEY=' + 'd' * 43 + '\n')
+    monkeypatch.setattr(module, '__file__', str(service / 'scripts/configure_local.py'))
+    access = module.dashboard_access
+    monkeypatch.setattr(access, 'PRIVATE', tmp_path / '.sgrs-private')
+    with access.database(write=True) as db:
+        db.execute('INSERT INTO connections VALUES(?,?,?,?,?,?,?)', ('inventarios', url, 'api-key', '', 'saved-key', 3, 0))
+    module.main()
+    value = access.connection('inventarios')
+    assert value['secret'] == expected
+    assert value['version'] == (4 if url.startswith('http://127.0.0.1:') else 3)
+    env = dict(line.split('=', 1) for line in (private / '.env').read_text().splitlines())
+    assert env['INVENTARIOS_REFRESH_SECONDS'] == '0'

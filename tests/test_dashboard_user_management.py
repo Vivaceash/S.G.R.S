@@ -46,6 +46,26 @@ def test_capabilities_are_separate_and_inherited(store):
     assert error.value.status == 403
 
 
+def test_delegated_read_and_create_permissions_survive_login_and_allow_user_creation(store):
+    operator = access.save_user({
+        'username': 'delegated.creator', 'name': 'Creador delegado', 'role': 'soporte',
+        'password': 'Delegated-2026-password', 'allowed_pages': ['usuarios'],
+        'allowed_submodules': [], 'capabilities': ['users.read', 'users.create'],
+    }, store['id'])
+    _, identity = access.login({'username': operator['username'], 'password': 'Delegated-2026-password'}, '127.0.0.1')
+    assert identity['allowed_pages'] == ['usuarios']
+    assert set(identity['capabilities']) == {'users.read', 'users.create'}
+    child = access.save_user({
+        'username': 'delegated.child', 'name': 'Consulta delegada', 'role': 'viewer',
+        'password': 'Delegated-child-2026', 'allowed_pages': ['usuarios'],
+        'allowed_submodules': [], 'capabilities': ['users.read'],
+    }, operator['id'])
+    assert child['id'] in {row['id'] for row in access.list_users(operator['id'])}
+    with pytest.raises(access.AccessError) as error:
+        access.save_user({**child, 'name': 'Edición no autorizada'}, operator['id'])
+    assert error.value.status == 403
+
+
 def test_hierarchy_controls_edit_and_delete_separately(store):
     admin = access.save_user({
         "username": "admin.local",

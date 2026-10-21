@@ -1344,12 +1344,12 @@ export default function App() {
     window.addEventListener("sgrs-session-expired", expired);
     return () => window.removeEventListener("sgrs-session-expired", expired);
   }, []);
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async ({ refreshModule = true } = {}) => {
     if (demo) {
       notify("La vista de demostración está actualizada.");
       return;
     }
-    window.dispatchEvent(new Event('sgrs:refresh-current-module'));
+    if (refreshModule) window.dispatchEvent(new Event('sgrs:refresh-current-module'));
     loadController.current?.abort();
     const controller = new AbortController();
     loadController.current = controller;
@@ -1363,7 +1363,7 @@ export default function App() {
       meztliLeases: "/api/forti/network/dhcp-leases",
       ...(reportsPath ? { reports: reportsPath } : {}),
       health: "/api/health",
-      segments: "/api/forti/network/dhcp-pools",
+      segments: "/api/networks",
       ...(canReadAudit ? { audit: "/api/audit" } : {}),
     };
     setPendingResources(new Set(Object.keys(endpoints)));
@@ -1379,13 +1379,14 @@ export default function App() {
         const response = await request(path, { signal: controller.signal });
         if (version !== generation.current) return;
         const value = key === "audit" ? (response.events || response)
-          : key === "segments" ? response.data?.pools
+          : key === "segments" ? response.networks
           : key === "meztliLeases" ? response.data : response;
         if (["idfs", "ips", "devices", "meztliLeases", "segments"].includes(key) && !Array.isArray(value)) {
           throw new Error("El servicio devolvió un formato no reconocido.");
         }
         loadedResources.current.add(key);
         setData(old => ({ ...old, [key]: value,
+          ...(key === 'segments' ? { networkSources: response.sources, networksPartial: response.partial } : {}),
           ...(key === "idfs" ? { resources: inventoryFromIdfs(value) } : {}),
           updatedAt: new Date().toISOString() }));
         setErrors(old => { const next = { ...old }; delete next[key]; return next; });
@@ -1406,7 +1407,7 @@ export default function App() {
     setLoading(false);
   }, [demo, notify, idfDataView, reportsPath, canReadAudit]);
   useEffect(() => {
-    if (!demo) refresh();
+    if (!demo) refresh({ refreshModule: false });
     return () => {
       generation.current++;
       loadController.current?.abort();
