@@ -393,10 +393,11 @@ def test_stop_includes_inventory_and_waits_before_erasing_registry(tmp_path, mon
     monkeypatch.setattr(run_module.sys, "platform", "win32")
     monkeypatch.setattr(run_module, "is_pid_alive", Mock(side_effect=[True, True, False]))
     monkeypatch.setattr(run_module.time, "sleep", lambda delay: None)
-    taskkill = Mock()
+    taskkill = Mock(side_effect=lambda command, **kwargs: subprocess.CompletedProcess(command, 0, stdout="", stderr=""))
     monkeypatch.setattr(run_module.subprocess, "run", taskkill)
+    monkeypatch.setattr(run_module, "wait_for_ports_free", lambda ports, timeout=10: None)
     run_module.stop_services()
-    assert taskkill.call_args.args[0] == ["taskkill", "/T", "/PID", "123"]
+    assert taskkill.call_args_list[0].args[0] == ["taskkill", "/T", "/PID", "123"]
     assert not registry.exists()
 
 
@@ -419,12 +420,13 @@ def test_windows_stop_escalates_without_sigkill(tmp_path, monkeypatch):
     monkeypatch.setattr(run_module, "is_pid_alive", lambda pid: True)
     monkeypatch.setattr(run_module, "process_matches_service", lambda service, pid: True)
     monkeypatch.setattr(run_module, "_wait_for_processes_to_exit", Mock(side_effect=[False, True]))
-    taskkill = Mock()
+    taskkill = Mock(side_effect=lambda command, **kwargs: subprocess.CompletedProcess(command, 0, stdout="", stderr=""))
     monkeypatch.setattr(run_module.subprocess, "run", taskkill)
+    monkeypatch.setattr(run_module, "wait_for_ports_free", lambda ports, timeout=10: None)
 
     run_module.stop_services()
 
-    assert [call.args[0] for call in taskkill.call_args_list] == [
+    assert [call.args[0] for call in taskkill.call_args_list[:2]] == [
         ["taskkill", "/T", "/PID", "123"],
         ["taskkill", "/F", "/T", "/PID", "123"],
     ]
@@ -449,3 +451,50 @@ def test_sgrs_launcher_resolves_symlink_from_another_directory(tmp_path):
     assert result.returncode == 0
     assert "Inventarios" in result.stdout
     assert "Dashboard" in result.stdout
+
+
+def test_windows_stop_kills_only_listeners_on_sgrs_ports_and_waits_for_release(tmp_path, monkeypatch):
+    registry = tmp_path / "pids.json"
+    registry.write_text('{"dashboard_port": 3000}')
+    monkeypatch.setattr(run_module, "PID_FILE", registry)
+    monkeypatch.setattr(run_module, "load_pids", lambda: {"dashboard_port": 3000})
+    monkeypatch.setattr(run_module.sys, "platform", "win32")
+    monkeypatch.setattr(run_module, "_wait_for_processes_to_exit", lambda pids, timeout: True)
+    netstat = subprocess.CompletedProcess([], 0, stdout=(
+        "  TCP    0.0.0.0:8000    0.0.0.0:0    LISTENING    444\n"
+        "  TCP    [::]:3000       [::]:0       LISTENING    445\n"
+        "  TCP    0.0.0.0:9999    0.0.0.0:0    LISTENING    446\n"
+    ), stderr="")
+    calls = []
+    monkeypatch.setattr(run_module.subprocess, "run", lambda command, **kwargs: calls.append(command) or netstat)
+    waited = []
+    monkeypatch.setattr(run_module, "wait_for_ports_free", lambda ports, timeout=10: waited.append((ports, timeout)))
+
+    run_module.stop_services()
+
+    assert calls == [["netstat", "-ano", "-p", "tcp"], ["taskkill", "/F", "/T", "/PID", "444"], ["taskkill", "/F", "/T", "/PID", "445"]]
+    assert waited == [([8000, 8001, 8002, 3000], 15)]
+    assert not registry.exists()
+
+
+def test_windows_stop_keeps_registry_when_a_service_port_stays_busy(tmp_path, monkeypatch):
+    registry = tmp_path / "pids.json"
+    registry.write_text('{"api_inventarios": 123}')
+    monkeypatch.setattr(run_module, "PID_FILE", registry)
+    monkeypatch.setattr(run_module, "load_pids", lambda: {"api_inventarios": 123})
+    monkeypatch.setattr(run_module.sys, "platform", "win32")
+    monkeypatch.setattr(run_module, "is_pid_alive", lambda pid: False)
+    monkeypatch.setattr(run_module, "_wait_for_processes_to_exit", lambda pids, timeout: True)
+    monkeypatch.setattr(run_module.subprocess, "run", lambda command, **kwargs: subprocess.CompletedProcess(
+        command, 0, stdout="", stderr=""
+    ))
+
+    def port_did_not_release(ports, timeout=10):
+        raise RuntimeError("Los puertos de la sesión anterior siguen ocupados")
+
+    monkeypatch.setattr(run_module, "wait_for_ports_free", port_did_not_release)
+
+    with pytest.raises(RuntimeError, match="No se cerraron todos los servicios"):
+        run_module.stop_services()
+
+    assert registry.exists()

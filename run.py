@@ -677,6 +677,46 @@ def wait_for_ports_free(ports, timeout=10):
         time.sleep(0.2)
 
 
+def windows_listening_pids(ports):
+    """Return PIDs listening on SGRS service ports, without touching other ports."""
+    ports = {port for port in ports if isinstance(port, int) and 0 < port <= 65535}
+    if not ports:
+        return set()
+    result = subprocess.run(
+        ["netstat", "-ano", "-p", "tcp"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("No se pudieron inspeccionar los puertos de Windows; no se confirmó el cierre de SGRS.")
+    listeners = set()
+    for line in result.stdout.splitlines():
+        columns = line.split()
+        if len(columns) < 5 or columns[0].upper() != "TCP" or columns[-2].upper() != "LISTENING":
+            continue
+        pid = columns[-1]
+        try:
+            port = int(columns[1].rsplit(":", 1)[1])
+        except (IndexError, ValueError):
+            continue
+        if port in ports and pid.isdigit() and int(pid) not in (0, os.getpid()):
+            listeners.add(int(pid))
+    return listeners
+
+
+def stop_windows_port_listeners(ports):
+    """Force-close residual child processes still listening on reserved SGRS ports."""
+    for pid in sorted(windows_listening_pids(ports)):
+        print(f"[SGRS] Cerrando proceso residual en un puerto de servicio (PID {pid}).")
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(pid)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+
 def status_services():
     """Muestra disponibilidad HTTP de todos los componentes de S.G.R.S."""
     display_host = os.environ.get("SGRS_SERVER_IP", "192.168.38.250")
@@ -778,6 +818,17 @@ def stop_services():
             remaining = {key: pid for key, pid in stopping.items() if is_pid_alive(pid)}
             save_pids({**remaining, "dashboard_port": pids.get("dashboard_port")} if remaining else {})
             raise RuntimeError("Hay servicios que no terminaron en 15s. Se conservaron sus PIDs; revisa SGRS logs.")
+
+    ports = list(dict.fromkeys(service["port"] for service in specs))
+    if sys.platform == "win32":
+        # The Python PID can exit while a uvicorn/npm child remains alive. Kill
+        # every remaining listener on SGRS's reserved ports, then verify sockets.
+        stop_windows_port_listeners(ports)
+        try:
+            wait_for_ports_free(ports, timeout=15)
+        except RuntimeError as exc:
+            save_pids({"dashboard_port": pids.get("dashboard_port") or 3000})
+            raise RuntimeError(f"No se cerraron todos los servicios; queda un puerto ocupado. {exc}") from exc
 
     PID_FILE.unlink(missing_ok=True)
     if stale and not stopping:
