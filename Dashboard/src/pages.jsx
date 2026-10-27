@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, AlertCircle, ArrowRight, ArrowUpDown, Building2, Calendar, Camera, Check, CheckCircle2, Eye, Thermometer, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Copy, Download, FileText, Grid, HardDrive, Headset, Info, Laptop, Layers3, List, Monitor, Network, Package, Plus, Printer, Radio, RotateCcw, Router, Search, Server, ShieldCheck, Smartphone, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X, LogIn, LogOut, UserPlus, KeyRound, PlugZap, MapPin, MapPinOff } from 'lucide-react';
+import { Activity, AlertCircle, ArrowRight, ArrowUpDown, Building2, Calendar, Camera, Check, CheckCircle2, Eye, EyeOff, MessageSquareText, MoreHorizontal, Thermometer, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Copy, Download, FileText, Grid, HardDrive, Headset, Info, Laptop, Layers3, List, Monitor, Network, Package, Plus, Printer, Radio, RotateCcw, Router, Search, Server, ShieldCheck, Smartphone, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X, LogIn, LogOut, UserPlus, KeyRound, PlugZap, MapPin, MapPinOff } from 'lucide-react';
 import { Badge, Button, DataTable, Dialog, Empty, Loading, InfiniteMore, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, downloadExcel, useListState } from './components.jsx';
-import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getOverviewSegmentDevices, isMeztliSegment, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, getSupportSegments, normalizeText } from './domain.mjs';
+import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getOverviewSegmentDevices, getSegmentAccounts, networkAccountStatus, isMeztliSegment, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, getSupportSegments, normalizeText, buildSegmentDeviceSheets } from './domain.mjs';
 import { useSession } from './session.jsx';
 import { DashboardWidgets } from './dashboard-widgets.jsx';
 import { AltasWidgets } from './altas-widgets.jsx';
-import { filterAltasUsers } from './altas-analytics.mjs';
+import { AccountDetails, DetailGrid } from './account-details.jsx';
+import { auditTimestamp, auditDate, auditSummary, auditChangeRows, auditValue, auditTargetLabel } from './audit-domain.mjs';
+import { filterAltasUsers, userDevices } from './altas-analytics.mjs';
 
 export function PageHeading({ eyebrow, title, description, updatedAt, children, headingId = 'page-title' }) {
   const hasActions = Boolean(children);
@@ -212,7 +214,8 @@ function parseOficioDescription(description, legacyEffectiveDate) {
 }
 
 export function Requests({ demo, data }) {
-  const { canViewSubmodule, altasCache } = useSession();
+  const { canViewSubmodule, altasCache, user } = useSession();
+  const isSuperAdmin = !demo && user?.role === 'super-admin';
   const canViewOficios = canViewSubmodule('altas', 'oficios');
   const canViewAll = canViewSubmodule('altas', 'all');
   const usersState = useListState('altas-usuarios');
@@ -222,12 +225,53 @@ export function Requests({ demo, data }) {
   const accountsListRef = useRef(null);
   const [snapshot, setSnapshot] = useState(() => (!demo && altasCache.peek()) || { users: [], sources: {}, loading: !demo, error: '', updatedAt: null });
   const [selectedUser, setSelectedUser] = useState(null);
+  const [networkProfile, setNetworkProfile] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('');
+  const networkProfiles = [...new Set(snapshot.users.map(user => user.accessRoleProfile).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
   const [editingConcessionUser, setEditingConcessionUser] = useState(null);
   const [concessionDate, setConcessionDate] = useState('');
   const [concessionBusy, setConcessionBusy] = useState(false);
   const [concessionError, setConcessionError] = useState('');
   const [revision, setRevision] = useState(0);
   const [now, setNow] = useState(Date.now());
+  const [annotationUser, setAnnotationUser] = useState(null);
+  const [annotationCategory, setAnnotationCategory] = useState('');
+  const [annotationComment, setAnnotationComment] = useState('');
+  const [annotationBusy, setAnnotationBusy] = useState(false);
+  const [annotationError, setAnnotationError] = useState('');
+  const [annotationHidden, setAnnotationHidden] = useState(false);
+  const [accountVisibility, setAccountVisibility] = useState('all');
+  const accountSnapshotUsers = useMemo(() => isSuperAdmin ? snapshot.users : snapshot.users
+    .filter(account => !account.adminAnnotation?.is_hidden)
+    .map(({ adminAnnotation, ...account }) => account), [snapshot.users, isSuperAdmin]);
+
+  const openAnnotation = account => {
+    setAnnotationUser(account);
+    setAnnotationCategory(account.adminAnnotation?.category || '');
+    setAnnotationComment(account.adminAnnotation?.comment || '');
+    setAnnotationHidden(Boolean(account.adminAnnotation?.is_hidden));
+    setAnnotationError('');
+  };
+
+  const saveAnnotation = async () => {
+    if (!annotationUser) return;
+    setAnnotationBusy(true);
+    setAnnotationError('');
+    try {
+      const result = await request('/api/altas/annotation', { body: {
+        username: annotationUser.username, is_hidden: annotationHidden,
+        category: annotationCategory, comment: annotationComment,
+      }});
+      if (!result.success) throw new Error(result.error || 'No se pudo guardar la clasificación.');
+      setSnapshot(old => ({ ...old, users: old.users.map(account => account.username === annotationUser.username
+        ? { ...account, adminAnnotation: result.annotation, adminCategory: result.annotation.category } : account) }));
+      setAnnotationUser(null);
+    } catch (error) {
+      setAnnotationError(error.message || 'No se pudo guardar la clasificación.');
+    } finally {
+      setAnnotationBusy(false);
+    }
+  };
 
   // Abre el modal para modificar concesión cargando la fecha en formato YYYY-MM-DD
   const openConcessionModal = user => {
@@ -364,7 +408,7 @@ export function Requests({ demo, data }) {
 
   // Las alertas requieren el formato exacto: Oficio - fecha límite - ingeniero.
   const oficiosUsers = useMemo(() => {
-    return snapshot.users
+    return accountSnapshotUsers
       .map(user => {
         const parsed = parseOficioDescription(user.description, user.dateOfEffective);
         if (!parsed) return null;
@@ -394,7 +438,7 @@ export function Requests({ demo, data }) {
         // Si ambos ya están vencidos, ordenar por el más recientemente vencido
         return b.diffMs - a.diffMs;
       });
-  }, [snapshot.users, now]);
+  }, [accountSnapshotUsers, now]);
 
   const activeOficios = oficiosUsers.filter(u => Number.isFinite(u.diffMs) && u.diffMs > 0);
 
@@ -416,9 +460,9 @@ export function Requests({ demo, data }) {
       key: 'username',
       label: 'Cuenta',
       render: row => (
-        <span className="altas-cell-account" title={row.username}>
+        <button type="button" className="altas-cell-account altas-account-button" title={`Ver cuenta de ${row.username}`} onClick={() => setSelectedUser(row)}>
           {row.username || '—'}
-        </span>
+        </button>
       )
     },
     {
@@ -447,7 +491,7 @@ export function Requests({ demo, data }) {
       key: 'department',
       label: 'Departamento',
       render: row => row.department ? (
-        <span className="altas-cell-dept">{row.department}</span>
+        <span className="altas-cell-dept" title={row.department}>{row.department}</span>
       ) : <span className="altas-empty-dash">—</span>
     },
     {
@@ -467,10 +511,12 @@ export function Requests({ demo, data }) {
     {
       key: 'accessRoleProfile',
       label: 'Perfil de acceso',
+      sortable: false,
+      header: <Select className="altas-network-select" label="Perfil de acceso" aria-label="Filtrar por red" value={networkProfile} onChange={event => { setNetworkProfile(event.target.value); usersState.setPage(1); }}><option value="">Todas las redes</option>{networkProfiles.map(profile => <option key={profile} value={profile}>{profile.replace(/^(?:__SSID[-_ ]?|__)/i, '')}</option>)}</Select>,
       render: row => row.accessRoleProfile ? (
         <span className="altas-profile-badge" title={row.accessRoleProfile}>
           <Wifi size={12} aria-hidden="true" />
-          <span>{String(row.accessRoleProfile).replace(/^__SSID[-_ ]?/i, '')}</span>
+          <span>{String(row.accessRoleProfile).replace(/^(?:__SSID[-_ ]?|__)/i, '')}</span>
         </span>
       ) : <span className="altas-empty-dash">—</span>
     },
@@ -487,14 +533,6 @@ export function Requests({ demo, data }) {
           </span>
         );
       }
-    },
-    {
-      key: 'activityAssessment',
-      label: 'Actividad por cotejo',
-      sortable: false,
-      render: row => <span className={`badge ${row.activityAssessment?.status === 'inactive' ? 'badge-warning' : 'badge-neutral'}`} title={row.activityAssessment?.reason || 'Actualiza la información para cotejar las fuentes.'}>
-        {{ inactive: 'Inactiva por cotejo', observed: 'Detectada en Forti', authenticated: 'Con autenticación', unknown: 'Sin verificar' }[row.activityAssessment?.status] || 'Sin verificar'}
-      </span>
     },
     {
       key: 'devices',
@@ -516,6 +554,25 @@ export function Requests({ demo, data }) {
       )
     }
   ];
+  if (isSuperAdmin) {
+    userColumns.push({
+      key: 'adminCategory',
+      label: 'Clasificación',
+      sortable: false,
+      render: row => (
+        <div className="altas-admin-tags">
+          {row.adminAnnotation?.is_hidden && <span className="altas-hidden-tag"><EyeOff size={12} aria-hidden="true" />Oculta</span>}
+          {row.adminAnnotation?.category && <span className="altas-category-tag">{row.adminAnnotation.category}</span>}
+          {row.adminAnnotation?.comment && <span className="altas-private-note" title={row.adminAnnotation.comment}><MessageSquareText size={13} aria-label="Tiene comentario privado" /></span>}
+          {!row.adminAnnotation?.is_hidden && !row.adminAnnotation?.category && !row.adminAnnotation?.comment && <span className="altas-empty-dash">—</span>}
+          <IconButton icon={MoreHorizontal} label={`Organizar cuenta ${row.username}`} onClick={() => openAnnotation(row)} />
+        </div>
+      )
+    });
+  }
+  const accountRows = isSuperAdmin
+    ? accountSnapshotUsers.filter(account => accountVisibility === 'all' || Boolean(account.adminAnnotation?.is_hidden) === (accountVisibility === 'hidden'))
+    : accountSnapshotUsers;
 
   return (
     <div className="altas-page">
@@ -529,7 +586,7 @@ export function Requests({ demo, data }) {
       {demo && <Notice title="Vista de demostración">Para consultar OmniVista cambia a datos del sistema e inicia sesión con una cuenta autorizada.</Notice>}
       {snapshot.error && <Notice title="No se pudo consultar OmniVista" tone="danger" action={<Button onClick={() => setRevision(value => value + 1)}>Reintentar</Button>}>{snapshot.error}</Notice>}
 
-      <AltasWidgets onRefresh={() => setRevision(value => value + 1)} updatedAt={snapshot.updatedAt} users={canViewAll ? snapshot.users : oficiosUsers} sources={snapshot.sources} now={now} demo={demo} loading={snapshot.loading} error={snapshot.error} canViewAll={canViewAll} canViewOficios={canViewOficios} onFilter={canViewAll ? filter => { setAnalyticsFilter(filter); usersState.setPage(1); requestAnimationFrame(() => accountsListRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' })); } : undefined} />
+      <AltasWidgets onRefresh={() => setRevision(value => value + 1)} updatedAt={snapshot.updatedAt} users={canViewAll ? snapshot.users : oficiosUsers} sources={snapshot.sources} now={now} demo={demo} loading={snapshot.loading} error={snapshot.error} canViewAll={canViewAll} canViewOficios={canViewOficios} onFilter={canViewAll ? filter => { setAnalyticsFilter(filter); usersState.reset(); setNetworkProfile(''); setDepartmentFilter(''); setAccountVisibility('all'); requestAnimationFrame(() => accountsListRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' })); } : undefined} />
 
       {canViewOficios && !canViewAll && <div className="altas-alert-toggle-row">
         <Button variant="secondary" icon={Clock} aria-expanded={alertsOpen} aria-controls="altas-alert-sidebar" onClick={() => setAlertsOpen(value => !value)}>
@@ -550,12 +607,12 @@ export function Requests({ demo, data }) {
           {analyticsFilter && <div className="altas-active-filter" role="status"><span>Filtro: <strong>{analyticsFilter.label}</strong></span><Button variant="ghost" icon={X} onClick={() => { setAnalyticsFilter(null); usersState.setPage(1); }}>Quitar filtro</Button></div>}
           <DataTable
             title="Todas las cuentas de usuarios OmniVista"
-            className="altas-accounts-table"
+            className={`altas-accounts-table ${isSuperAdmin ? 'has-admin-columns' : ''}`}
             paginated={false}
             infiniteScroll
-            resetKey={`${snapshot.updatedAt || ''}:${analyticsFilter?.id || ''}:${analyticsFilter?.value || ''}`}
+            resetKey={`${snapshot.updatedAt || ''}:${analyticsFilter?.id || ''}:${analyticsFilter?.value || ''}:${networkProfile}:${departmentFilter}`}
             rowKey="username"
-            rows={filterAltasUsers(snapshot.users, analyticsFilter, now)}
+            rows={filterAltasUsers(accountRows, analyticsFilter, now).filter(account => (!networkProfile || account.accessRoleProfile === networkProfile) && (!departmentFilter || (departmentFilter === '__none__' ? !account.department : account.department === departmentFilter)))}
             columns={userColumns}
             state={usersState}
             noun="cuentas"
@@ -563,10 +620,8 @@ export function Requests({ demo, data }) {
             error={snapshot.error}
             onRetry={() => setRevision(value => value + 1)}
             exportable={!demo}
-            emptyText={analyticsFilter ? 'No hay cuentas que coincidan con el indicador seleccionado.' : 'OmniVista no devolvió cuentas en esta consulta.'}
-            toolbar={
-              <SearchField defer value={usersState.query} onChange={usersState.setQuery} placeholder="Buscar cuenta, nombre o departamento…" />
-            }
+            emptyText={analyticsFilter || networkProfile || departmentFilter ? 'No hay cuentas que coincidan con el indicador seleccionado.' : 'OmniVista no devolvió cuentas en esta consulta.'}
+            toolbar={<div className="altas-accounts-tools"><SearchField defer value={usersState.query} onChange={usersState.setQuery} placeholder="Buscar cuenta, nombre o departamento…" /><Select label="Departamento" value={departmentFilter} onChange={event => { setDepartmentFilter(event.target.value); usersState.setPage(1); }}><option value="">Todos los departamentos</option>{options(accountSnapshotUsers.map(account => account.department))}{accountSnapshotUsers.some(account => !account.department) && <option value="__none__">Sin departamento</option>}</Select>{isSuperAdmin && <Select label="Visibilidad de cuentas" value={accountVisibility} onChange={event => setAccountVisibility(event.target.value)}><option value="all">Todas las cuentas</option><option value="visible">Visibles</option><option value="hidden">Ocultas</option></Select>}</div>}
           />
         </div>}
         {canViewOficios && alertsOpen && <aside id="altas-alert-sidebar" className="altas-concession-alerts" aria-labelledby="altas-alerts-title">
@@ -582,7 +637,7 @@ export function Requests({ demo, data }) {
             rows={activeOficios}
             rowKey="username"
             columns={[
-              { key: 'username', label: 'Cuenta', render: user => <div className="altas-alert-account"><strong>{user.username}</strong><small>{user.fullName || user.department || 'Oficio'}</small></div> },
+              { key: 'username', label: 'Cuenta', render: user => <div className="altas-alert-account"><strong>{user.username}</strong><small>{[user.fullName, user.department].filter(Boolean).join(' · ') || 'Oficio'}</small></div> },
               { key: 'effectiveTime', label: 'Concesión', render: user => <div className={`altas-alert-concession ${user.diffMs <= 24 * 3600 * 1000 ? 'is-urgent' : ''}`}><strong>{formatCountdown(user.diffMs)}</strong><small>Vence <time dateTime={new Date(user.effectiveTime).toISOString()}>{dateTime(user.effectiveTime)}</time>{user.concessionEngineer && <span className="altas-alert-engineer">Alta: {user.concessionEngineer}</span>}</small></div> },
               { key: 'actions', label: 'Acciones', sortable: false, render: user => <div className="altas-alert-row-actions"><IconButton icon={Calendar} label={`Modificar concesión de ${user.username}`} onClick={() => openConcessionModal(user)} />{user.devices?.length > 0 && <IconButton icon={Monitor} label={`Ver equipos de ${user.username}`} onClick={() => setSelectedUser(user)} />}</div> },
             ]}
@@ -596,46 +651,8 @@ export function Requests({ demo, data }) {
           />
         </aside>}
       </div>
-      <Dialog open={Boolean(selectedUser)} title={`Dispositivos de ${selectedUser?.username || 'la cuenta'}`} onClose={() => setSelectedUser(null)} wide>
-        <div className="altas-dialog-copy">
-          <p className="muted">Cotejo entre Company Property de OmniVista y el inventario observado por FortiGate.</p>
-          {selectedUser?.description && (
-            <div className="altas-dialog-note">
-              <strong>Motivo de alta / Oficio:</strong> {selectedUser.description}
-              {(selectedUser.effectiveTime || selectedUser.dateOfEffective) && (
-                <span className="altas-dialog-muted">
-                  Límite de concesión: {new Date(Number(selectedUser.effectiveTime || selectedUser.dateOfEffective)).toLocaleString('es-MX')}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-        {selectedUser?.devices?.length ? (
-          <div className="detail-list">
-            {selectedUser.devices.map((device, index) => (
-              <article className="panel" key={`${device.deviceMac || device.id || index}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <strong>{device.deviceName || device.deviceMac || 'Dispositivo sin nombre'}</strong>
-                  <Badge status={device.forti?.status || device.status} />
-                </div>
-                <dl className="detail-grid">
-                  <div><dt>MAC</dt><dd className="font-mono">{device.deviceMac || '—'}</dd></div>
-                  <div><dt>Equipo OmniVista</dt><dd>{device.lastAccessDeviceName || '—'}</dd></div>
-                  <div><dt>Categoría / familia</dt><dd>{[device.deviceCategory, device.deviceFamily].filter(Boolean).join(' · ') || '—'}</dd></div>
-                  <div><dt>Sistema operativo</dt><dd>{device.deviceOS || '—'}</dd></div>
-                  <div><dt>Cotejo</dt><dd>{device.cotejo}</dd></div>
-                  {device.forti && <>
-                    <div><dt>FortiGate · IP</dt><dd className="font-mono">{device.forti.ip || '—'}</dd></div>
-                    <div><dt>FortiGate · tipo / interfaz</dt><dd>{[device.forti.type, device.forti.interface].filter(Boolean).join(' · ') || '—'}</dd></div>
-                    <div><dt>FortiGate · última detección</dt><dd>{device.forti.last_seen || '—'}</dd></div>
-                  </>}
-                </dl>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <Empty title="Sin dispositivos asociados">OmniVista no tiene terminales asociadas a esta cuenta en la consulta actual.</Empty>
-        )}
+      <Dialog open={Boolean(selectedUser)} title={<span className="account-dialog-title">Detalle de cuenta <span className="account-username">{selectedUser?.username}</span></span>} onClose={() => setSelectedUser(null)} wide className="account-detail-dialog" bodyLabel="Información de la cuenta y dispositivos registrados">
+        <AccountDetails account={selectedUser} />
       </Dialog>
 
       {/* Modal / Diálogo para modificar tiempo de concesión con calendario */}
@@ -717,6 +734,17 @@ export function Requests({ demo, data }) {
           </div>
         </div>
       </Dialog>
+
+      {isSuperAdmin && <Dialog open={Boolean(annotationUser)} title={`Clasificación privada · ${annotationUser?.username || ''}`} onClose={() => !annotationBusy && setAnnotationUser(null)} busy={annotationBusy}>
+        <div className="altas-concession-form">
+          <p className="muted">La clasificación, el estado de ocultamiento y el comentario solo son visibles para super-admin.</p>
+          <label className="altas-private-toggle"><input type="checkbox" checked={annotationHidden} onChange={event => setAnnotationHidden(event.target.checked)} /> Ocultar esta cuenta a los demás perfiles</label>
+          <label className="field">Categoría privada<input className="form-input" maxLength={80} value={annotationCategory} onChange={event => setAnnotationCategory(event.target.value)} placeholder="Ej. Cuenta de servicio" /></label>
+          <label className="field">Comentario privado<textarea className="form-input altas-private-comment" maxLength={2000} rows={4} value={annotationComment} onChange={event => setAnnotationComment(event.target.value)} placeholder="Nota visible solo para super-admin…" /></label>
+          {annotationError && <Notice tone="danger" title="Error al guardar">{annotationError}</Notice>}
+          <div className="dialog-actions altas-dialog-actions"><Button onClick={() => setAnnotationUser(null)} disabled={annotationBusy}>Cancelar</Button><Button variant="primary" busy={annotationBusy} onClick={saveAnnotation}>Guardar</Button></div>
+        </div>
+      </Dialog>}
 
       <Note title="Alcance de la consulta">Las alertas muestran cuentas con descripción de "Oficio" y concesión vigente, ordenadas por vencimiento. El listado principal incluye todas las cuentas autorizadas de OmniVista.</Note>
     </div>
@@ -1511,6 +1539,17 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
   const handleQuery = setQuery;
   const handleStatus = e => setStatusFilter(e.target.value);
 
+  const handleExportDevicesExcel = () => {
+    try {
+      const sheets = buildSegmentDeviceSheets(segment, filtered);
+      const safeName = (segment.name || segment.interface || 'segmento').toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+      const date = new Date().toISOString().slice(0, 10);
+      downloadExcel(`dispositivos_${safeName}_${date}.xls`, sheets);
+    } catch (e) {
+      console.error('Error al exportar dispositivos', e);
+    }
+  };
+
   return <section className="segment-devices-panel" ref={panelRef} aria-labelledby="segment-devices-title">
     <div className="segment-devices-header">
       <div className="segment-devices-title-area">
@@ -1545,6 +1584,17 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
             <option value="offline">Fuera de línea / Reservados</option>
           </Select>
         </div>
+        <Button
+          icon={Download}
+          variant="secondary"
+          onClick={handleExportDevicesExcel}
+          disabled={!filtered.length}
+          className="devices-export-btn segment-devices-export-btn"
+          title={`Descargar ${filtered.length} ${filtered.length === 1 ? 'dispositivo' : 'dispositivos'} en Excel (.xls)`}
+          aria-label="Descargar listado de dispositivos en Excel"
+        >
+          Descargar Excel
+        </Button>
       </div>
       <div className="segment-devices-hint"><Info size={16} aria-hidden="true" /><span>Selecciona cualquier fila para abrir el detalle técnico</span></div>
     </div>
@@ -1596,6 +1646,7 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
     </div>
   </section>;
 }
+export const SegmentAccountsPanel = SegmentDevicesPanel;
 
 export function SupportMovements({ demo }) {
   const [rows, setRows] = useState([]);
@@ -2004,13 +2055,17 @@ export function SupportInventory({ canEdit = false }) {
       </div>
       <p className="support-inventory-footnote">Las cantidades conservan sus unidades originales: piezas, cajas, kits, pares, paquetes o bolsas. Ningún estado se ha verificado físicamente.</p>
     </>}
-    {editing && <div className="support-inventory-edit-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !saving) setEditing(null); }}><form className="support-inventory-edit panel" onSubmit={saveQuantity} aria-label={`Modificar cantidad de ${editing.description}`}>
-      <h2>Modificar cantidad</h2><p><strong>{editing.description}</strong><br />Existencia actual: {editing.quantity} {editing.unit}</p>
-      {error && <Notice tone="danger">{error}</Notice>}
-      <label>Nueva cantidad<input type="number" min="0" step="1" required value={draftQuantity} onChange={event => setDraftQuantity(event.target.value)} /></label>
-      <label>Motivo de la corrección<textarea required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} placeholder="Explica por qué se modifica la existencia" /></label>
-      <div className="support-inventory-edit-actions"><Button type="button" variant="secondary" onClick={() => setEditing(null)} disabled={saving}>Cancelar</Button><Button type="submit" variant="primary" busy={saving}>Guardar cantidad</Button></div>
-    </form></div>}
+    <Dialog open={Boolean(editing)} onClose={() => !saving && setEditing(null)} title="Modificar cantidad" busy={saving}>
+      {editing && <form className="support-inventory-edit" onSubmit={saveQuantity} aria-label={`Modificar cantidad de ${editing.description}`}>
+        <dl className="detail-grid"><div><dt>Artículo</dt><dd>{editing.description}</dd></div><div><dt>Existencia actual</dt><dd>{editing.quantity} {editing.unit}</dd></div></dl>
+        {error && <Notice tone="danger">{error}</Notice>}
+        <div className="form-grid">
+          <div className="field"><label htmlFor="support-inventory-quantity">Nueva cantidad</label><input id="support-inventory-quantity" type="number" min="0" step="1" required value={draftQuantity} onChange={event => setDraftQuantity(event.target.value)} /></div>
+          <div className="field col-span-full"><label htmlFor="support-inventory-reason">Motivo de la corrección</label><textarea id="support-inventory-reason" required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} placeholder="Explica por qué se modifica la existencia" /></div>
+        </div>
+        <div className="dialog-actions"><Button type="button" variant="secondary" onClick={() => setEditing(null)} disabled={saving}>Cancelar</Button><Button type="submit" variant="primary" busy={saving}>Guardar cantidad</Button></div>
+      </form>}
+    </Dialog>
   </section>;
 }
 
@@ -2160,28 +2215,29 @@ export function ProjectAuditLog({
 }) {
   const state = useListState('bitacora-general');
   const rawAudit = data.audit || [];
+  const [selectedEvent, setSelectedEvent] = useState(null);
 
   const enrichedEvents = useMemo(() => {
     return rawAudit.map((e, idx) => {
       const meta = resolveActionMetadata(e.action);
-      const ts = typeof e.created_at === 'number' && e.created_at < 1e12
-        ? e.created_at * 1000
-        : Number(e.created_at) || Date.now();
+      const ts = auditTimestamp(e.created_at);
       return {
         ...e,
         key: `audit-${e.id || idx}`,
         meta,
-        formattedDate: dateTime(ts),
+        timestamp: ts,
+        formattedDate: auditDate(e.created_at),
+        detailsSummary: auditSummary(e.action, e.details, meta.description),
         category: meta.category,
         categoryLabel: meta.categoryLabel,
         categoryTone: meta.categoryTone,
         title: meta.title,
         description: meta.description,
-        targetDisplay: e.target_label || e.target || '—',
+        targetDisplay: auditTargetLabel(e, data.idfs),
         actorDisplay: e.actor_name || e.actor || 'Sistema',
       };
     });
-  }, [rawAudit]);
+  }, [rawAudit, data.idfs]);
 
   const counts = useMemo(() => {
     const total = enrichedEvents.length;
@@ -2256,11 +2312,12 @@ export function ProjectAuditLog({
       key: 'created_at',
       label: 'Fecha y hora',
       width: '18%',
-      value: r => r.created_at,
+      value: r => r.timestamp ?? 0,
       render: r => (
-        <div className="audit-actor-line" title={`Timestamp unix: ${r.created_at}`}>
-          <Clock size={13} className="text-muted" aria-hidden="true" />
-          <span className="font-mono text-xs">{r.formattedDate}</span>
+        <div className="audit-date-cell">
+          <div className="audit-actor-line"><Clock size={13} className="text-muted" aria-hidden="true" /><span className="font-mono text-xs">{r.formattedDate}</span></div>
+          {r.source === 'report-history' && <small>Reporte histórico</small>}
+          {r.timestamp === null && r.original_date && <small>Referencia original sin fecha calendario: {r.original_date}</small>}
         </div>
       ),
     },
@@ -2279,7 +2336,7 @@ export function ProjectAuditLog({
       key: 'action',
       label: 'Movimiento / Acción',
       width: '29%',
-      value: r => `${r.title} ${r.description} ${r.action}`,
+      value: r => `${r.title} ${r.detailsSummary} ${r.action}`,
       render: r => {
         const Icon = r.meta.icon || Activity;
         return (
@@ -2289,7 +2346,8 @@ export function ProjectAuditLog({
             </span>
             <div className="project-audit-action-info">
               <strong>{r.title}</strong>
-              <small title={r.description}>{r.details || r.description}</small>
+              <small>{r.detailsSummary}</small>
+              {r.details && <button type="button" className="audit-detail-link" onClick={() => setSelectedEvent(r)}>Ver detalle</button>}
             </div>
           </div>
         );
@@ -2327,7 +2385,7 @@ export function ProjectAuditLog({
     },
   ];
 
-  const hasActiveFilters = Boolean(state.query || state.filters.category || state.filters.actor);
+  const hasActiveFilters = Boolean(state.query || state.filters.category || state.filters.actorDisplay);
 
   return (
     <>
@@ -2399,8 +2457,8 @@ export function ProjectAuditLog({
             </Select>
             <Select
               label="Responsable"
-              value={state.filters.actor || ''}
-              onChange={e => state.setFilter('actor', e.target.value)}
+              value={state.filters.actorDisplay || ''}
+              onChange={e => state.setFilter('actorDisplay', e.target.value)}
             >
               <option value="">Todos los responsables</option>
               {options(enrichedEvents.map(e => e.actorDisplay))}
@@ -2414,8 +2472,23 @@ export function ProjectAuditLog({
         }
       />
 
-      <Note title="Inmutabilidad y seguridad de auditoría">
-        Todos los movimientos registrados en la bitácora son firmados por el servidor y almacenados en SQLite institucional con sellos de tiempo unix inmutables.
+      <Dialog open={Boolean(selectedEvent)} onClose={() => setSelectedEvent(null)} title="Detalle del movimiento" wide>
+        {selectedEvent && <>
+          <DetailGrid items={[
+            ['Fecha del evento', selectedEvent.formattedDate], ['Responsable', selectedEvent.actorDisplay],
+            ['Recurso', selectedEvent.targetDisplay], ['Movimiento', selectedEvent.title],
+          ]} />
+          <p className="audit-event-summary">{selectedEvent.detailsSummary}</p>
+          {auditChangeRows(selectedEvent.details).length > 0 && <section className="audit-change-list" aria-label="Cambios registrados">{auditChangeRows(selectedEvent.details).map(change => <article key={change.key}>
+            <h3>{change.label}</h3><div className="audit-change-values"><div><strong>Antes</strong><p>{auditValue(change.key, change.before)}</p></div><div><strong>Después</strong><p>{auditValue(change.key, change.after)}</p></div></div>
+          </article>)}</section>}
+          <details className="audit-technical-reference"><summary>Referencia técnica</summary><DetailGrid items={[
+            ['Acción del sistema', selectedEvent.action], ['Identificador del recurso', selectedEvent.target],
+          ]} /></details>
+        </>}
+      </Dialog>
+      <Note title="Origen y fecha de los registros">
+        Los eventos del sistema conservan su fecha de registro en SQLite. Los reportes históricos muestran la fecha original cuando puede verificarse; una referencia sin fecha calendario no se sustituye por la fecha actual.
       </Note>
     </>
   );

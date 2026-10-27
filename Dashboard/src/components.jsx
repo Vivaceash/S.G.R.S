@@ -50,7 +50,7 @@ export function Note({ title = 'Nota operativa', children }) {
 export function Metric({ icon: Icon, label, value, caption, tone = 'brand', children }) {
   return <article className="metric"><div className={`metric-icon metric-icon-${tone}`}><Icon size={28} strokeWidth={1.6} aria-hidden="true" /></div><div className="min-w-0"><p className="metric-label">{label}</p><strong className="metric-value">{value}</strong><p className="metric-caption">{caption}</p>{children}</div></article>;
 }
-export function Dialog({ open, onClose, title, children, footer, wide = false, busy = false }) {
+export function Dialog({ open, onClose, title, children, footer, wide = false, busy = false, className = '', bodyLabel }) {
   const ref = useRef(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -64,10 +64,10 @@ export function Dialog({ open, onClose, title, children, footer, wide = false, b
     document.body.style.overflow = 'hidden';
     return () => { dialog.close(); document.body.style.overflow = previous; if (trigger?.isConnected) trigger.focus(); };
   }, [open]);
-  return <dialog ref={ref} className={`dialog ${wide ? 'dialog-wide' : ''}`} aria-labelledby={titleId}
+  return <dialog ref={ref} className={`dialog ${wide ? 'dialog-wide' : ''} ${className}`} aria-labelledby={titleId}
     onCancel={event => { event.preventDefault(); if (!busy) onCloseRef.current(); }}>
-    <div className="dialog-header"><h2 id={titleId}>{title}</h2><IconButton icon={X} label="Cerrar diálogo" disabled={busy} onClick={onClose} /></div>
-    <div className="dialog-body">{children}</div>{footer && <div className="dialog-footer">{footer}</div>}
+    <div className="dialog-header"><div className="dialog-heading"><span className="dialog-heading-icon"><Info size={21} strokeWidth={1.7} aria-hidden="true" /></span><div><p className="dialog-eyebrow">Centro Operativo</p><h2 id={titleId}>{title}</h2></div></div><IconButton icon={X} label="Cerrar diálogo" disabled={busy} onClick={onClose} /></div>
+    <div className="dialog-body" tabIndex={0} role="region" aria-label={bodyLabel} aria-labelledby={bodyLabel ? undefined : titleId}>{children}</div>{footer && <div className="dialog-footer">{footer}</div>}
   </dialog>;
 }
 export function Empty({ title = 'Aún no hay registros', children = 'Los registros aparecerán aquí cuando estén disponibles.', action }) {
@@ -165,8 +165,8 @@ export function DataTable({ title, rows, columns, state, noun = 'registros', pag
   return <section className={`table-panel ${className}`} aria-label={title}>
     {(toolbar || exportable) && <div className="table-panel-heading"><div>{toolbar}</div>{exportable && <Button icon={Download} onClick={() => downloadCsv(title, columns.filter(c => c.key !== 'actions'), visible)} disabled={!visible.length}>Exportar consulta</Button>}</div>}
     <div ref={scrollRef} onScroll={handleInfiniteScroll} className="table-scroll" tabIndex={0} role="region" aria-label={`${title}. Desplázate para ver todas las filas y columnas.`}>
-      <table><caption className="sr-only">{title}</caption><thead><tr>{columns.map(column => <th key={column.key} scope="col" aria-sort={state.sort === column.key ? state.asc ? 'ascending' : 'descending' : undefined}>
-        {column.sortable === false ? column.label : <button type="button" className="sort-button" onClick={() => state.setSort(column.key)}>{column.label}<ArrowDownUp size={13} aria-hidden="true" /></button>}
+      <table><caption className="sr-only">{title}</caption><thead><tr>{columns.map(column => <th key={column.key} scope="col" aria-sort={column.sortable !== false && state.sort === column.key ? state.asc ? 'ascending' : 'descending' : undefined}>
+        {column.header ?? (column.sortable === false ? column.label : <button type="button" className="sort-button" onClick={() => state.setSort(column.key)}>{column.label}<ArrowDownUp size={13} aria-hidden="true" /></button>)}
       </th>)}</tr></thead><tbody>{!loading && !error && renderedRows.map((row, index) => {
         const cls = typeof rowClassName === 'function' ? rowClassName(row) : rowClassName;
         const rowIndex = (infiniteScroll ? windowStart : 0) + index;

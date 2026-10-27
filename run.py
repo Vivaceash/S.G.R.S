@@ -896,7 +896,7 @@ def ensure_environment():
     """Verifica y prepara el entorno para ejecución en servidor o local.
 
     - Crea el entorno virtual .venv si no existe.
-    - Instala dependencias desde requirements.txt si faltan en el entorno virtual.
+    - Instala dependencias verificadas desde requirements.lock si faltan en el entorno virtual.
     - Asegura permisos estrictos (0o700 / 0o600) en .sgrs-private y sus bases de datos en Linux/POSIX.
     - Si Dashboard/dist no existe y npm está disponible, compila el frontend.
     """
@@ -930,13 +930,13 @@ def ensure_environment():
     )
 
     if check_deps.returncode != 0:
-        req_file = ROOT_DIR / "requirements.txt"
+        req_file = ROOT_DIR / "requirements.lock"
         if req_file.exists():
-            print("[SGRS] Dependencias de Python no detectadas en el entorno virtual. Instalando requirements.txt...")
-            subprocess.run([py_exe, "-m", "pip", "install", "-r", str(req_file)], check=True)
+            print("[SGRS] Dependencias de Python no detectadas en el entorno virtual. Instalando requirements.lock...")
+            subprocess.run([py_exe, "-m", "pip", "install", "--require-hashes", "-r", str(req_file)], check=True)
             print("[SGRS] [OK] Dependencias instaladas exitosamente.")
         else:
-            print("[SGRS] Aviso: requirements.txt no encontrado.")
+            raise RuntimeError("requirements.lock no encontrado; no se pueden instalar dependencias verificadas.")
 
     # 3. Comprobar permisos seguros de .sgrs-private (Linux / POSIX)
     private_dir = ROOT_DIR / ".sgrs-private"

@@ -9,6 +9,7 @@ import {
   Clock,
   FileText,
   Home,
+  Info,
   Menu,
   RefreshCw,
   Server,
@@ -34,6 +35,11 @@ import {
   Thermometer,
   AlertTriangle,
   Calendar,
+  Smartphone,
+  Router,
+  MapPin,
+  Network,
+  HardDrive,
 } from "lucide-react";
 import {
   Badge,
@@ -46,6 +52,7 @@ import {
   Notice,
   SearchField,
 } from "./components.jsx";
+import { DetailGrid, DetailIdentity, DetailSection } from "./account-details.jsx";
 import {
   Addresses,
   AuditLog,
@@ -452,14 +459,89 @@ function QrCard({
     </div>
   );
 }
-function DeviceDetail({ row, demo, canReadTraffic = false }) {
+function DeviceDetail({ row, allDevices = [], demo, canReadTraffic = false }) {
+  const candidateDevices = useMemo(() => {
+    if (Array.isArray(row?.devices) && row.devices.length > 0) {
+      return row.devices;
+    }
+    const initial = row ? [row] : [];
+    if (!row || !Array.isArray(allDevices) || !allDevices.length) return initial;
+
+    const account = String(
+      row.omnivista?.account ||
+      row.user ||
+      row.account ||
+      row.employeeAccount ||
+      ""
+    ).trim().toLowerCase();
+
+    const isGeneric =
+      !account ||
+      [
+        "no identificado",
+        "no informado",
+        "sin cuenta",
+        "sin cuenta individual",
+        "desconocido",
+        "—",
+        "-",
+      ].includes(account);
+
+    if (isGeneric) {
+      return initial;
+    }
+
+    const matches = allDevices.filter((d) => {
+      if (!d) return false;
+      const devAccount = String(
+        d.omnivista?.account ||
+        d.user ||
+        d.account ||
+        d.employeeAccount ||
+        ""
+      ).trim().toLowerCase();
+      return devAccount === account;
+    });
+
+    if (matches.length > 1) {
+      const seen = new Set();
+      const result = [];
+      for (const d of [row, ...matches]) {
+        const cleanMac = String(d.mac || d.deviceMac || "")
+          .replace(/[^a-f0-9]/gi, "")
+          .toLowerCase();
+        const key =
+          cleanMac && cleanMac !== "000000000000"
+            ? `mac:${cleanMac}`
+            : d.ip && d.ip !== "—"
+              ? `ip:${d.ip}`
+              : `name:${d.name || d.deviceName || Math.random()}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          result.push(d);
+        }
+      }
+      return result;
+    }
+
+    return initial;
+  }, [row, allDevices]);
+
+  const [selectedDeviceIndex, setSelectedDeviceIndex] = useState(0);
+  useEffect(() => {
+    setSelectedDeviceIndex(0);
+  }, [row]);
+
+  const activeDevice =
+    candidateDevices[selectedDeviceIndex] || candidateDevices[0] || row;
+
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [traffic, setTraffic] = useState(null);
   const controller = useRef(null);
   useEffect(() => () => controller.current?.abort(), []);
   const load = async () => {
-    if (!canReadTraffic || demo || !row?.ip || row.ip === "—") return;
+    if (!canReadTraffic || demo || !activeDevice?.ip || activeDevice.ip === "—") return;
     controller.current?.abort();
     const current = new AbortController();
     controller.current = current;
@@ -468,7 +550,7 @@ function DeviceDetail({ row, demo, canReadTraffic = false }) {
     const timer = setTimeout(() => current.abort(), 12000);
     try {
       const json = await request(
-        `/api/traffic/ip/${encodeURIComponent(row.ip)}?limit=20&direction=all`,
+        `/api/traffic/ip/${encodeURIComponent(activeDevice.ip)}?limit=20&direction=all`,
         { signal: current.signal },
       );
       if (controller.current === current) setTraffic(json.data || json);
@@ -486,200 +568,145 @@ function DeviceDetail({ row, demo, canReadTraffic = false }) {
   };
 
   const ipDisplay =
-    row?.ip_source === "unconfirmed"
+    activeDevice?.ip_source === "unconfirmed"
       ? "Pendiente de confirmar"
-      : row?.ip ||
-        (row?.is_reserved && row?.reserved_ip
-          ? `${row.reserved_ip} (reservada)`
-          : "No informada");
-  const macDisplay = row?.mac || "No informada";
+      : activeDevice?.ip ||
+        (activeDevice?.is_reserved && activeDevice?.reserved_ip
+          ? `${activeDevice.reserved_ip} (reservada)`
+          : activeDevice?.forti?.ip || "No informada");
+  const macDisplay = activeDevice?.mac || activeDevice?.deviceMac || activeDevice?.forti?.mac || "No informada";
   const serialDisplay =
-    row?.serial ||
-    row?.raw?.serial ||
-    row?.omnivista?.serial ||
-    row?.raw?.serial_number ||
+    activeDevice?.serial ||
+    activeDevice?.raw?.serial ||
+    activeDevice?.omnivista?.serial ||
+    activeDevice?.forti?.serial ||
+    activeDevice?.raw?.serial_number ||
     "No informado";
-  const vendorDisplay = row?.vendor || row?.brand || "No informado";
+  const vendorDisplay = activeDevice?.vendor || activeDevice?.brand || activeDevice?.forti?.vendor || "No informado";
   const modelDisplay =
-    row?.model ||
-    row?.raw?.model ||
-    row?.brandModel ||
-    row?.omnivista?.model ||
+    activeDevice?.model ||
+    activeDevice?.raw?.model ||
+    activeDevice?.brandModel ||
+    activeDevice?.omnivista?.model ||
     "No informado";
   const osDisplay =
-    row?.os || row?.omnivista?.os || row?.raw?.os_name || "No informado";
+    activeDevice?.os || activeDevice?.deviceOS || activeDevice?.omnivista?.os || activeDevice?.forti?.os || activeDevice?.raw?.os_name || "No informado";
   const locationDisplay =
-    row?.omnivista?.location ||
-    formatLocation(row?.location, row?.vendor, row?.interface) ||
+    activeDevice?.omnivista?.location ||
+    activeDevice?.lastAccessLocation ||
+    formatLocation(activeDevice?.location, activeDevice?.vendor, activeDevice?.interface) ||
     "No informada";
   const typeDisplay = formatDeviceType(
-    row?.type,
+    activeDevice?.type || activeDevice?.deviceCategory,
     osDisplay,
-    row?.omnivista?.device_name || row?.name,
+    activeDevice?.omnivista?.device_name || activeDevice?.deviceName || activeDevice?.name,
     vendorDisplay,
   );
-  const statusDisplay =
-    statusNames[row?.status] || row?.status || "No informado";
   const hostnameDisplay =
-    row?.hostname ||
-    row?.detected_device ||
-    row?.omnivista?.device_name ||
-    row?.name ||
+    activeDevice?.hostname ||
+    activeDevice?.detected_device ||
+    activeDevice?.omnivista?.device_name ||
+    activeDevice?.deviceName ||
+    activeDevice?.name ||
     "No informado";
-  const userDisplay = row?.user || row?.omnivista?.account || "No identificado";
-  const fortigateDisplay = row?.fortigate || "No informado";
+  const userDisplay = activeDevice?.user || activeDevice?.omnivista?.account || activeDevice?.employeeAccount || activeDevice?.forti?.user || "No identificado";
+  const fortigateDisplay = activeDevice?.fortigate || activeDevice?.forti?.fortigate || "No informado";
 
-  const techDetails = [
-    ["Nombre de equipo / Hostname", hostnameDisplay],
-    ["Usuario identificado", userDisplay],
-    ["Dirección IP", ipDisplay],
-    ["Dirección MAC", macDisplay],
-    ["Número de serie (serial)", serialDisplay],
-    ["Fabricante", vendorDisplay],
-    ["Modelo", modelDisplay],
-    ["Sistema operativo", osDisplay],
-    ["Tipo de dispositivo", typeDisplay],
-    ["Ubicación física", locationDisplay],
-    ["Interfaz de red", row?.interface || row?.vlan || "No informada"],
-    ["FortiGate de procedencia", fortigateDisplay],
-    ["Estado del equipo", statusDisplay],
-    ["Última actividad", row?.activity || row?.last_seen || "Reciente"],
-  ];
+  const omni = activeDevice?.omnivista || (activeDevice?.lastAccessDeviceName || activeDevice?.lastAccessDeviceSSID ? activeDevice : null);
+  const hasOmni = Boolean(activeDevice?.omnivista?.matched || omni?.device_name || omni?.account || omni?.lastAccessDeviceName);
+  const DeviceIcon = /mobile|teléfono|android|iphone|ipad/i.test(`${typeDisplay} ${osDisplay} ${hostnameDisplay}`) ? Smartphone : /access|router|switch|AP-/i.test(`${typeDisplay} ${hostnameDisplay}`) ? Router : Monitor;
 
   return (
-    <>
-      <dl className="detail-grid">
-        {techDetails.map(([label, value]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd
-              className={
-                label.includes("IP") ||
-                label.includes("MAC") ||
-                label.includes("serie") ||
-                label.includes("Hostname")
-                  ? "font-mono"
-                  : undefined
-              }
-            >
-              {value || "No informado"}
-            </dd>
-          </div>
-        ))}
-      </dl>
-
-      {row?.omnivista?.matched && (
-        <div className="omni-detail-box">
-          <div className="omni-detail-header">
-            <CheckCircle2
-              size={18}
-              className="text-success"
-              aria-hidden="true"
-            />
-            <h4>Información cotejada en OmniVista 2500</h4>
-          </div>
-          <dl className="detail-grid">
-            <div>
-              <dt>Nombre en OmniVista</dt>
-              <dd>
-                <strong>{row.omnivista.device_name || "—"}</strong>
-              </dd>
-            </div>
-            <div>
-              <dt>Cuenta asignada</dt>
-              <dd>{row.omnivista.account || "Sin cuenta individual"}</dd>
-            </div>
-            <div>
-              <dt>Ubicación física (IDF / Puerto)</dt>
-              <dd>
-                <strong className="text-location">
-                  {row.omnivista.location || "No informada"}
-                </strong>
-              </dd>
-            </div>
-            <div>
-              <dt>Punto de acceso (AP)</dt>
-              <dd>{row.omnivista.ap_name || "No informado"}</dd>
-            </div>
-            <div>
-              <dt>SSID reportado</dt>
-              <dd>{row.omnivista.ssid || row.interface || "—"}</dd>
-            </div>
-            <div>
-              <dt>Perfil de acceso</dt>
-              <dd>{row.omnivista.profile || "—"}</dd>
-            </div>
-            <div>
-              <dt>Categoría / Familia</dt>
-              <dd>
-                {[row.omnivista.category, row.omnivista.family]
-                  .filter(Boolean)
-                  .join(" · ") || "—"}
-              </dd>
-            </div>
-            <div>
-              <dt>Sistema operativo OmniVista</dt>
-              <dd>{row.omnivista.os || "—"}</dd>
-            </div>
-            <div>
-              <dt>Estado en OmniVista</dt>
-              <dd>
-                <Badge
-                  status={
-                    row.omnivista.status?.toLowerCase() === "online"
-                      ? "online"
-                      : "offline"
-                  }
-                />{" "}
-                {row.omnivista.status || "—"}
-              </dd>
-            </div>
-          </dl>
+    <div className="device-detail-content">
+      {candidateDevices.length > 1 && (
+        <div className="select-field mb-4" style={{ marginBottom: "16px" }}>
+          <label htmlFor="device-detail-dropdown" style={{ display: "block", marginBottom: "6px", fontWeight: "600", fontSize: "13px" }}>
+            Dispositivos asociados ({candidateDevices.length})
+          </label>
+          <select
+            id="device-detail-dropdown"
+            className="form-input"
+            value={selectedDeviceIndex}
+            onChange={(e) => setSelectedDeviceIndex(Number(e.target.value))}
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              borderRadius: "8px",
+              border: "1px solid var(--border, #d1d5db)",
+              backgroundColor: "var(--surface, #fff)",
+              color: "var(--text, #111827)",
+              fontSize: "14px",
+            }}
+          >
+            {candidateDevices.map((dev, idx) => {
+              const devName =
+                dev.omnivista?.device_name ||
+                dev.deviceName ||
+                dev.name ||
+                dev.hostname ||
+                `Dispositivo ${idx + 1}`;
+              const devIp =
+                dev.ip_source === "unconfirmed"
+                  ? "IP pendiente"
+                  : dev.ip || dev.forti?.ip || "";
+              const devMac = dev.mac || dev.deviceMac || dev.forti?.mac || "";
+              const devMeta = [devIp, devMac].filter(Boolean).join(" · ");
+              return (
+                <option
+                  key={dev.mac || dev.deviceMac || dev.ip || idx}
+                  value={idx}
+                >
+                  {devName} {devMeta ? `(${devMeta})` : ""}
+                </option>
+              );
+            })}
+          </select>
         </div>
       )}
 
-      <div className="forti-detail-box">
-        <div className="forti-detail-header">
-          <ShieldCheck size={18} className="text-brand" aria-hidden="true" />
-          <h4>Datos cotejados de la captura de FortiGate</h4>
-        </div>
-        <dl className="detail-grid">
-          <div>
-            <dt>Usuario identificado</dt>
-            <dd>
-              <strong>{row?.user || "No identificado"}</strong>
-            </dd>
-          </div>
-          <div>
-            <dt>Interfaz</dt>
-            <dd className="font-mono">
-              {row?.interface || row?.vlan || "No informada"}
-            </dd>
-          </div>
-          <div>
-            <dt>FortiGate de procedencia</dt>
-            <dd>
-              <strong>{row?.fortigate || "No informado"}</strong>
-            </dd>
-          </div>
-          <div>
-            <dt>Hostname / Detected Device</dt>
-            <dd className="font-mono">
-              {row?.hostname || row?.detected_device || "No informado"}
-            </dd>
-          </div>
-          <div>
-            <dt>Número de serie (Service Tag)</dt>
-            <dd className="font-mono">
-              {row?.serial || row?.raw?.serial || "No informado"}
-            </dd>
-          </div>
-        </dl>
+      <DetailIdentity name={hostnameDisplay} subtitle={[vendorDisplay, typeDisplay].join(' · ')} account={userDisplay} status={activeDevice?.status ?? "unknown"} icon={DeviceIcon} />
+      <DetailGrid className="device-key-facts" items={[
+        ["Dirección IP", ipDisplay, Globe2, true],
+        ["Dirección MAC", macDisplay, Network, true],
+        ["Ubicación física", locationDisplay, MapPin],
+        ["Interfaz de red", activeDevice?.interface || activeDevice?.vlan || activeDevice?.forti?.interface || "No informada", Wifi],
+        ["FortiGate de procedencia", fortigateDisplay, ShieldCheck],
+        ["Última actividad", activeDevice?.activity || activeDevice?.last_seen || activeDevice?.forti?.last_seen || "Reciente", Clock],
+      ]} />
+      <DetailSection title="Identificación técnica" icon={HardDrive}>
+        <DetailGrid className="device-specifications" items={[
+          ["Número de serie (serial)", serialDisplay, null, true],
+          ["Fabricante", vendorDisplay], ["Modelo", modelDisplay], ["Sistema operativo", osDisplay],
+        ]} />
+      </DetailSection>
+      <div className={`device-evidence-grid ${hasOmni ? 'has-omni' : ''}`}>
+        {hasOmni && <DetailSection title="Información cotejada en OmniVista 2500" source="OmniVista" icon={CheckCircle2} className="omni-detail-box">
+          <DetailGrid items={[
+            ["Nombre en OmniVista", omni?.device_name || omni?.deviceName || "—"],
+            ["Cuenta asignada", omni?.account || omni?.employeeAccount || "Sin cuenta individual"],
+            ["Ubicación física (IDF / Puerto)", omni?.location || omni?.lastAccessLocation || "No informada"],
+            ["Punto de acceso (AP)", omni?.ap_name || omni?.lastAccessDeviceName || "No informado"],
+            ["SSID reportado", omni?.ssid || omni?.lastAccessDeviceSSID || activeDevice?.interface || "—"],
+            ["Perfil de acceso", omni?.profile || omni?.accessRoleProfile || "—"],
+            ["Categoría / Familia", [omni?.category || omni?.deviceCategory, omni?.family || omni?.deviceFamily].filter(Boolean).join(" · ") || "—"],
+            ["Sistema operativo OmniVista", omni?.os || omni?.deviceOS || "—"],
+            ["Estado en OmniVista", omni?.status || omni?.activeStatus || "—"],
+          ]} />
+        </DetailSection>}
+        <DetailSection title="Datos cotejados de la captura de FortiGate" source="FortiGate" icon={ShieldCheck} className="forti-detail-box">
+          <DetailGrid items={[
+            ["Usuario identificado", activeDevice?.user || activeDevice?.forti?.user || "No identificado"],
+            ["Interfaz", activeDevice?.interface || activeDevice?.vlan || activeDevice?.forti?.interface || "No informada", null, true],
+            ["FortiGate de procedencia", fortigateDisplay],
+            ["Hostname / Detected Device", activeDevice?.hostname || activeDevice?.detected_device || activeDevice?.forti?.name || "No informado", null, true],
+            ["Número de serie (Service Tag)", activeDevice?.serial || activeDevice?.raw?.serial || activeDevice?.forti?.serial || "No informado", null, true],
+          ]} />
+        </DetailSection>
       </div>
 
-      {(row?.uptime_seconds != null ||
-        row?.first_connected_at != null ||
-        row?.total_connected_seconds != null) && (
+      {(activeDevice?.uptime_seconds != null ||
+        activeDevice?.first_connected_at != null ||
+        activeDevice?.total_connected_seconds != null) && (
         <div className="uptime-detail-box">
           <div className="uptime-detail-header">
             <Clock size={18} className="text-brand" aria-hidden="true" />
@@ -690,8 +717,8 @@ function DeviceDetail({ row, demo, canReadTraffic = false }) {
               <dt>Tiempo continuo actual</dt>
               <dd>
                 <strong>
-                  {row?.uptime_seconds != null
-                    ? formatUptime(row.uptime_seconds)
+                  {activeDevice?.uptime_seconds != null
+                    ? formatUptime(activeDevice.uptime_seconds)
                     : "—"}
                 </strong>
               </dd>
@@ -699,12 +726,12 @@ function DeviceDetail({ row, demo, canReadTraffic = false }) {
             <div>
               <dt>Conectado desde</dt>
               <dd>
-                {row?.first_connected_at
+                {activeDevice?.first_connected_at
                   ? dateTime(
-                      typeof row.first_connected_at === "number" &&
-                        row.first_connected_at < 1e12
-                        ? row.first_connected_at * 1000
-                        : row.first_connected_at,
+                      typeof activeDevice.first_connected_at === "number" &&
+                        activeDevice.first_connected_at < 1e12
+                        ? activeDevice.first_connected_at * 1000
+                        : activeDevice.first_connected_at,
                     )
                   : "—"}
               </dd>
@@ -713,8 +740,8 @@ function DeviceDetail({ row, demo, canReadTraffic = false }) {
               <dt>Tiempo acumulado en base de datos</dt>
               <dd>
                 <strong>
-                  {row?.total_connected_seconds != null
-                    ? formatUptime(row.total_connected_seconds)
+                  {activeDevice?.total_connected_seconds != null
+                    ? formatUptime(activeDevice.total_connected_seconds)
                     : "—"}
                 </strong>
               </dd>
@@ -728,7 +755,7 @@ function DeviceDetail({ row, demo, canReadTraffic = false }) {
           <Button
             icon={RefreshCw}
             busy={loading}
-            disabled={demo || !row.ip || row.ip === "—"}
+            disabled={demo || !activeDevice?.ip || activeDevice.ip === "—"}
             onClick={load}
           >
             Consultar telemetría de tráfico
@@ -781,7 +808,7 @@ function DeviceDetail({ row, demo, canReadTraffic = false }) {
           )}
         </>
       )}
-    </>
+    </div>
   );
 }
 function IdfHub({
@@ -1321,6 +1348,8 @@ export default function App() {
   const [logoutBusy, setLogoutBusy] = useState(false);
   const generation = useRef(0);
   const loadController = useRef(null);
+  const auditRequestSequence = useRef(0);
+  const previousAuditRoute = useRef(route.path);
   const loadedResources = useRef(new Set());
   const [pendingResources, setPendingResources] = useState(new Set());
   const mutationLock = useRef(false);
@@ -1375,9 +1404,11 @@ export default function App() {
     // Publish each source as soon as it arrives: a slow, unrelated provider
     // must not keep every page behind its loading placeholder.
     await Promise.allSettled(Object.entries(endpoints).map(async ([key, path]) => {
+      const auditSequence = key === 'audit' ? ++auditRequestSequence.current : null;
+      const currentRequest = () => version === generation.current && (key !== 'audit' || auditSequence === auditRequestSequence.current);
       try {
         const response = await request(path, { signal: controller.signal });
-        if (version !== generation.current) return;
+        if (!currentRequest()) return;
         const value = key === "audit" ? (response.events || response)
           : key === "segments" ? response.networks
           : key === "meztliLeases" ? response.data : response;
@@ -1391,13 +1422,13 @@ export default function App() {
           updatedAt: new Date().toISOString() }));
         setErrors(old => { const next = { ...old }; delete next[key]; return next; });
       } catch (error) {
-        if (version !== generation.current) return;
+        if (!currentRequest()) return;
         loadedResources.current.add(key);
         setErrors(old => ({ ...old, [key]: error.name === "AbortError"
           ? "Se agotó el tiempo de consulta. Vuelve a intentar." : error.message }));
       }
       finally {
-        if (version === generation.current) setPendingResources(old => {
+        if (currentRequest()) setPendingResources(old => {
           const next = new Set(old); next.delete(key); return next;
         });
       }
@@ -1413,6 +1444,28 @@ export default function App() {
       loadController.current?.abort();
     };
   }, [demo, refresh]);
+  useEffect(() => {
+    const enteredAudit = route.path === 'bitacora' && previousAuditRoute.current !== 'bitacora';
+    previousAuditRoute.current = route.path;
+    if (!enteredAudit || demo || !canReadAudit) return;
+    const controller = new AbortController();
+    const sequence = ++auditRequestSequence.current;
+    let active = true;
+    const timer = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
+    setPendingResources(old => new Set([...old, 'audit']));
+    request('/api/audit', { signal: controller.signal }).then(response => {
+      if (sequence !== auditRequestSequence.current || controller.signal.aborted) return;
+      loadedResources.current.add('audit');
+      setData(old => ({ ...old, audit: response.events || response, updatedAt: new Date().toISOString() }));
+      setErrors(old => { const next = { ...old }; delete next.audit; return next; });
+    }).catch(error => {
+      if (active && sequence === auditRequestSequence.current) setErrors(old => ({ ...old, audit: error.name === 'AbortError' ? 'Se agotó el tiempo de consulta de la bitácora. Vuelve a intentar.' : error.message }));
+    }).finally(() => {
+      clearTimeout(timer);
+      if (sequence === auditRequestSequence.current) setPendingResources(old => { const next = new Set(old); next.delete('audit'); return next; });
+    });
+    return () => { active = false; clearTimeout(timer); controller.abort(); };
+  }, [route.path, demo, canReadAudit]);
   const go = (path) => {
     setMenu(false);
     setDirty(false);
@@ -2005,11 +2058,7 @@ export default function App() {
             : modal?.kind === "qr"
               ? "Código QR del gabinete"
               : modal?.kind === "device-detail"
-                ? modal.row.hostname ||
-                  modal.row.detected_device ||
-                  modal.row.omnivista?.device_name ||
-                  modal.row.name ||
-                  "Detalle del dispositivo"
+                ? "Ficha del dispositivo"
                 : modal?.kind === "request-detail"
                   ? "Detalle del registro"
                   : modal?.kind === "report-detail"
@@ -2136,7 +2185,6 @@ export default function App() {
           </span>
           <span className="account-info">
             <strong className="account-name">{user.name}</strong>
-            <small className="account-username">@{user.username || 'usuario'}</small>
           </span>
           <ChevronDown size={14} className="account-chevron" />
         </button>
@@ -2312,6 +2360,8 @@ export default function App() {
         open={Boolean(modal)}
         onClose={closeModal}
         title={modalTitle}
+        className={modal?.kind === "device-detail" ? "device-detail-dialog" : undefined}
+        bodyLabel={modal?.kind === "device-detail" ? "Información del dispositivo y cotejo" : undefined}
         wide={["resource", "stock", "request", "device-detail", "report-detail"].includes(
           modal?.kind,
         )}
@@ -2407,6 +2457,7 @@ export default function App() {
         {modal?.kind === "device-detail" && (
           <DeviceDetail
             row={modal.row}
+            allDevices={data.devices}
             demo={demo}
             canReadTraffic={can("traffic.read")}
           />

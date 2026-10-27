@@ -2,6 +2,18 @@
   "idf-3": {
     "incidents": [
       {
+        "id": "IDF-f66d6f44-0dba-458b-a323-7ca2ce7fcc81",
+        "date": "2026-10-27T16:20:13.587452+00:00",
+        "severity": "medium",
+        "device": "Gabinete",
+        "temp": 42.0,
+        "title": "Reporte de incidencia",
+        "description": "Se encontro una rata, estoy buscando el thinner",
+        "status": "open",
+        "tech": "Israel Garcia",
+        "actor_id": "9276a7d9981a7c3ff6a1df06cb376a47"
+      },
+      {
         "id": "INC-03-204",
         "date": "Hoy, 14:15",
         "severity": "medium",
@@ -44,13 +56,25 @@
       }
     ],
     "telemetry": {
-      "temp": 22,
-      "date": "08/09/2026 19:55",
-      "status": "normal"
+      "date": "2026-10-27T16:20:13.587452+00:00",
+      "temp": 42.0,
+      "status": "critical"
     }
   },
   "idf-1": {
     "incidents": [
+      {
+        "id": "IDF-ffd178a1-9eff-45e7-a6f2-74340007cee3",
+        "date": "2026-10-27T15:41:43.131466+00:00",
+        "severity": "medium",
+        "device": "Gabinete",
+        "temp": 28.0,
+        "title": "Reporte de incidencia",
+        "description": "iode",
+        "status": "open",
+        "tech": "Israel Garcia",
+        "actor_id": "9276a7d9981a7c3ff6a1df06cb376a47"
+      },
       {
         "id": "FOL-IDF1-FMP0P",
         "date": "08/09/2026 19:40",
@@ -95,9 +119,9 @@
       }
     ],
     "telemetry": {
-      "date": "2026-10-01T21:59:57.327813+00:00",
-      "temp": 22.5,
-      "status": "normal"
+      "date": "2026-10-27T15:41:43.131466+00:00",
+      "temp": 28.0,
+      "status": "critical"
     }
   },
   "idf-pacs": {
@@ -149,6 +173,18 @@
   "idf-9": {
     "incidents": [
       {
+        "id": "IDF-61a6632d-efd9-4dca-8122-cd8586a99926",
+        "date": "2026-10-27T15:41:24.747937+00:00",
+        "severity": "medium",
+        "device": "Gabinete",
+        "temp": 21.0,
+        "title": "Reporte de incidencia",
+        "description": "Se entro a revisar gotera",
+        "status": "open",
+        "tech": "Israel Garcia",
+        "actor_id": "9276a7d9981a7c3ff6a1df06cb376a47"
+      },
+      {
         "id": "IDF-cfe4e553-a7c1-4b45-a037-dde6f532e3af",
         "date": "2026-09-21T22:26:53.354562+00:00",
         "severity": "medium",
@@ -166,7 +202,7 @@
       }
     ],
     "telemetry": {
-      "date": "2026-09-21T22:26:53.354562+00:00",
+      "date": "2026-10-27T15:41:24.747937+00:00",
       "temp": 21.0,
       "status": "normal"
     }

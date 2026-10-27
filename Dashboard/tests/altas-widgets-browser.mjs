@@ -46,6 +46,11 @@ try {
     await page.clock.fastForward(120000);
     assert.equal(reads, initialReads, 'Filters and countdowns must not query APIs');
     await page.getByRole('button', { name: 'Personalizar indicadores', exact: true }).click();
+    const overlaps = await page.locator('.altas-compact-list').evaluateAll(cards => cards.filter(card => {
+      const cell = card.closest('.dashboard-widget-cell');
+      return card.getBoundingClientRect().bottom > cell.getBoundingClientRect().bottom + 1;
+    }).length);
+    assert.equal(overlaps, 0, 'List cards must fit below their editing controls without overflowing their cells');
     const listWidth = page.getByRole('combobox', { name: 'Ancho de Sistemas operativos', exact: true });
     const listCell = page.locator('[data-widget="altas-platforms"]');
     await listWidth.selectOption('4');

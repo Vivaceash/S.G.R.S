@@ -79,8 +79,8 @@ def main():
             ).rowcount
             if changed:
                 dashboard_access.audit(db, 'system', 'connection.synchronized', 'inventarios')
-        print('API Inventarios configurada con credenciales aleatorias. Secreto de Forti:', 'disponible' if forti_key else 'por configurar',
-              '· Secreto de Omni:', 'disponible' if omni_key else 'por configurar')
+        print('API Inventarios: claves internas listas (se conservan las existentes). Conexión con Forti:', 'disponible' if forti_key else 'por configurar',
+              '· Conexión con Omni:', 'disponible' if omni_key else 'por configurar')
     except Exception as exc:
         raise SystemExit('No se pudo preparar API Inventarios: ' + type(exc).__name__) from None
 

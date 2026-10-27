@@ -24,8 +24,8 @@ export const CAPABILITY_LABELS = {
 };
 export const capabilityLabel = capability => CAPABILITY_LABELS[capability] || capability;
 export const canAssignRole = (actorRole, targetRole) => Boolean(ROLE_RANK[targetRole] && ROLE_RANK[targetRole] <= (ROLE_RANK[actorRole] || 0));
-export const canEditUserTarget = (actor, target) => Boolean(actor && target && actor.id !== target.id
-  && (actor.role === 'super-admin' || (ROLE_RANK[target.role] || 0) < (ROLE_RANK[actor.role] || 0)));
+export const canEditUserTarget = (actor, target) => Boolean(actor && target
+  && (actor.role === 'super-admin' || (actor.id !== target.id && (ROLE_RANK[target.role] || 0) < (ROLE_RANK[actor.role] || 0))));
 
 export function clearIdfViewSession(userId) {
   if (typeof sessionStorage === 'undefined' || !userId) return;
@@ -158,6 +158,29 @@ export function deviceInSegment(device, segment) {
 export function getSegmentDevices(devices, segment) {
   if (!Array.isArray(devices) || !segment) return [];
   return devices.filter(device => deviceInSegment(device, segment));
+}
+
+// Account membership follows the assigned profile, including accounts without devices.
+export function getSegmentAccounts(accounts, segment) {
+  if (!Array.isArray(accounts) || !segment) return [];
+  const profileKey = value => normalizeText(value).trim().replace(/^_+/, '').replace(/^ssid[-_ ]*/, '').replace(/\s+/g, ' ');
+  const profiles = new Set([segment.name, segment.interface, ...(segment.profiles || [])].map(profileKey).filter(Boolean));
+  const matchesProfile = value => Boolean(profileKey(value)) && profiles.has(profileKey(value));
+  const unique = new Map();
+  for (const account of accounts) {
+    if (!account?.username) continue;
+    const matches = matchesProfile(account.accessRoleProfile) || (account.devices || []).some(device =>
+      matchesProfile(device.accessRoleProfile) || (device.forti && deviceInSegment(device.forti, segment)));
+    const key = String(account.username).trim().toLowerCase();
+    if (matches && !unique.has(key)) unique.set(key, account);
+  }
+  return [...unique.values()];
+}
+export function networkAccountStatus(value) {
+  const status = String(value ?? '').trim();
+  if (/^(1|online|active|enabled|normal)$/i.test(status)) return 'active';
+  if (/^(0|offline|inactive|disabled)$/i.test(status)) return 'inactive';
+  return 'unknown';
 }
 
 export function isMeztliSegment(segment) {
@@ -547,6 +570,149 @@ export function buildSupportSheets({
     });
   }
   return sheets;
+}
+
+export function getSegmentDeviceExportColumns(segment = {}) {
+  const segmentLabel = segment.name || segment.interface || 'Segmento';
+  return [
+    {
+      key: 'device_name',
+      label: 'Dispositivo / Equipo',
+      value: d => d?.omnivista?.device_name || d?.name || d?.hostname || d?.detected_device || '—',
+    },
+    {
+      key: 'original_name',
+      label: 'Nombre Detectado / Red',
+      value: d => d?.name || d?.detected_device || d?.hostname || '—',
+    },
+    {
+      key: 'ip',
+      label: 'Dirección IP',
+      value: d => d?.ip_source === 'unconfirmed' ? 'Pendiente de confirmar' : (d?.ip || '—'),
+    },
+    {
+      key: 'ip_type',
+      label: 'Tipo de Asignación IP',
+      value: d => d?.is_reserved ? (d?.reserved_ip ? `Reservada (${d.reserved_ip})` : 'IP reservada') : 'Dinámica (DHCP)',
+    },
+    {
+      key: 'mac',
+      label: 'Dirección MAC',
+      value: d => d?.mac || '—',
+    },
+    {
+      key: 'device_type',
+      label: 'Tipo de Dispositivo',
+      value: d => formatDeviceType(d?.type, d?.os || d?.omnivista?.os || d?.raw?.os_name, d?.omnivista?.device_name || d?.name, d?.vendor) || 'Desconocido',
+    },
+    {
+      key: 'vendor',
+      label: 'Marca / Fabricante',
+      value: d => d?.vendor || d?.brand || '—',
+    },
+    {
+      key: 'model',
+      label: 'Modelo',
+      value: d => d?.model || d?.raw?.model || d?.brandModel || d?.omnivista?.model || '—',
+    },
+    {
+      key: 'os',
+      label: 'Sistema Operativo',
+      value: d => d?.os || d?.omnivista?.os || d?.raw?.os_name || '—',
+    },
+    {
+      key: 'status',
+      label: 'Estado',
+      value: d => d?.status === 'online' ? 'En servicio' : (d?.status === 'offline' ? 'Fuera de línea / Reservado' : (statusNames[d?.status] || d?.status || '—')),
+    },
+    {
+      key: 'location',
+      label: 'Ubicación',
+      value: d => d?.omnivista?.location || formatLocation(d?.location, d?.vendor, segmentLabel) || '—',
+    },
+    {
+      key: 'ap_name',
+      label: 'Punto de Acceso (AP)',
+      value: d => d?.omnivista?.ap_name || '—',
+    },
+    {
+      key: 'omnivista_matched',
+      label: 'Cotejado OmniVista',
+      value: d => d?.omnivista?.matched ? 'Sí' : 'No',
+    },
+    {
+      key: 'omnivista_account',
+      label: 'Cuenta OmniVista',
+      value: d => d?.omnivista?.account || d?.user || '—',
+    },
+    {
+      key: 'omnivista_user',
+      label: 'Usuario / Responsable',
+      value: d => d?.omnivista?.full_name || d?.user || '—',
+    },
+    {
+      key: 'department',
+      label: 'Departamento',
+      value: d => d?.omnivista?.department || '—',
+    },
+    {
+      key: 'position',
+      label: 'Puesto',
+      value: d => d?.omnivista?.position || '—',
+    },
+    {
+      key: 'segment',
+      label: 'Segmento / Red',
+      value: () => segmentLabel,
+    },
+    {
+      key: 'subnet',
+      label: 'Subred',
+      value: () => segment.subnet || segment.ip_ranges?.[0] || '—',
+    },
+    {
+      key: 'gateway',
+      label: 'Gateway',
+      value: () => segment.default_gateway || '—',
+    },
+    {
+      key: 'activity',
+      label: 'Última Actividad',
+      value: d => d?.activity || d?.last_seen || 'Reciente',
+    },
+  ];
+}
+
+export function buildSegmentDeviceSheets({ segment = {}, allDevices = [], filteredDevices = [] } = {}) {
+  const columns = getSegmentDeviceExportColumns(segment);
+  const segmentLabel = segment.name || segment.interface || 'Segmento';
+  const hasFilter = Array.isArray(filteredDevices) && Array.isArray(allDevices) &&
+    filteredDevices.length > 0 &&
+    filteredDevices.length !== allDevices.length;
+
+  if (hasFilter) {
+    return [
+      {
+        name: `Filtrados (${filteredDevices.length})`,
+        columns,
+        rows: filteredDevices,
+      },
+      {
+        name: `Todos (${allDevices.length})`,
+        columns,
+        rows: allDevices,
+      },
+    ];
+  }
+
+  const rows = (filteredDevices && filteredDevices.length) ? filteredDevices : allDevices;
+  return [
+    {
+      name: segmentLabel,
+      columns,
+      rows: Array.isArray(rows) ? rows : [],
+    },
+  ];
 }
 
 export function makeExcelWorkbook(sheets) {

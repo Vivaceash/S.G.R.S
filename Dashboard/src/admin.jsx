@@ -194,9 +194,12 @@ export function UsersPage({ demoUsers, setDemoUsers, notify }) {
   const [editor, setEditor] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [discard, setDiscard] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const busy = useRef(false);
   const close = () => { if (busy.current) return; if (dirty) setDiscard(true); else setEditor(null); };
-  useEffect(() => { const expired = () => { setEditor(null); setDirty(false); setDiscard(false); }; window.addEventListener('sgrs-session-expired', expired); return () => window.removeEventListener('sgrs-session-expired', expired); }, []);
+  useEffect(() => { const expired = () => { setEditor(null); setDirty(false); setDiscard(false); setDeleteTarget(null); setDeleteError(''); }; window.addEventListener('sgrs-session-expired', expired); return () => window.removeEventListener('sgrs-session-expired', expired); }, []);
   useEffect(() => { if (!dirty) return; const warn = e => { e.preventDefault(); e.returnValue = ''; }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty]);
   const save = async values => {
     if (busy.current) return;
@@ -217,18 +220,20 @@ export function UsersPage({ demoUsers, setDemoUsers, notify }) {
         list.setValue(old => ({ users: values.id ? old.users.map(u => u.id === values.id ? saved : u) : [saved, ...old.users] }));
       }
       setDirty(false); setEditor(null); notify(demo ? 'Usuario de ejemplo guardado. No crea acceso real.' : 'Usuario y permisos guardados.');
-      if (!demo && saved.id === user.id && saved.role !== user.role) window.dispatchEvent(new Event('sgrs-session-expired'));
+      if (!demo && saved.id === user.id) window.location.reload();
     } finally { busy.current = false; }
   };
   const remove = async row => {
     if (busy.current || !canDeleteUsers || !canEditUserTarget(user, row)) return;
-    if (!window.confirm(`¿Eliminar por completo la cuenta ${row.username}? Esta acción no se puede deshacer.`)) return;
     busy.current = true;
+    setDeletePending(true);
+    setDeleteError('');
     try {
       if (demo) setDemoUsers(old => old.filter(item => item.id !== row.id));
       else { await request('/api/admin/users/delete', { body: { id: row.id, version: row.version } }); list.setValue(old => ({ users: old.users.filter(item => item.id !== row.id) })); }
-      setDirty(false); setEditor(null); notify(demo ? 'Usuario de ejemplo eliminado.' : 'Usuario eliminado y sesiones revocadas.');
-    } finally { busy.current = false; }
+      setDirty(false); setEditor(null); setDeleteTarget(null); notify(demo ? 'Usuario de ejemplo eliminado.' : 'Usuario eliminado y sesiones revocadas.');
+    } catch (error) { setDeleteError(error.message || 'No se pudo eliminar la cuenta.');
+    } finally { busy.current = false; setDeletePending(false); }
   };
   const rawUsers = list.value?.users || [];
   const visibleUsers = useMemo(() => demo
@@ -248,7 +253,17 @@ export function UsersPage({ demoUsers, setDemoUsers, notify }) {
     <p className="muted">Las cuentas se administran por jerarquía. La eliminación conserva un registro anónimo y protege al último superadmin activo.</p>
     <Dialog open={Boolean(editor)} onClose={close} title={editor?.row ? `Administrar ${editor.row.name}` : 'Crear usuario'} wide>
       {discard && <Notice title="¿Descartar los cambios de esta cuenta?" tone="warning" action={<><Button autoFocus onClick={() => setDiscard(false)}>Seguir editando</Button><Button variant="danger" onClick={() => { setDirty(false); setEditor(null); }}>Descartar</Button></>}>Los cambios aún no se han guardado.</Notice>}
-      {editor && <InheritedUserForm key={editor.row?.id || 'new'} row={editor.row} canConfigure={editor.row ? canEditUsers && canEditUserTarget(user, editor.row) : canCreateUsers} canDelete={Boolean(editor.row && canDeleteUsers && canEditUserTarget(user, editor.row))} onDelete={() => remove(editor.row)} save={save} cancel={close} onDirty={setDirty} />}
+      {editor && <InheritedUserForm key={editor.row?.id || 'new'} row={editor.row} canConfigure={editor.row ? canEditUsers && canEditUserTarget(user, editor.row) : canCreateUsers} canDelete={Boolean(editor.row && editor.row.id !== user.id && canDeleteUsers && canEditUserTarget(user, editor.row))} onDelete={() => { setDeleteError(''); setDeleteTarget(editor.row); }} save={save} cancel={close} onDirty={setDirty} />}
+    </Dialog>
+    <Dialog open={Boolean(deleteTarget)} onClose={() => !deletePending && setDeleteTarget(null)} title="Eliminar usuario" busy={deletePending} footer={<>
+      <Button variant="secondary" disabled={deletePending} onClick={() => setDeleteTarget(null)}>Cancelar</Button>
+      <Button variant="danger" busy={deletePending} onClick={() => remove(deleteTarget)}>Eliminar cuenta</Button>
+    </>}>
+      {deleteTarget && <>
+        <dl className="detail-grid"><div><dt>Cuenta</dt><dd>{deleteTarget.username}</dd></div><div><dt>Nombre</dt><dd>{deleteTarget.name}</dd></div></dl>
+        <Notice title="Esta acción no se puede deshacer" tone="warning">Se eliminará por completo la cuenta y se revocarán sus sesiones activas.</Notice>
+        {deleteError && <Notice title="No se pudo eliminar la cuenta" tone="danger">{deleteError}</Notice>}
+      </>}
     </Dialog>
   </>;
 }

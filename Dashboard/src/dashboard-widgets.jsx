@@ -261,6 +261,32 @@ export function DashboardWidgets({ children, data, demo, userId, loading, errors
     </div>
     {message && <p className="widget-save-message" role="status"><Check size={16} aria-hidden="true" />{message}</p>}
     {saveError && !editing && <Notice tone="danger" title="No se pudo ocultar el widget">{saveError}</Notice>}
+    {groups.map(({ group, widgets }) => <div key={group} className="dashboard-widget-grid" data-widget-group={group || undefined} aria-label={group || (editing ? 'Vista previa del diseño' : 'Widgets del dashboard')}>{widgets.map((widget, index) => {
+      const definition = catalog.find(item => item.id === widget.id);
+      const slotError = widget.id === 'metrics' ? (errors.ips || errors.devices || errors.segments) : ['segments', 'network'].includes(widget.id) ? errors.segments : '';
+      return <section key={widget.id} className={`dashboard-widget-cell widget-span-${widget.size}`} data-widget={widget.id} style={{ '--widget-span': widget.size }}>
+        {quickHide && !editing && <IconButton icon={EyeOff} label={`Ocultar ${definition.title}`} className="widget-hide-control" onClick={() => hide(widget.id)} />}
+        {editing && <div className="widget-placement">
+          <span className="widget-placement-title">
+            <SlidersHorizontal size={14} aria-hidden="true" />
+            <strong>{definition.title}</strong>
+          </span>
+          <div>
+            <label className="widget-size-label">
+              <span className="sr-only">Ancho de {definition.title}</span>
+              <select aria-label={`Ancho de ${definition.title}`} value={widget.size} onChange={event => setDraft(current => current.map(item => item.id === widget.id ? { ...item, size: Number(event.target.value) } : item))}>
+                {WIDGET_SIZES.filter(size => size.value >= definition.min).map(size => <option key={size.value} value={size.value}>{size.label}</option>)}
+              </select>
+            </label>
+            <IconButton icon={ArrowUp} label={`Subir ${definition.title}`} disabled={index === 0} onClick={() => move(widget.id, widgets[index - 1].id)} />
+            <IconButton icon={ArrowDown} label={`Bajar ${definition.title}`} disabled={index === widgets.length - 1} onClick={() => move(widget.id, widgets[index + 1].id)} />
+            <IconButton icon={Trash2} label={`Quitar ${definition.title}`} onClick={() => setDraft(current => current.filter(item => item.id !== widget.id))} />
+          </div>
+        </div>}
+        {slots[widget.id] && slotError && <WidgetWarning error={slotError} onRetry={refresh} />}
+        {slots[widget.id] || <DataWidget id={widget.id} data={data} demo={demo} loading={loading} errors={errors} navigate={navigate} refresh={refresh} />}
+      </section>;
+    })}</div>)}
     {editing && <section className="widget-editor" aria-label="Personalizar widgets">
       <div className="widget-editor-heading">
         <div>
@@ -297,39 +323,13 @@ export function DashboardWidgets({ children, data, demo, userId, loading, errors
       })}</div>
       {saveError && <Notice tone="danger" title="Diseño sin guardar">{saveError}</Notice>}
       <div className="widget-editor-actions">
-        <span><strong>{draft.length}</strong> widgets seleccionados · Vista previa debajo</span>
+        <span><strong>{draft.length}</strong> widgets seleccionados · Vista previa arriba</span>
         <div style={{ display: 'flex', gap: '8px' }}>
           <Button onClick={() => { setEditing(false); setSaveError(''); }}>Cancelar</Button>
           <Button variant="primary" onClick={save}>Guardar diseño</Button>
         </div>
       </div>
     </section>}
-    {groups.map(({ group, widgets }) => <div key={group} className="dashboard-widget-grid" data-widget-group={group || undefined} aria-label={group || (editing ? 'Vista previa del diseño' : 'Widgets del dashboard')}>{widgets.map((widget, index) => {
-      const definition = catalog.find(item => item.id === widget.id);
-      const slotError = widget.id === 'metrics' ? (errors.ips || errors.devices || errors.segments) : ['segments', 'network'].includes(widget.id) ? errors.segments : '';
-      return <section key={widget.id} className={`dashboard-widget-cell widget-span-${widget.size}`} data-widget={widget.id} style={{ '--widget-span': widget.size }}>
-        {quickHide && !editing && <IconButton icon={EyeOff} label={`Ocultar ${definition.title}`} className="widget-hide-control" onClick={() => hide(widget.id)} />}
-        {editing && <div className="widget-placement">
-          <span className="widget-placement-title">
-            <SlidersHorizontal size={14} aria-hidden="true" />
-            <strong>{definition.title}</strong>
-          </span>
-          <div>
-            <label className="widget-size-label">
-              <span className="sr-only">Ancho de {definition.title}</span>
-              <select aria-label={`Ancho de ${definition.title}`} value={widget.size} onChange={event => setDraft(current => current.map(item => item.id === widget.id ? { ...item, size: Number(event.target.value) } : item))}>
-                {WIDGET_SIZES.filter(size => size.value >= definition.min).map(size => <option key={size.value} value={size.value}>{size.label}</option>)}
-              </select>
-            </label>
-            <IconButton icon={ArrowUp} label={`Subir ${definition.title}`} disabled={index === 0} onClick={() => move(widget.id, widgets[index - 1].id)} />
-            <IconButton icon={ArrowDown} label={`Bajar ${definition.title}`} disabled={index === widgets.length - 1} onClick={() => move(widget.id, widgets[index + 1].id)} />
-            <IconButton icon={Trash2} label={`Quitar ${definition.title}`} onClick={() => setDraft(current => current.filter(item => item.id !== widget.id))} />
-          </div>
-        </div>}
-        {slots[widget.id] && slotError && <WidgetWarning error={slotError} onRetry={refresh} />}
-        {slots[widget.id] || <DataWidget id={widget.id} data={data} demo={demo} loading={loading} errors={errors} navigate={navigate} refresh={refresh} />}
-      </section>;
-    })}</div>)}
     {!displayed.length && <Empty title="Tu dashboard está listo para personalizar" action={!editing && <Button icon={Plus} onClick={start}>Agregar widgets</Button>}>Agrega información de tus módulos desde el catálogo.</Empty>}
   </div>;
 }

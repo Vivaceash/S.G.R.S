@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { csvCell, makeCsv, paginate, selectRows, inventoryFromIdfs, reportsFromData, roleLabel, AVAILABLE_PAGES, ROLE_PAGE_DEFAULTS, formatDeviceType, BASE_ROLE_CATALOG, getEffectiveRoles, formatUptime, getSaturationStatus, getSaturationLabel, makeExcelWorkbook, SUPPORT_EXPORT_COLUMNS, SUPPORT_NETWORK_EXPORT_COLUMNS, buildSupportSheets, escapeXml, sanitizeWorksheetName, EXCEL_MIME_TYPE, isSupportSegment, getSupportSegments, normalizeText, usersForDemo, projectUsersForActor, getCardRoles, getUserFilterRoles, countUsersForRoleCard, canViewPageId } from '../src/domain.mjs';
+import { csvCell, makeCsv, paginate, selectRows, inventoryFromIdfs, reportsFromData, roleLabel, AVAILABLE_PAGES, ROLE_PAGE_DEFAULTS, formatDeviceType, BASE_ROLE_CATALOG, getEffectiveRoles, formatUptime, getSaturationStatus, getSaturationLabel, makeExcelWorkbook, SUPPORT_EXPORT_COLUMNS, SUPPORT_NETWORK_EXPORT_COLUMNS, buildSupportSheets, escapeXml, sanitizeWorksheetName, EXCEL_MIME_TYPE, isSupportSegment, getSupportSegments, normalizeText, usersForDemo, projectUsersForActor, getCardRoles, getUserFilterRoles, countUsersForRoleCard, canViewPageId, getSegmentDeviceExportColumns, buildSegmentDeviceSheets } from '../src/domain.mjs';
 import { createDemo } from '../src/demo.mjs';
 
 test('Incidencias sin ID conservan su identidad y la resolución sustituye solo su origen', () => {
@@ -649,6 +649,125 @@ test('makeCsv genera exportación de soporte alineada a las 8 columnas requerida
   assert.ok(!csv.includes('Sistema Operativo'));
   assert.ok(!csv.includes('Fabricante / Hardware'));
   assert.ok(!csv.includes('FortiGate de Procedencia'));
+});
+
+test('getSegmentDeviceExportColumns y buildSegmentDeviceSheets extraen la información técnica del segmento para Excel', () => {
+  const segment = {
+    name: 'SSID-Quetzacoatl',
+    interface: 'wl-quetzal',
+    subnet: '15.40.1.0/24',
+    default_gateway: '15.40.1.254',
+  };
+
+  const dev1 = {
+    name: 'SEP788517AD8CF5',
+    ip: '15.40.1.28',
+    mac: '78:85:17:ad:8c:f6',
+    vendor: 'Cisco',
+    type: 'Teléfono',
+    status: 'online',
+    is_reserved: true,
+    reserved_ip: '15.40.1.28',
+    activity: 'Activo hace 5 min',
+    omnivista: {
+      matched: true,
+      device_name: 'Videoconferencia Sistemas',
+      account: '325318',
+      full_name: 'Sala de Juntas B',
+      department: 'Sistemas',
+      position: 'Equipo Común',
+      location: 'IDF 2 -> Rack A',
+      ap_name: 'AP-PISO2-NORTE',
+    },
+  };
+
+  const dev2 = {
+    name: 'PC-ADMIN-01',
+    ip: '—',
+    ip_source: 'unconfirmed',
+    mac: '00:11:22:33:44:55',
+    vendor: 'HP',
+    os: 'Windows 11',
+    type: 'Computadora',
+    status: 'offline',
+    is_reserved: false,
+    location: 'Piso 1',
+  };
+
+  const columns = getSegmentDeviceExportColumns(segment);
+  assert.ok(columns.length >= 20, 'Debe incluir al menos 20 columnas de extracción técnica');
+
+  // Verificar labels de columnas esenciales
+  const labels = columns.map(c => c.label);
+  assert.ok(labels.includes('Dispositivo / Equipo'));
+  assert.ok(labels.includes('Dirección IP'));
+  assert.ok(labels.includes('Tipo de Asignación IP'));
+  assert.ok(labels.includes('Dirección MAC'));
+  assert.ok(labels.includes('Tipo de Dispositivo'));
+  assert.ok(labels.includes('Marca / Fabricante'));
+  assert.ok(labels.includes('Estado'));
+  assert.ok(labels.includes('Ubicación'));
+  assert.ok(labels.includes('Punto de Acceso (AP)'));
+  assert.ok(labels.includes('Cotejado OmniVista'));
+  assert.ok(labels.includes('Cuenta OmniVista'));
+  assert.ok(labels.includes('Segmento / Red'));
+  assert.ok(labels.includes('Subred'));
+  assert.ok(labels.includes('Gateway'));
+
+  // Verificar valores extraídos de dev1
+  const map1 = Object.fromEntries(columns.map(c => [c.label, c.value(dev1)]));
+  assert.equal(map1['Dispositivo / Equipo'], 'Videoconferencia Sistemas');
+  assert.equal(map1['Nombre Detectado / Red'], 'SEP788517AD8CF5');
+  assert.equal(map1['Dirección IP'], '15.40.1.28');
+  assert.equal(map1['Tipo de Asignación IP'], 'Reservada (15.40.1.28)');
+  assert.equal(map1['Dirección MAC'], '78:85:17:ad:8c:f6');
+  assert.equal(map1['Marca / Fabricante'], 'Cisco');
+  assert.equal(map1['Estado'], 'En servicio');
+  assert.equal(map1['Ubicación'], 'IDF 2 -> Rack A');
+  assert.equal(map1['Punto de Acceso (AP)'], 'AP-PISO2-NORTE');
+  assert.equal(map1['Cotejado OmniVista'], 'Sí');
+  assert.equal(map1['Cuenta OmniVista'], '325318');
+  assert.equal(map1['Usuario / Responsable'], 'Sala de Juntas B');
+  assert.equal(map1['Departamento'], 'Sistemas');
+  assert.equal(map1['Segmento / Red'], 'SSID-Quetzacoatl');
+  assert.equal(map1['Subred'], '15.40.1.0/24');
+  assert.equal(map1['Gateway'], '15.40.1.254');
+
+  // Verificar valores extraídos de dev2 con IP no confirmada y sin reserva
+  const map2 = Object.fromEntries(columns.map(c => [c.label, c.value(dev2)]));
+  assert.equal(map2['Dirección IP'], 'Pendiente de confirmar');
+  assert.equal(map2['Tipo de Asignación IP'], 'Dinámica (DHCP)');
+  assert.equal(map2['Cotejado OmniVista'], 'No');
+
+  // buildSegmentDeviceSheets: cuando no hay filtro genera una sola hoja
+  const sheetsAll = buildSegmentDeviceSheets({
+    segment,
+    allDevices: [dev1, dev2],
+    filteredDevices: [dev1, dev2],
+  });
+  assert.equal(sheetsAll.length, 1);
+  assert.equal(sheetsAll[0].name, 'SSID-Quetzacoatl');
+  assert.equal(sheetsAll[0].rows.length, 2);
+
+  // buildSegmentDeviceSheets: cuando hay filtro genera hojas separadas "Filtrados" y "Todos"
+  const sheetsFiltered = buildSegmentDeviceSheets({
+    segment,
+    allDevices: [dev1, dev2],
+    filteredDevices: [dev1],
+  });
+  assert.equal(sheetsFiltered.length, 2);
+  assert.equal(sheetsFiltered[0].name, 'Filtrados (1)');
+  assert.equal(sheetsFiltered[0].rows.length, 1);
+  assert.equal(sheetsFiltered[1].name, 'Todos (2)');
+  assert.equal(sheetsFiltered[1].rows.length, 2);
+
+  // Validar generación de XML Workbook con makeExcelWorkbook
+  const xml = makeExcelWorkbook(sheetsFiltered);
+  assert.ok(xml.includes('<Worksheet ss:Name="Filtrados (1)">'));
+  assert.ok(xml.includes('<Worksheet ss:Name="Todos (2)">'));
+  assert.ok(xml.includes('Videoconferencia Sistemas'));
+  assert.ok(xml.includes('15.40.1.28'));
+  assert.ok(xml.includes('15.40.1.0/24'));
 });
 
 test('support discovers every published network without a name or VLAN allowlist', () => {

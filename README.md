@@ -270,7 +270,7 @@ Cada microservicio se configura mediante variables de entorno validadas con **Py
 | `OV_PROTOCOL` | `str` | `https` | Protocolo hacia el NMS. |
 | `OV_USERNAME` | `str` | `""` | Usuario de servicio usado para obtener el token de sesión al arrancar. |
 | `OV_PASSWORD` | `str` | `""` | Contraseña del usuario de servicio. |
-| `OV_API_KEY` | `str` | `""` | Obsoleta; no se usa. En producción su presencia invalida la configuración. |
+| `OV_API_KEY` | `str` | `""` | Obligatoria en producción; debe coincidir con Asset Tracking en OmniVista. Se verifica junto con usuario y contraseña antes de consultar datos. |
 | `OV_VERIFY_SSL` | `bool` | `true` | Validación estricta de certificados TLS. |
 | `OV_CA_BUNDLE` | `str` | `""` | Ruta hacia el certificado CA corporativo. |
 | `REQUIRE_PROVIDER_ON_STARTUP` | `bool` | `false` | Si es `true`, aborta el proceso cuando OmniVista no autentica al arrancar. |
@@ -280,9 +280,15 @@ Cada microservicio se configura mediante variables de entorno validadas con **Py
 ## 🚀 Puesta en Marcha
 
 ### Prerrequisitos
-- Python 3.11 o superior instalado.
+- Python 3.14.9 (versión validada y fijada en `.python-version`).
+- Node.js 24.22.1 LTS (fijado en `.nvmrc`) para compilar el Dashboard.
 - Conectividad de red hacia los equipos (FortiGate y OmniVista).
 - Git instalado.
+
+Las dependencias Python se instalan con `python -m pip install --require-hashes -r requirements.lock`;
+las del Dashboard, con `npm ci --prefix Dashboard`. Para actualizar una instalación existente,
+ejecutar explícitamente la instalación desde el bloqueo y reiniciar los servicios: el arranque
+solo instala paquetes cuando faltan dependencias. Véase [la revisión de seguridad](docs/DEPENDENCY_SECURITY_2026-10-23.md).
 
 ### 1. Inicio Rápido Unificado (Recomendado)
 En Linux, desde cualquier directorio de la terminal:

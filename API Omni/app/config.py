@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     OV_USERNAME: str = ""
     OV_PASSWORD: str = ""
     OV_AUTH_MODE: str = "credentials"
-    # Deprecated: las consultas upstream deben usar login con OV_USERNAME/OV_PASSWORD.
+    # Clave de Asset Tracking: debe coincidir con la publicada por OmniVista.
     OV_API_KEY: str = ""
     OV_VERIFY_SSL: bool = True
     OV_CA_BUNDLE: Optional[str] = None
@@ -116,8 +116,8 @@ class Settings(BaseSettings):
                 raise ValueError("APP_API_KEY debe contener claves robustas fuera de development/test.")
             if self.OV_AUTH_MODE != "credentials":
                 raise ValueError("OV_AUTH_MODE debe ser 'credentials' fuera de development/test.")
-            if self.OV_API_KEY:
-                raise ValueError("OV_API_KEY no está permitido: OmniVista debe autenticarse con usuario y contraseña.")
+            if not self.OV_API_KEY.strip():
+                raise ValueError("OV_API_KEY es obligatoria junto con OV_USERNAME y OV_PASSWORD.")
             if not self.OV_USERNAME.strip() or not self.OV_PASSWORD.strip():
                 raise ValueError("OV_USERNAME y OV_PASSWORD son obligatorios para autenticar OmniVista.")
             if not self.JWT_SECRET_KEY or self.JWT_SECRET_KEY == default_jwt_secret:

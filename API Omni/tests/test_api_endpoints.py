@@ -38,7 +38,7 @@ def _production_settings(**overrides):
         "OV_PASSWORD": "service-password-with-adequate-length",
         "OV_VERIFY_SSL": True,
         "OV_PROTOCOL": "https",
-        "OV_API_KEY": "",
+        "OV_API_KEY": "provider-asset-tracking-key",
         "ALLOWED_HOSTS": ["api.example.test"],
         "CORS_ORIGINS": ["https://dashboard.example.test"],
     }

@@ -308,6 +308,11 @@ def database(write=False):
             user_id TEXT PRIMARY KEY,
             principal_segments TEXT NOT NULL,
             updated_at INTEGER NOT NULL);
+          CREATE TABLE IF NOT EXISTS altas_account_annotations (
+            username TEXT PRIMARY KEY COLLATE NOCASE,
+            is_hidden INTEGER NOT NULL DEFAULT 0 CHECK(is_hidden IN (0,1)),
+            category TEXT NOT NULL DEFAULT '', comment TEXT NOT NULL DEFAULT '',
+            updated_at INTEGER NOT NULL, updated_by TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS dashboard_migrations (
             id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL);
           CREATE TABLE IF NOT EXISTS attempts (bucket TEXT NOT NULL, created_at INTEGER NOT NULL);
@@ -601,7 +606,7 @@ def _user_snapshot(row):
     }
 
 
-def save_user(body, actor=None, bootstrap=False):
+def save_user(body, actor=None, bootstrap=False, preserve_session=None):
     username, name, role = user_values(body)
     user_id = body.get("id")
     password = body.get("password", "")
@@ -650,6 +655,8 @@ def save_user(body, actor=None, bootstrap=False):
                     raise AccessError(404, "No se encontró el usuario.")
                 if not can_edit_target(actor_row, old):
                     raise AccessError(403, "Solo una cuenta de jerarquía superior puede editar este usuario.")
+                if old["id"] == actor_row["id"] and not active:
+                    raise AccessError(403, "No puedes suspender tu propia cuenta.")
                 if body.get("version") != old["version"]:
                     raise AccessError(409, "Otro administrador modificó este usuario. Cierra y vuelve a abrir su ficha.")
                 hidden = body.get("is_hidden", bool(old["is_hidden"]))
@@ -707,7 +714,10 @@ def save_user(body, actor=None, bootstrap=False):
                     audit(db, actor, "user.hidden" if after["is_hidden"] else "user.unhidden", user_id)
                 if encoded:
                     audit(db, actor, "user.password.reset", user_id)
-                db.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+                if preserve_session:
+                    db.execute("DELETE FROM sessions WHERE user_id=? AND token_hash<>?", (user_id, preserve_session))
+                else:
+                    db.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
             else:
                 user_id = secrets.token_hex(16)
                 stored_pages = allowed_pages or (['__none__'] if role == 'super-admin' else [])
@@ -759,6 +769,8 @@ def delete_user(actor, body):
             raise AccessError(404, "No se encontró el usuario.")
         if version != target["version"]:
             raise AccessError(409, "El usuario cambió. Recarga la lista antes de eliminarlo.")
+        if target["id"] == actor_row["id"]:
+            raise AccessError(403, "No puedes eliminar tu propia cuenta.")
         if not can_edit_target(actor_row, target):
             raise AccessError(403, "Solo una cuenta de jerarquía superior puede eliminar este usuario.")
         if target["role"] == "super-admin" and target["active"]:

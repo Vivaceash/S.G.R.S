@@ -1,4 +1,6 @@
 import time
+import secrets
+from threading import RLock
 import logging
 import requests
 import urllib3
@@ -21,7 +23,7 @@ if not settings.OV_VERIFY_SSL and not settings.OV_CA_BUNDLE:
 class OmniVistaService:
     """
     Servicio de integración para consultas con Alcatel-Lucent OmniVista 2500 NMS REST API.
-    Autentica exclusivamente mediante sesión con usuario/contraseña (/api/login).
+    Exige sesión con usuario/contraseña y coincidencia de la clave de Asset Tracking.
     La APP_API_KEY pertenece a este gateway y no se reenvía a OmniVista.
     """
 
@@ -29,6 +31,8 @@ class OmniVistaService:
         self.base_url = settings.ov_base_url
         self.username = settings.OV_USERNAME
         self.password = settings.OV_PASSWORD
+        self.api_key = settings.OV_API_KEY.strip()
+        self._auth_lock = RLock()
         
         # Validación TLS con CA bundle corporativo o flag booleano
         if settings.OV_CA_BUNDLE:
@@ -42,14 +46,42 @@ class OmniVistaService:
         self.token_expiry: float = 0.0
         self.last_login_error: Optional[str] = None
 
-    def login(self) -> bool:
-        """Autentica contra OmniVista 2500 y almacena el token de sesión."""
+    def _clear_authentication(self):
         self.access_token = None
         self.token_expiry = 0.0
         self.session.headers.pop("Authorization", None)
+        self.session.cookies.clear()
+
+    def _verify_provider_key(self) -> bool:
+        """Compare the configured key with OmniVista; never expose either value."""
+        try:
+            response = self.session.get(
+                f"{self.base_url}/api/externalapps/apikey/assetTracking",
+                timeout=8, allow_redirects=False,
+            )
+            data = response.json() if response.status_code == 200 else None
+            result = data.get("response") if isinstance(data, dict) else None
+            actual = result.get("apiKey") if isinstance(result, dict) else None
+            if (isinstance(data, dict) and data.get("status") == "SUCCESS"
+                    and isinstance(actual, str) and actual and self.api_key
+                    and secrets.compare_digest(actual.encode("utf-8"), self.api_key.encode("utf-8"))):
+                return True
+        except (requests.exceptions.RequestException, ValueError):
+            pass
+        self.last_login_error = "No se pudo validar OV_API_KEY contra Asset Tracking de OmniVista."
+        self._clear_authentication()
+        return False
+
+    def login(self) -> bool:
+        with self._auth_lock:
+            return self._login()
+
+    def _login(self) -> bool:
+        """Autentica contra OmniVista 2500 y almacena el token de sesión."""
+        self._clear_authentication()
         self.last_login_error = None
-        if not self.username or not self.password:
-            self.last_login_error = "Faltan OV_USERNAME u OV_PASSWORD."
+        if not self.username or not self.password or not self.api_key:
+            self.last_login_error = "Faltan OV_API_KEY, OV_USERNAME u OV_PASSWORD."
             logger.warning("[OV-AUTH] %s", self.last_login_error)
             return False
 
@@ -70,6 +102,7 @@ class OmniVistaService:
                 token = (data.get("accessToken") or data.get("access_token")) if isinstance(data, dict) else None
                 if not isinstance(token, str) or not token.strip():
                     self.last_login_error = "OmniVista respondió HTTP 200 sin token de acceso."
+                    self._clear_authentication()
                     logger.warning("[OV-AUTH] %s", self.last_login_error)
                     return False
                 self.access_token = token.strip()
@@ -83,8 +116,9 @@ class OmniVistaService:
                     "Authorization": f"Bearer {self.access_token}",
                     "Accept": "application/json"
                 })
-                return True
+                return self._verify_provider_key()
             self.last_login_error = f"OmniVista rechazó el login (HTTP {r.status_code})."
+            self._clear_authentication()
             logger.warning("[OV-AUTH] %s", self.last_login_error)
             return False
         except requests.exceptions.SSLError:
@@ -100,17 +134,24 @@ class OmniVistaService:
             self.last_login_error = "OmniVista devolvió una respuesta de login que no es JSON válido."
         except Exception as exc:
             self.last_login_error = f"No fue posible completar el login con OmniVista ({type(exc).__name__})."
+        self._clear_authentication()
         logger.warning("[OV-AUTH] %s", self.last_login_error)
         return False
 
     def _ensure_authenticated(self):
-        """Asegura un token obtenido con el usuario y contraseña configurados."""
+        """Exige sesión vigente y clave de proveedor coincidente antes de consultar."""
         if not self.access_token or time.time() > self.token_expiry:
             if not self.login():
-                raise OmniVistaAuthError("No fue posible autenticar con el servidor Alcatel OmniVista 2500. Revisa OV_USERNAME y OV_PASSWORD.")
+                raise OmniVistaAuthError("No fue posible autenticar con el servidor Alcatel OmniVista 2500. Revisa OV_API_KEY, OV_USERNAME y OV_PASSWORD.")
+        elif not self._verify_provider_key():
+            raise OmniVistaAuthError(self.last_login_error)
 
     def request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         """Envía una petición HTTP a OmniVista con reintentos y reautenticación automática"""
+        with self._auth_lock:
+            return self._request_authenticated(method, endpoint, **kwargs)
+
+    def _request_authenticated(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         self._ensure_authenticated()
         if not endpoint.startswith("/"):
             endpoint = f"/{endpoint}"
@@ -118,10 +159,11 @@ class OmniVistaService:
 
         try:
             response = self.session.request(method, url, **kwargs)
-            # Si el token expira, renovar exclusivamente con usuario/contraseña.
+            # Si el token expira, renovar sesión y volver a comprobar la clave.
             if response.status_code == 401 and self.username and self.password:
-                if self.login():
-                    response = self.session.request(method, url, **kwargs)
+                if not self.login():
+                    raise OmniVistaAuthError(self.last_login_error)
+                response = self.session.request(method, url, **kwargs)
             return response
         except requests.exceptions.RequestException as exc:
             raise OmniVistaConnectionError(
@@ -429,7 +471,7 @@ class OmniVistaService:
         try:
             res = self.request("GET", "/api/devices", timeout=8)
             connected = res.status_code == 200 and "json" in res.headers.get("Content-Type", "")
-            message = "Conexión exitosa con OmniVista 2500 (autenticación por usuario y contraseña)" if connected else f"OmniVista respondió con HTTP {res.status_code}"
+            message = "Conexión exitosa con OmniVista 2500 (API key, usuario y contraseña verificados)" if connected else f"OmniVista respondió con HTTP {res.status_code}"
         except Exception as exc:
             message = "Error de enlace con OmniVista"
 
@@ -440,7 +482,7 @@ class OmniVistaService:
             "omnivista_host": self.base_url,
             "omnivista_connected": connected,
             "latency_ms": elapsed_ms,
-            "auth_mode": "CREDENTIALS",
+            "auth_mode": "CREDENTIALS_AND_API_KEY",
             "message": message
         }
 

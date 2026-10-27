@@ -1,4 +1,4 @@
-import { chromium } from '@playwright/test';
+import { chromium, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
 import { createDemo } from '../src/demo.mjs';
 
@@ -6,7 +6,6 @@ const browser = await chromium.launch({ ...(process.env.SGRS_BROWSER ? { executa
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
-  await page.clock.install();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   const data = createDemo();
@@ -52,7 +51,7 @@ try {
   assert.equal(Number(colBadge.trim()), data.segments.length, 'Todas las redes recibidas deben aparecer');
 
   const networkCards = page.locator('.support-network-card');
-  assert.equal(await networkCards.count(), data.segments.length, 'Sin lista fija de nombres');
+  await expect(networkCards, 'Sin lista fija de nombres').toHaveCount(data.segments.length);
 
   const networkColText = await page.locator('.support-column').first().textContent();
   for (const name of ['Quetzalcóatl', 'Tonatiuh', 'Ehécatl', 'Tláloc', 'Meztli']) {
@@ -74,38 +73,32 @@ try {
 
   // Buscar 'tlaloc' (sin acento)
   await networkSearchInput.fill('tlaloc');
-  await page.waitForTimeout(100);
-  assert.equal(await networkCards.count(), 1, 'Buscar tlaloc sin acento debe encontrar exactamente 1 red');
-  assert.ok((await networkCards.first().textContent()).includes('Tláloc'), 'Debe mostrar la tarjeta de Tláloc');
+  await expect(networkCards, 'Buscar tlaloc sin acento debe encontrar exactamente 1 red').toHaveCount(1);
+  await expect(networkCards.first(), 'Debe mostrar la tarjeta de Tláloc').toContainText('Tláloc');
 
   // Buscar 'ehecatl' (sin acento)
   await networkSearchInput.fill('ehecatl');
-  await page.waitForTimeout(100);
-  assert.equal(await networkCards.count(), 1, 'Buscar ehecatl sin acento debe encontrar exactamente 1 red');
-  assert.ok((await networkCards.first().textContent()).includes('Ehécatl'), 'Debe mostrar la tarjeta de Ehécatl');
+  await expect(networkCards, 'Buscar ehecatl sin acento debe encontrar exactamente 1 red').toHaveCount(1);
+  await expect(networkCards.first(), 'Debe mostrar la tarjeta de Ehécatl').toContainText('Ehécatl');
 
   // Buscar 'quetzal'
   await networkSearchInput.fill('quetzal');
-  await page.waitForTimeout(100);
-  assert.equal(await networkCards.count(), 1, 'Buscar quetzal debe encontrar Quetzalcóatl');
-  assert.ok((await networkCards.first().textContent()).includes('Quetzalcóatl'), 'Debe mostrar la tarjeta de Quetzalcóatl');
+  await expect(networkCards, 'Buscar quetzal debe encontrar Quetzalcóatl').toHaveCount(1);
+  await expect(networkCards.first(), 'Debe mostrar la tarjeta de Quetzalcóatl').toContainText('Quetzalcóatl');
 
   // Buscar 'quetzalcoatl' (sin acento)
   await networkSearchInput.fill('quetzalcoatl');
-  await page.waitForTimeout(100);
-  assert.equal(await networkCards.count(), 1, 'Buscar quetzalcoatl sin acento debe encontrar Quetzalcóatl');
-  assert.ok((await networkCards.first().textContent()).includes('Quetzalcóatl'), 'Debe mostrar la tarjeta de Quetzalcóatl');
+  await expect(networkCards, 'Buscar quetzalcoatl sin acento debe encontrar Quetzalcóatl').toHaveCount(1);
+  await expect(networkCards.first(), 'Debe mostrar la tarjeta de Quetzalcóatl').toContainText('Quetzalcóatl');
 
   // Buscar 'quetzacoatl' (variante fonética sin 'l')
   await networkSearchInput.fill('quetzacoatl');
-  await page.waitForTimeout(100);
-  assert.equal(await networkCards.count(), 1, 'Buscar quetzacoatl debe encontrar Quetzalcóatl');
-  assert.ok((await networkCards.first().textContent()).includes('Quetzalcóatl'), 'Debe mostrar la tarjeta de Quetzalcóatl');
+  await expect(networkCards, 'Buscar quetzacoatl debe encontrar Quetzalcóatl').toHaveCount(1);
+  await expect(networkCards.first(), 'Debe mostrar la tarjeta de Quetzalcóatl').toContainText('Quetzalcóatl');
 
   // Restablecer búsqueda
-  await networkSearchInput.fill('');
-  await page.waitForTimeout(100);
-  assert.equal(await networkCards.count(), data.segments.length, 'Limpiar búsqueda restablece todas las redes');
+  await page.locator('.support-column').first().getByRole('button', { name: 'Limpiar búsqueda', exact: true }).click();
+  await expect(networkCards, 'Limpiar búsqueda restablece todas las redes').toHaveCount(data.segments.length);
   const mixcoatl = networkCards.filter({ hasText: 'Mixcoatl' });
   assert.ok((await mixcoatl.textContent()).includes('Capacidad DHCP no informada'));
   assert.equal(await mixcoatl.locator('meter').count(), 0);

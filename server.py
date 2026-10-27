@@ -24,11 +24,12 @@ try:
 except ImportError:
     pass
 
-from dashboard_access import connection, connection_headers, AccessError, ensure_hidden_superadmin
+from dashboard_access import connection, connection_headers, AccessError, ensure_hidden_superadmin, database
 from dashboard_routes import AccessRoutes
 from dashboard_reports import ReportRoutes, report_key, tagged_reports, idf_overview
 from integration_health import upstream_healthy
 from dashboard_account_activity import assess_activity
+from dashboard_omni_accounts import employee_index, account_details
 from dashboard_history import start_collector
 from dashboard_inventory import cabinets_with_documentary
 from dashboard_device_history import normalize_mac, format_device_type, format_uptime
@@ -166,9 +167,11 @@ def _format_activity(is_online, last_seen):
 
 # Cache en memoria para cotejo no bloqueante con OmniVista (Company Property)
 _omni_cache_lock = threading.Lock()
+_omni_refresh_thread = None
 _omni_devices_cache = {
     "by_mac": {},
     "updated_at": 0,
+    "complete": False,
     "fetching": False
 }
 
@@ -179,6 +182,24 @@ def _refresh_omni_devices_cache():
         _omni_devices_cache["fetching"] = True
     try:
         by_mac = {}
+        employees = []
+        for page in range(1, 21):
+            try:
+                code, body, _ = _fetch_upstream(f"{OMNI_API_URL}/employees?page={page}&page_size=500", timeout=6.0)
+                if code != 200:
+                    break
+                payload = json.loads(body.decode('utf-8'))
+                data = payload.get('data') or {}
+                items = data.get('items', []) if isinstance(data, dict) else data
+            except (ValueError, AttributeError, TypeError, OSError):
+                break
+            if not isinstance(items, list):
+                break
+            employees.extend(item for item in items if isinstance(item, dict))
+            if len(items) < 500:
+                break
+        accounts = employee_index(employees)
+        devices_complete = False
         for page in range(1, 10):
             code, body, _ = _fetch_upstream(f"{OMNI_API_URL}/company-properties?page={page}&page_size=500", timeout=6.0)
             if code != 200:
@@ -189,6 +210,7 @@ def _refresh_omni_devices_cache():
             except Exception:
                 break
             if not items:
+                devices_complete = True
                 break
             for item in items:
                 if not isinstance(item, dict):
@@ -209,13 +231,16 @@ def _refresh_omni_devices_cache():
                         "family": item.get("deviceFamily"),
                         "os": item.get("deviceOS"),
                         "status": item.get("status"),
+                        **account_details(item, accounts),
                     }
             if len(items) < 500:
+                devices_complete = True
                 break
-        if by_mac:
+        if by_mac or devices_complete:
             with _omni_cache_lock:
                 _omni_devices_cache["by_mac"] = by_mac
                 _omni_devices_cache["updated_at"] = time.time()
+                _omni_devices_cache["complete"] = devices_complete
     except Exception:
         pass
     finally:
@@ -227,17 +252,22 @@ def get_omni_device_by_mac(mac):
     if not clean_mac:
         return None
     now = time.time()
-    if now - _omni_devices_cache["updated_at"] > 300 and not _omni_devices_cache["fetching"]:
-        threading.Thread(target=_refresh_omni_devices_cache, daemon=True).start()
+    if now - _omni_devices_cache["updated_at"] > 300:
+        _start_omni_refresh()
     return _omni_devices_cache["by_mac"].get(clean_mac)
+
+def _start_omni_refresh():
+    global _omni_refresh_thread
+    with _omni_cache_lock:
+        if _omni_refresh_thread is None or not _omni_refresh_thread.is_alive():
+            _omni_refresh_thread = threading.Thread(target=_refresh_omni_devices_cache, daemon=True)
+            _omni_refresh_thread.start()
+        return _omni_refresh_thread
 
 def ensure_omni_cache_warm(max_wait=1.5):
     if _omni_devices_cache["by_mac"]:
         return
-    if not _omni_devices_cache["fetching"]:
-        t = threading.Thread(target=_refresh_omni_devices_cache, daemon=True)
-        t.start()
-        t.join(timeout=max_wait)
+    _start_omni_refresh().join(timeout=max_wait)
 
 
 class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
@@ -395,8 +425,8 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                         complete = True
                         break
                 return list(rows_by_id.values()), status_code, complete
-            users, users_status, users_complete = omni_collection('employees', ('username', 'fullName', 'department', 'position', 'accessRoleProfile', 'status', 'email', 'description', 'dateOfEffective'), ('username', 'id'))
-            devices, devices_status, devices_complete = omni_collection('company-properties', ('deviceMac', 'deviceName', 'account', 'employeeAccount', 'accessRoleProfile', 'deviceCategory', 'deviceFamily', 'deviceOS', 'status', 'lastAccessDeviceName', 'lastAccessLocation', 'lastAuthenticationTime'), ('deviceMac', 'id'))
+            users, users_status, users_complete = omni_collection('employees', ('id', 'username', 'fullName', 'telephone', 'department', 'position', 'accessRoleProfile', 'status', 'email', 'description', 'dateOfEffective'), ('username', 'id'))
+            devices, devices_status, devices_complete = omni_collection('company-properties', ('id', 'deviceMac', 'deviceName', 'account', 'employeeAccount', 'accessRoleProfile', 'deviceCategory', 'deviceFamily', 'deviceOS', 'status', 'activeStatus', 'description', 'lastAccessDeviceName', 'lastAccessDeviceSSID', 'lastAccessLocation', 'lastAuthenticationTime'), ('deviceMac', 'id'))
             # Cotejo de Company Property contra el inventario observado por FortiGate.
             forti_by_mac, forti_by_ip = {}, {}
             forti_status = 502
@@ -413,7 +443,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 for item in forti_devices if forti_complete else []:
                     if not isinstance(item, dict):
                         continue
-                    projected = {"name": item.get("hostname") or item.get("ip") or item.get("mac"), "ip": item.get("ip"), "mac": item.get("mac"), "type": item.get("device_type") or item.get("hardware_family"), "vendor": item.get("hardware_vendor"), "interface": item.get("interface"), "status": "online" if item.get("is_online") else "offline", "last_seen": item.get("last_seen")}
+                    projected = {"name": item.get("hostname") or item.get("ip") or item.get("mac"), "ip": item.get("ip"), "mac": item.get("mac"), "type": item.get("device_type") or item.get("hardware_family"), "vendor": item.get("hardware_vendor"), "interface": item.get("interface"), "status": "online" if item.get("is_online") is True else "offline" if item.get("is_online") is False else "unknown", "last_seen": item.get("last_seen"), "os": " ".join(str(item.get(key) or "") for key in ("os_name", "os_version")).strip(), "serial": item.get("serial"), "user": item.get("user"), "fortigate": item.get("fortigate"), "ip_source": item.get("ip_source"), "is_reserved": item.get("is_reserved"), "reserved_ip": item.get("reserved_ip")}
                     mac = ''.join(ch for ch in str(projected.get("mac") or '').lower() if ch.isalnum())
                     ip = str(projected.get("ip") or '').strip()
                     if mac: forti_by_mac[mac] = projected
@@ -479,7 +509,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 match = forti_by_mac.get(mac)
                 if match:
                     forti_matches += 1
-                item = {**device, "forti": match, "cotejo": "encontrado" if match else "sin coincidencia en FortiGate", "asociacion": association_source or "sin cuenta coincidente"}
+                item = {**device, "forti": match, "cotejo": "encontrado" if match else "sin coincidencia en FortiGate" if forti_complete else "pendiente de cotejo", "asociacion": association_source or "sin cuenta coincidente"}
                 if account:
                     associated_devices += 1
                     grouped.setdefault(account.casefold(), []).append(item)
@@ -514,6 +544,24 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                     if dev_times:
                         reg_date = min(dev_times)
                 user["registeredAt"] = reg_date
+            with database() as db:
+                annotations = {row['username'].casefold(): row for row in db.execute(
+                    'SELECT username,is_hidden,category,comment FROM altas_account_annotations')}
+            is_super_admin = self.identity['user']['role'] == 'super-admin'
+            visible_users = []
+            for user in users:
+                annotation = annotations.get(str(user.get('username') or '').casefold())
+                if annotation and annotation['is_hidden'] and not is_super_admin:
+                    continue
+                if is_super_admin:
+                    user['adminAnnotation'] = {
+                        'is_hidden': bool(annotation['is_hidden']) if annotation else False,
+                        'category': annotation['category'] if annotation else '',
+                        'comment': annotation['comment'] if annotation else '',
+                    }
+                    user['adminCategory'] = user['adminAnnotation']['category']
+                visible_users.append(user)
+            users = visible_users
             self._send_json({"success": users_status == 200, "data": {"users": users, "sources": {"users": {"status": users_status, "complete": users_complete, "count": len(users)}, "company_properties": {"status": devices_status, "complete": devices_complete, "count": len(devices), "associated": associated_devices, "unassociated": max(0, len(devices) - associated_devices)}, "fortigate": {"status": forti_status, "complete": forti_complete, "count": len(forti_by_mac), "matches": forti_matches} }}, "message": "Cotejo completo de cuentas, dispositivos y FortiGate en modo lectura."})
 
         # 3c. Consulta de Access Points en tiempo real desde OmniVista
@@ -592,6 +640,18 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 })
             except Exception as e:
                 self._send_json({"error": "No se pudieron procesar los puntos de acceso.", "aps": [], "summary": {}}, 500)
+
+        elif urlsplit(path).path == '/api/devices/omnivista':
+            params = parse_qs(urlsplit(path).query)
+            mac = ''.join(ch for ch in params.get('mac', [''])[0].upper() if ch.isalnum())
+            if not re.fullmatch(r'[0-9A-F]{12}', mac):
+                self._send_json({'error': 'Indica una MAC válida para cotejar OmniVista.'}, 422)
+                return
+            ensure_omni_cache_warm(max_wait=12)
+            omni = _omni_devices_cache['by_mac'].get(mac)
+            status = ('matched' if omni else 'loading' if _omni_devices_cache['fetching']
+                      else 'not_found' if _omni_devices_cache.get('complete') else 'unavailable')
+            self._send_json({'status': status, 'omnivista': omni})
 
         # 4. Catálogo general de dispositivos (Integrado en vivo con API Forti + Fallback)
         elif path.startswith('/api/devices'):
@@ -901,8 +961,8 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
 
         # 8. Verificación de salud global de la plataforma (Health Check)
         elif path == '/api/health':
-            forti_code, forti_body, _ = _fetch_upstream(f"{FORTI_API_URL}/health", timeout=5)
-            omni_code, omni_body, _ = _fetch_upstream(f"{OMNI_API_URL}/system/health", timeout=5)
+            forti_code, forti_body, _ = self.probe_connection(connection("forti"))
+            omni_code, omni_body, _ = self.probe_connection(connection("omni"))
             forti_ok = upstream_healthy("forti", forti_code, forti_body)
             omni_ok = upstream_healthy("omni", omni_code, omni_body)
             self._send_json({
@@ -1064,6 +1124,21 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
             pass
 
     def probe_connection(self, value):
+        # Health routes are public: they cannot validate the saved credential.
+        protected = {"forti": "/system/status", "omni": "/catalogs/device-options",
+                     "inventarios": "/catalogs/cabinets"}
+        result = _configured_request(value, protected[value["id"]], timeout=8.0)
+        if not 200 <= result[0] < 300:
+            return result
+        try:
+            payload = json.loads(result[1])
+            valid = ("json" in result[2].lower() and isinstance(payload, dict)
+                     and payload.get("success") is True and not payload.get("error")
+                     and isinstance(payload.get("data"), (dict, list)))
+        except (ValueError, TypeError, UnicodeError):
+            valid = False
+        if not valid:
+            return 502, b'{"error":"No se pudo validar la consulta autenticada."}', "application/json"
         return _configured_request(value, "/health" if value["id"] == "forti" else "/system/health", timeout=8.0)
 
     def report_context(self):

@@ -65,11 +65,33 @@ def test_ensure_environment_sets_permissions_on_private_dir(tmp_path, monkeypatc
 
     # Solo comprobar permisos POSIX en sistemas no Windows
     if sys.platform != "win32":
+        # Este caso comprueba permisos, usando las dependencias del entorno de pruebas.
+        monkeypatch.setattr(run_module, "get_python_exe", lambda: sys.executable)
         run_module.ensure_environment()
         dir_mode = stat.S_IMODE(os.stat(test_private).st_mode)
         file_mode = stat.S_IMODE(os.stat(test_db).st_mode)
         assert dir_mode == 0o700
         assert file_mode == 0o600
+
+
+def test_environment_installs_hashed_lockfile(tmp_path, monkeypatch):
+    python = tmp_path / ".venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    python.parent.mkdir(parents=True)
+    python.touch()
+    lock = tmp_path / "requirements.lock"
+    lock.write_text("# test lock\n")
+    (tmp_path / "Dashboard/dist").mkdir(parents=True)
+    (tmp_path / "Dashboard/dist/index.html").touch()
+    monkeypatch.setattr(run_module, "ROOT_DIR", tmp_path)
+    monkeypatch.setattr(run_module, "get_python_exe", lambda: str(python))
+    calls = Mock(side_effect=[subprocess.CompletedProcess([], 1), subprocess.CompletedProcess([], 0)])
+    monkeypatch.setattr(run_module.subprocess, "run", calls)
+
+    run_module.ensure_environment()
+
+    calls.assert_called_with(
+        [str(python), "-m", "pip", "install", "--require-hashes", "-r", str(lock)], check=True
+    )
 
 
 def test_main_handles_setup_command(monkeypatch, capsys):

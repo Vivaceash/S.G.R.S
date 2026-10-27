@@ -101,7 +101,7 @@ export function SessionProvider({ children }) {
   const [setupAllowed, setSetupAllowed] = useState(false);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
-  const altasCache = useMemo(() => createAltasCache(), [identity?.user?.id, expired, demo]);
+  const altasCache = useMemo(() => createAltasCache(), [identity?.user?.id, identity?.user?.role, expired, demo]);
   useEffect(() => {
     if (demo) { setReady(true); setCsrfToken(''); return; }
     const controller = new AbortController(); let alive = true;

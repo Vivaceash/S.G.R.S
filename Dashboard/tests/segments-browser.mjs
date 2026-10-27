@@ -31,6 +31,24 @@ try {
       status: 'Online'
     } : null
   }));
+  // Dispositivo adicional para user.0 para verificar dropdown de múltiples dispositivos
+  data.devices.push({
+    name: 'Celular de user.0',
+    ip: '192.168.10.200',
+    mac: '001A2B3C9999',
+    status: 'online',
+    os: 'Android 14',
+    interface: data.segments[0].interface,
+    omnivista: {
+      matched: true,
+      mac: '001A2B3C9999',
+      device_name: 'celular-user-0',
+      account: 'user.0',
+      category: 'Mobile',
+      os: 'Android 14',
+      status: 'Online',
+    },
+  });
   data.devices.push({ name: 'Otro segmento', ip: '192.168.20.1', status: 'online' });
   data.devices.push({ name: 'Reserva desconectada', ip: '192.168.20.2', status: 'offline', is_reserved: true });
   data.devices.push({ name: 'Histórico sin reserva', ip: '192.168.20.3', status: 'offline' });
@@ -101,13 +119,13 @@ try {
     await list.evaluate(el=>{el.scrollTop=el.scrollHeight;});
     await page.waitForTimeout(150);
   }
-  assert.equal(await devicesPanel.locator('.segment-devices-table tbody tr').count(), 126);
+  assert.equal(await devicesPanel.locator('.segment-devices-table tbody tr').count(), 127);
 
   // Búsqueda en la lista inferior
   await devicesPanel.getByPlaceholder('Buscar por equipo, IP, MAC o fabricante…').fill('Local 10');
   await page.waitForTimeout(300);
   const filteredCount = await devicesPanel.locator('.segment-devices-table tbody tr').count();
-  assert.ok(filteredCount > 0 && filteredCount < 126);
+  assert.ok(filteredCount > 0 && filteredCount < 127);
 
   // Al presionar Ocultar dispositivos se cierra y se retira el borde
   await firstCard.getByRole('button', { name: 'Ocultar dispositivos', exact: true }).click();
@@ -129,6 +147,11 @@ try {
   await page.locator('dialog[open]').waitFor();
   assert.equal(await page.locator('dialog[open] h2').innerText(), 'ov-device-0');
   assert.equal(await page.locator('.omni-detail-box').count(), 1);
+  assert.equal(await page.locator('.forti-detail-box').count(), 1);
+  assert.equal(await page.locator('#device-detail-dropdown').isVisible(), true);
+  assert.equal(await page.locator('#device-detail-dropdown option').count(), 2);
+  await page.locator('#device-detail-dropdown').selectOption('1');
+  assert.ok((await page.locator('.omni-detail-box').textContent()).includes('celular-user-0'));
   await page.keyboard.press('Escape');
 
   // Accesibilidad y captura de pantalla

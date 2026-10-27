@@ -64,7 +64,7 @@ def test_vlan_query_does_not_publish_failed_incomplete_or_invalid_results(change
         service.get_vlans()
 
 
-def test_omnivista_login_is_required_even_with_legacy_provider_key(monkeypatch):
+def test_omnivista_login_requires_credentials_and_matching_provider_key(monkeypatch):
     """La API upstream solo acepta la sesión obtenida con usuario y contraseña."""
     session = Mock()
     session.headers = {}
@@ -73,6 +73,9 @@ def test_omnivista_login_is_required_even_with_legacy_provider_key(monkeypatch):
     query_response = Mock(status_code=200)
     session.post.return_value = login_response
     session.request.return_value = query_response
+    key_response = Mock(status_code=200)
+    key_response.json.return_value = {"status": "SUCCESS", "response": {"apiKey": "legacy-provider-key"}}
+    session.get.return_value = key_response
 
     monkeypatch.setattr(omnivista_module.requests, "Session", lambda: session)
     monkeypatch.setattr(settings, "OV_USERNAME", "api-readonly-user")
@@ -201,3 +204,79 @@ def test_access_profiles_fetch_new_networks_each_call_and_fail_explicitly():
     response.status_code = 503
     with pytest.raises(OmniVistaResponseError):
         service.get_access_role_profiles()
+
+
+@pytest.mark.parametrize("key_response", [
+    {"status": "SUCCESS", "response": {"apiKey": "wrong-key"}},
+    {"status": "FAILURE", "response": {"apiKey": "test-provider-key"}},
+    {"status": "SUCCESS", "response": {}},
+    [],
+])
+def test_provider_key_failure_blocks_data_and_clears_session(monkeypatch, key_response):
+    monkeypatch.setattr(settings, "OV_API_KEY", "test-provider-key")
+    service = OmniVistaService()
+    service.session.post = Mock(return_value=Mock(status_code=200))
+    service.session.post.return_value.json.return_value = {"accessToken": "test-session"}
+    service.session.get = Mock(return_value=Mock(status_code=200))
+    service.session.get.return_value.json.return_value = key_response
+    service.session.request = Mock()
+    with pytest.raises(OmniVistaAuthError):
+        service.request("GET", "/api/devices")
+    service.session.request.assert_not_called()
+    assert service.access_token is None
+    assert "Authorization" not in service.session.headers
+    assert not service.session.cookies
+
+
+def test_provider_key_is_rechecked_for_existing_session(monkeypatch):
+    monkeypatch.setattr(settings, "OV_API_KEY", "test-provider-key")
+    service = OmniVistaService()
+    service.access_token = "existing-session"
+    service.token_expiry = float("inf")
+    service.session.headers["Authorization"] = "Bearer existing-session"
+    service.session.get = Mock(return_value=Mock(status_code=200))
+    service.session.get.return_value.json.return_value = {"status": "SUCCESS", "response": {"apiKey": "rotated-key"}}
+    service.session.request = Mock()
+    with pytest.raises(OmniVistaAuthError):
+        service.request("GET", "/api/devices")
+    service.session.request.assert_not_called()
+    assert service.access_token is None
+
+
+@pytest.mark.parametrize("field", ["OV_API_KEY", "OV_USERNAME", "OV_PASSWORD"])
+def test_missing_provider_factor_never_logs_in(monkeypatch, field):
+    monkeypatch.setattr(settings, field, "")
+    service = OmniVistaService()
+    service.session.post = Mock()
+    assert service.login() is False
+    service.session.post.assert_not_called()
+
+
+@pytest.mark.parametrize("failure", ["redirect", "non_json", "timeout"])
+def test_provider_key_unavailable_never_allows_data(monkeypatch, failure):
+    import requests
+    monkeypatch.setattr(settings, "OV_API_KEY", "test-provider-key")
+    service = OmniVistaService()
+    login_response = Mock(status_code=200)
+    login_response.json.return_value = {"accessToken": "test-session"}
+    service.session.post = Mock(return_value=login_response)
+    key_response = Mock(status_code=302 if failure == "redirect" else 200)
+    key_response.json.side_effect = ValueError("not JSON")
+    service.session.get = Mock(return_value=key_response)
+    if failure == "timeout":
+        service.session.get.side_effect = requests.exceptions.Timeout()
+    service.session.request = Mock()
+    with pytest.raises(OmniVistaAuthError):
+        service.request("GET", "/api/devices")
+    service.session.request.assert_not_called()
+    assert service.access_token is None
+    assert "test-provider-key" not in service.last_login_error
+
+
+def test_production_requires_provider_key():
+    from app.config import Settings
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError, match="OV_API_KEY es obligatoria"):
+        Settings(_env_file=None, ENVIRONMENT="production", DEBUG=False,
+                 APP_API_KEY="strong-local-key-for-unit-test", OV_API_KEY="",
+                 OV_USERNAME="test-user", OV_PASSWORD="test-password")

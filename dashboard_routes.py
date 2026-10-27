@@ -14,6 +14,7 @@ from urllib.parse import urlsplit, parse_qs
 from integration_health import upstream_healthy
 from dashboard_catalog import CATALOG
 from dashboard_history import history
+from dashboard_audit import audit_events
 import dashboard_inventory as inventory
 import dashboard_inventarios as inventories_api
 from dashboard_device_history import get_longest_connected_devices
@@ -392,65 +393,10 @@ class AccessRoutes:
                 return True
             if path == "/api/audit":
                 self._require_pages(("bitacora",), "activity.read")
-                reports_file = Path("data/reports.json")
-                reports_data = {}
-                if reports_file.is_file():
-                    try:
-                        reports_data = json.loads(reports_file.read_text(encoding="utf-8"))
-                    except Exception:
-                        pass
-                with database() as db:
-                    user_map = {r['id']: (r['name'] or r['username']) for r in db.execute('SELECT id, name, username FROM users').fetchall()}
-                    rows = db.execute("""
-                        SELECT a.id, a.actor, COALESCE(u.name, u.username, a.actor) as actor_name,
-                               COALESCE(u.username, '') as username, COALESCE(u.role, '') as user_role,
-                               a.action, a.target, a.created_at, a.details
-                        FROM audit a
-                        LEFT JOIN users u ON u.id = a.actor
-                        ORDER BY a.id DESC LIMIT 300
-                    """).fetchall()
-                    events = []
-                    for r in rows:
-                        item = dict(r)
-                        target = item.get("target") or ""
-                        action = item.get("action") or ""
-                        if action.startswith("user.") and target in user_map:
-                            item["target_label"] = f"Usuario {user_map[target]}"
-                        elif action.startswith("session.") and target in user_map:
-                            item["target_label"] = f"Sesión {user_map[target]}"
-                        elif action.startswith("connection."):
-                            item["target_label"] = f"Servicio {target.upper()}"
-                        else:
-                            item["target_label"] = target
-                        events.append(item)
-
-                    audit_targets = {e.get("target") for e in events}
-                    for idf_id, group in reports_data.items():
-                        incidents = group if isinstance(group, list) else group.get("incidents", [])
-                        for inc in incidents:
-                            inc_id = inc.get("id") or ""
-                            target_ref = f"{idf_id}:{inc_id}"
-                            if target_ref not in audit_targets and inc_id not in audit_targets:
-                                dt = inc.get("date")
-                                try:
-                                    ts = int(datetime.fromisoformat(dt.replace("Z", "+00:00")).timestamp()) if dt else int(time.time())
-                                except Exception:
-                                    ts = int(time.time())
-                                is_res = inc.get("status") == "resolved"
-                                events.append({
-                                    "id": f"rep-{inc_id or idf_id}",
-                                    "actor": inc.get("actor_id") or "operativo",
-                                    "actor_name": inc.get("tech") or "Técnico de campo",
-                                    "username": "",
-                                    "user_role": "operativo",
-                                    "action": "idf.report.resolved" if is_res else "idf.report.created",
-                                    "target": target_ref,
-                                    "target_label": f"{idf_id.upper()} · {inc.get('title') or inc_id}",
-                                    "created_at": ts,
-                                    "details": inc.get("description") or "",
-                                })
-                    events.sort(key=lambda x: x.get("created_at") or 0, reverse=True)
-                self._send_json({"events": events[:400]})
+                reports_file, idfs_file, lock = self.report_context()
+                with lock:
+                    events = audit_events(reports_file, idfs_file)
+                self._send_json({"events": events})
                 return True
             if path == "/api/support/longest-connected":
                 self._require_submodule('soporte', 'live', 'dashboard.read')
@@ -469,7 +415,7 @@ class AccessRoutes:
                 self._send_json(devices)
                 return True
             normal = {"/api/idfs", "/api/reports", "/api/ips", "/api/devices", "/api/devices/summary", "/api/devices/export", "/api/health", "/api/ip", "/api/networks", "/api/forti/network/dhcp-pools", "/api/forti/network/dhcp-leases", "/api/altas/omnivista", "/api/aps/omnivista"}
-            if path in normal:
+            if path in normal or path == '/api/devices/omnivista':
                 if path == '/api/aps/omnivista':
                     self._require_submodule('aps', 'live', 'inventory.read')
                 return False
@@ -540,6 +486,30 @@ class AccessRoutes:
                     updated = dict(db.execute('SELECT * FROM support_inventory WHERE id=?', (item_id,)).fetchone())
                 self._send_json({'status': 'success', 'item': updated})
                 return True
+            if path == '/api/altas/annotation':
+                if self.identity['user']['role'] != 'super-admin':
+                    raise AccessError(403, 'Solo un super-admin puede organizar las cuentas OmniVista.')
+                body = self._body()
+                username = body.get('username')
+                hidden = body.get('is_hidden', False)
+                category = body.get('category', '')
+                comment = body.get('comment', '')
+                if not isinstance(username, str) or not username.strip() or len(username) > 160:
+                    raise AccessError(422, 'La cuenta OmniVista no es válida.')
+                if not isinstance(hidden, bool) or not isinstance(category, str) or len(category) > 80 or not isinstance(comment, str) or len(comment) > 2000:
+                    raise AccessError(422, 'Revisa la categoría y el comentario (máximo 80 y 2000 caracteres).')
+                username = username.strip()
+                category, comment = category.strip(), comment.strip()
+                with database(write=True) as db:
+                    db.execute('''INSERT INTO altas_account_annotations(username,is_hidden,category,comment,updated_at,updated_by)
+                        VALUES(?,?,?,?,?,?) ON CONFLICT(username) DO UPDATE SET
+                        is_hidden=excluded.is_hidden,category=excluded.category,comment=excluded.comment,
+                        updated_at=excluded.updated_at,updated_by=excluded.updated_by''',
+                        (username, int(hidden), category, comment, int(time.time()), self.identity['user']['id']))
+                    audit(db, self.identity['user']['id'], 'altas.account.annotated', username,
+                          {'hidden': hidden, 'category': category, 'comment_updated': bool(comment)})
+                self._send_json({'success': True, 'annotation': {'is_hidden': hidden, 'category': category, 'comment': comment}})
+                return True
             if path == '/api/support/movements':
                 self._require_submodule('soporte', 'log', 'activity.read')
                 if self.identity['user']['role'] != 'soporte':
@@ -592,7 +562,9 @@ class AccessRoutes:
                 self._send_json({"status": "success"})
                 return True
             if path == "/api/admin/users/save":
-                self._send_json({"user": save_user(self._body(), actor)})
+                body = self._body()
+                preserve_session = self.identity['token_hash'] if body.get('id') == actor else None
+                self._send_json({"user": save_user(body, actor, preserve_session=preserve_session)})
                 return True
             if path == "/api/admin/users/delete":
                 self._send_json(delete_user(actor, self._body()))
@@ -651,6 +623,16 @@ class AccessRoutes:
         identity = getattr(self, "identity", None)
         if identity and identity["user"]["role"] != "super-admin":
             data = project_hidden_actors(data)
+            if isinstance(data, dict) and isinstance(data.get('data'), dict) and isinstance(data['data'].get('users'), list):
+                projected = []
+                for account in data['data']['users']:
+                    if not isinstance(account, dict):
+                        continue
+                    annotation = account.get('adminAnnotation')
+                    if isinstance(annotation, dict) and annotation.get('is_hidden'):
+                        continue
+                    projected.append({key: value for key, value in account.items() if key not in ('adminAnnotation', 'adminCategory')})
+                data = {**data, 'data': {**data['data'], 'users': projected}}
         if identity and identity["user"]["role"] == "viewer":
             hidden = {"raw", "mac", "serial", "tech", "actor", "actor_id", "resolved_by", "username", "notes", "description", "evidence", "hostname", "user", "users"}
             def clean(value):
