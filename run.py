@@ -988,10 +988,15 @@ def dashboard_fingerprint():
     for folder in ("src", "public"):
         paths.extend(path for path in (dashboard / folder).rglob("*") if path.is_file())
     digest = hashlib.sha256()
-    for path in sorted(path for path in paths if path.is_file()):
+    # Path ordering differs on Windows (case-insensitive) and POSIX. Sort
+    # portable relative strings, and tolerate Git's autocrlf text conversion.
+    for path in sorted((path for path in paths if path.is_file()), key=lambda path: path.relative_to(dashboard).as_posix()):
         digest.update(path.relative_to(dashboard).as_posix().encode("utf-8"))
         digest.update(b"\0")
-        digest.update(path.read_bytes())
+        content = path.read_bytes()
+        if path.suffix.lower() in {".js", ".jsx", ".mjs", ".ts", ".tsx", ".css", ".json", ".html", ".svg", ".txt"} or path.name == ".npmrc":
+            content = content.replace(b"\r\n", b"\n")
+        digest.update(content)
     return digest.hexdigest()
 
 
@@ -1017,6 +1022,7 @@ def ensure_dashboard():
     stamp = dashboard / "dist/.sgrs-build.sha256"
     fingerprint = dashboard_fingerprint()
     if dashboard_assets_ready() and stamp.is_file() and stamp.read_text().strip() == fingerprint:
+        print("[SGRS] [OK] Dashboard incluido vigente; no necesita Node.js ni npm para arrancar.")
         return
     npm = get_npm_exe()
     if npm == "npm" and not shutil.which(npm):

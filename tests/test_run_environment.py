@@ -623,3 +623,42 @@ def test_windows_pid_check_preserves_64bit_handles(monkeypatch):
     assert run_module.is_pid_alive(123) is True
     assert kernel.OpenProcess.restype is ctypes.wintypes.HANDLE
     kernel.CloseHandle.assert_called_once_with(handle)
+
+
+def test_dashboard_fingerprint_is_portable_and_normalizes_only_text(tmp_path, monkeypatch):
+    dashboard = dashboard_fixture(tmp_path, monkeypatch)
+    (dashboard / 'src/App.jsx').write_bytes(b'export default 1;\n')
+    (dashboard / 'src/a').mkdir()
+    (dashboard / 'src/a/item.css').write_bytes(b'body {}\n')
+    (dashboard / 'src/a.jsx').write_bytes(b'export default 2;\n')
+    (dashboard / 'src/Z.jsx').write_bytes(b'export default 3;\n')
+    image = dashboard / 'src/image.png'
+    image.write_bytes(b'PNG\r\n')
+    paths = sorted([path for path in dashboard.rglob('*') if path.is_file()], key=lambda path: path.relative_to(dashboard).as_posix())
+    expected = hashlib.sha256()
+    for path in paths:
+        expected.update(path.relative_to(dashboard).as_posix().encode('utf-8'))
+        expected.update(b'\0')
+        expected.update(path.read_bytes())
+    before = run_module.dashboard_fingerprint()
+    assert before == expected.hexdigest()
+    for path in paths:
+        if path.suffix != '.png':
+            path.write_bytes(path.read_bytes().replace(b'\n', b'\r\n'))
+    assert run_module.dashboard_fingerprint() == before
+    image.write_bytes(b'PNG\n')
+    assert run_module.dashboard_fingerprint() != before
+
+
+def test_precompiled_dashboard_does_not_invoke_outdated_or_missing_npm(tmp_path, monkeypatch, capsys):
+    dashboard = dashboard_fixture(tmp_path, monkeypatch)
+    (dashboard / 'dist/assets').mkdir(parents=True)
+    (dashboard / 'dist/.vite').mkdir()
+    (dashboard / 'dist/index.html').write_text('<script src="/assets/app.js"></script>')
+    (dashboard / 'dist/assets/app.js').write_text('compiled')
+    (dashboard / 'dist/.vite/manifest.json').write_text('{"index.html":{"file":"assets/app.js"}}')
+    (dashboard / 'dist/.sgrs-build.sha256').write_text(run_module.dashboard_fingerprint())
+    monkeypatch.setattr(run_module, 'get_npm_exe', Mock(side_effect=AssertionError('npm must not run for a precompiled Dashboard')))
+    monkeypatch.setattr(run_module.sys, 'platform', 'win32')
+    run_module.ensure_dashboard()
+    assert 'no necesita Node.js ni npm' in capsys.readouterr().out

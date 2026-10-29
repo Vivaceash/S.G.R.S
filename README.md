@@ -321,7 +321,9 @@ py -3 run.py status
 
 `setup` crea `.venv`, instala las dependencias Python con hashes, verifica `pip check`, prepara las claves locales de Inventarios y compila el Dashboard con `npm ci --include=dev --include=optional`. Comprueba las versiones de Node requeridas por los paquetes y se detiene si la instalación o compilación falla. Una ejecución posterior conserva las claves y reutiliza el compilado solo si las fuentes y los archivos generados siguen vigentes. No copies `.venv` ni `node_modules` desde Linux: ejecuta la preparación en el equipo Windows de destino.
 
-Python y Node.js deben estar instalados antes de ejecutar estos comandos. Las credenciales y certificados de FortiGate/OmniVista deben corresponder al equipo de destino; `setup` no inventa accesos a los proveedores. El arranque comprueba la salud HTTP de los cuatro servicios y no anuncia éxito si alguno falla. Los puertos predeterminados son 8000, 8001, 8002 y 3000; el Dashboard mantiene el puerto 3000 de los QR permanentes.
+El paquete publicado incluye el Dashboard compilado. Si su huella y assets son válidos, el arranque usa ese compilado sin ejecutar Node.js/npm. La huella es idéntica en Windows/Linux y tolera los finales de línea CRLF/LF de Git. Node.js de la versión indicada en `.nvmrc` solo es necesario cuando hay que recompilar fuentes; una versión anterior no bloquea el uso del compilado vigente.
+
+Python debe estar instalado antes de ejecutar estos comandos. Las credenciales y certificados de FortiGate/OmniVista deben corresponder al equipo de destino; `setup` no inventa accesos a los proveedores. El arranque comprueba la salud HTTP de los cuatro servicios y no anuncia éxito si alguno falla. Los puertos predeterminados son 8000, 8001, 8002 y 3000; el Dashboard mantiene el puerto 3000 de los QR permanentes.
 
 La comprobación reproducible `python tests/check_clean_setup.py` prueba una instalación aislada sin credenciales, en una ruta con espacios, y una segunda preparación sin modificar claves. La tarea **Clean Windows installation** de CI ejecuta esa comprobación en Windows nativo.
 
