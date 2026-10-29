@@ -287,8 +287,8 @@ Cada microservicio se configura mediante variables de entorno validadas con **Py
 
 Las dependencias Python se instalan con `python -m pip install --require-hashes -r requirements.lock`;
 las del Dashboard, con `npm ci --prefix Dashboard`. Para actualizar una instalación existente,
-ejecutar explícitamente la instalación desde el bloqueo y reiniciar los servicios: el arranque
-solo instala paquetes cuando faltan dependencias. Véase [la revisión de seguridad](docs/DEPENDENCY_SECURITY_2026-10-23.md).
+reiniciar los servicios con `run.py`: la preparación instala paquetes si faltan dependencias o
+cambió el bloqueo desde la última preparación verificada. Véase [la revisión de seguridad](docs/DEPENDENCY_SECURITY_2026-10-23.md).
 
 ### 1. Inicio Rápido Unificado (Recomendado)
 En Linux, desde cualquier directorio de la terminal:
@@ -311,9 +311,23 @@ install.cmd
 
 También puedes ejecutar `py -3 run.py install`. En Windows, `install` prepara el entorno, instala los comandos globales del usuario e inicia los cuatro servicios en segundo plano en esa misma operación. Después cierra y vuelve a abrir la aplicación de terminal para cargar el `PATH` actualizado; desde ahí podrás ejecutar `SGRS`, `sgrs`, `SGRS status`, `SGRS stop` y los demás comandos desde cualquier directorio.
 
+Para preparar y arrancar directamente con `run.py`, sin activar manualmente el entorno:
+
+```powershell
+py -3 run.py setup
+py -3 run.py
+py -3 run.py status
+```
+
+`setup` crea `.venv`, instala las dependencias Python con hashes, verifica `pip check`, prepara las claves locales de Inventarios y compila el Dashboard con `npm ci --include=dev --include=optional`. Comprueba las versiones de Node requeridas por los paquetes y se detiene si la instalación o compilación falla. Una ejecución posterior conserva las claves y reutiliza el compilado solo si las fuentes y los archivos generados siguen vigentes. No copies `.venv` ni `node_modules` desde Linux: ejecuta la preparación en el equipo Windows de destino.
+
+Python y Node.js deben estar instalados antes de ejecutar estos comandos. Las credenciales y certificados de FortiGate/OmniVista deben corresponder al equipo de destino; `setup` no inventa accesos a los proveedores. El arranque comprueba la salud HTTP de los cuatro servicios y no anuncia éxito si alguno falla. Los puertos predeterminados son 8000, 8001, 8002 y 3000; el Dashboard mantiene el puerto 3000 de los QR permanentes.
+
+La comprobación reproducible `python tests/check_clean_setup.py` prueba una instalación aislada sin credenciales, en una ruta con espacios, y una segunda preparación sin modificar claves. La tarea **Clean Windows installation** de CI ejecuta esa comprobación en Windows nativo.
+
 En Linux, `SGRS install` prepara el entorno virtual, dependencias, credenciales locales de Inventarios y los comandos globales; después se inicia con `SGRS`. También puede ejecutarse `./install.sh`.
 En Linux, `SGRS` y `sgrs` apuntan a `sgrs.sh`, que delega en `run.py` usando el entorno virtual.
-En Windows el instalador genera `SGRS.cmd` y `sgrs.cmd` bajo `%USERPROFILE%\bin` y añade esa carpeta al `PATH` del usuario. El runner usa `CREATE_NO_WINDOW`, por lo que las cuatro APIs y el Dashboard no abren una terminal propia.
+En Windows el instalador genera `SGRS.cmd` y `sgrs.cmd` bajo `%USERPROFILE%\bin` y añade esa carpeta al `PATH` del usuario. El runner usa `CREATE_NO_WINDOW`, por lo que las tres APIs y el Dashboard no abren una terminal propia.
 Desde la raíz del repositorio también se puede ejecutar `python run.py` con los mismos comandos.
 El inicio predeterminado ejecuta los cuatro servicios en segundo plano:
 
@@ -330,6 +344,7 @@ y vuelve a iniciar los que terminaron; no confunde Inventarios activo con un pue
 OmniVista intenta autenticar con `OV_USERNAME`/`OV_PASSWORD` al arrancar y Forti valida su `FORTIOS_API_TOKEN`.
 Si un proveedor falla, el error indica el estado HTTP o la causa de conexión sin exponer credenciales y la API local conserva su liveness.
 Después de cambiar un `.env`, ejecutar `SGRS restart` para cargar la configuración nueva.
+
 `SGRS status` muestra disponibilidad HTTP, el PID registrado y la URL de cada componente.
 `SGRS open` abre el puerto real del Dashboard; `SGRS stop` detiene los procesos registrados.
 

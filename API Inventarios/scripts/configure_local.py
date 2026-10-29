@@ -5,7 +5,7 @@ from pathlib import Path
 import secrets
 import sys
 import tempfile
-import time
+from dotenv import dotenv_values
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -33,12 +33,13 @@ def main():
     service_env = private / '.env'
     shared = dashboard_access.PRIVATE / 'inventarios-connection.json'
     try:
-        old_env = {}
-        if service_env.exists():
-            for line in service_env.read_text().splitlines():
-                if '=' in line and not line.lstrip().startswith('#'):
-                    key, value = line.split('=', 1)
-                    old_env[key] = value
+        # Read both supported files before provisioning: existing keys must never
+        # be replaced merely because the private file has not been created yet.
+        old_env = {
+            **dotenv_values(private.parent / '.env', interpolate=False),
+            **dotenv_values(service_env, interpolate=False),
+        }
+        old_env = {key: value for key, value in old_env.items() if value is not None}
         dashboard_key = old_env.get('INVENTARIOS_DASHBOARD_KEY') or secrets.token_urlsafe(48)
         read_key = old_env.get('INVENTARIOS_API_KEYS') or secrets.token_urlsafe(48)
         write_key = old_env.get('INVENTARIOS_WRITE_KEYS') or secrets.token_urlsafe(48)
@@ -58,27 +59,20 @@ def main():
             'INVENTARIOS_ENABLE_DOCS': old_env.get('INVENTARIOS_ENABLE_DOCS', 'true'),
             'INVENTARIOS_API_KEYS': read_key, 'INVENTARIOS_WRITE_KEYS': write_key,
             'INVENTARIOS_EXPORT_KEYS': export_key, 'INVENTARIOS_DASHBOARD_KEY': dashboard_key,
-            'INVENTARIOS_FORTI_URL': forti_url, 'INVENTARIOS_FORTI_KEY': forti_key,
-            'INVENTARIOS_FORTI_AUTH_MODE': forti_mode, 'INVENTARIOS_FORTI_VDOM': old_env.get('INVENTARIOS_FORTI_VDOM', 'root'),
-            'INVENTARIOS_OMNI_URL': omni_url, 'INVENTARIOS_OMNI_KEY': omni_key,
-            'INVENTARIOS_OMNI_AUTH_MODE': omni_mode,
+            'INVENTARIOS_FORTI_URL': old_env.get('INVENTARIOS_FORTI_URL', forti_url), 'INVENTARIOS_FORTI_KEY': old_env.get('INVENTARIOS_FORTI_KEY', forti_key),
+            'INVENTARIOS_FORTI_AUTH_MODE': old_env.get('INVENTARIOS_FORTI_AUTH_MODE', forti_mode), 'INVENTARIOS_FORTI_VDOM': old_env.get('INVENTARIOS_FORTI_VDOM', 'root'),
+            'INVENTARIOS_OMNI_URL': old_env.get('INVENTARIOS_OMNI_URL', omni_url), 'INVENTARIOS_OMNI_KEY': old_env.get('INVENTARIOS_OMNI_KEY', omni_key),
+            'INVENTARIOS_OMNI_AUTH_MODE': old_env.get('INVENTARIOS_OMNI_AUTH_MODE', omni_mode),
             'INVENTARIOS_STALE_SECONDS': old_env.get('INVENTARIOS_STALE_SECONDS', '120'),
             'INVENTARIOS_REFRESH_SECONDS': old_env.get('INVENTARIOS_REFRESH_SECONDS', '0'),
             'INVENTARIOS_RETENTION_DAYS': old_env.get('INVENTARIOS_RETENTION_DAYS', '90'),
         }
-        atomic_private(service_env, ''.join(f'{key}={value}\n' for key, value in values.items()))
+        atomic_private(service_env, ''.join(f'{key}={json.dumps(value, ensure_ascii=False)}\n' for key, value in values.items()))
         local_url = f"http://127.0.0.1:{values['INVENTARIOS_PORT']}/api/v1"
-        atomic_private(shared, json.dumps({'url': local_url, 'secret': dashboard_key}))
-        # Saved connections override the shared file. Keep the managed local
-        # identity synchronized, while preserving custom remote connections.
-        with dashboard_access.database(write=True) as db:
-            changed = db.execute(
-                "UPDATE connections SET secret=?,version=version+1,updated_at=? "
-                "WHERE id='inventarios' AND url=? AND auth_mode='api-key' AND secret<>?",
-                (dashboard_key, int(time.time()), local_url, dashboard_key),
-            ).rowcount
-            if changed:
-                dashboard_access.audit(db, 'system', 'connection.synchronized', 'inventarios')
+        # Provision defaults only. Saved dashboard connections and their keys
+        # belong to the administrator and must not be synchronized at startup.
+        if not shared.exists():
+            atomic_private(shared, json.dumps({'url': local_url, 'secret': dashboard_key}))
         print('API Inventarios: claves internas listas (se conservan las existentes). Conexión con Forti:', 'disponible' if forti_key else 'por configurar',
               '· Conexión con Omni:', 'disponible' if omni_key else 'por configurar')
     except Exception as exc:

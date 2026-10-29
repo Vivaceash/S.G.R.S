@@ -14,6 +14,7 @@ import ssl
 import unicodedata
 import csv
 import io
+from dashboard_spreadsheets import xlsx_bytes, scalar as spreadsheet_scalar
 from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
 
@@ -757,7 +758,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 devices_data = [d for d in devices_data if d.get("status") == "online"]
 
             # Soporte de exportación para listados (incluyendo computadoras e impresoras)
-            if clean_path == '/api/devices/export' or params.get("export") in (["csv"], ["excel"], ["xls"]):
+            if clean_path == '/api/devices/export' or params.get("export") in (["csv"], ["excel"], ["xls"], ["xlsx"]):
                 fmt = params.get("format", [params.get("export", ["csv"])[0]])[0].lower()
                 fn_type = params.get("type", ["dispositivos"])[0].lower()
 
@@ -786,13 +787,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                         ""
                     ]
 
-                if fmt in ("excel", "xls"):
-                    def _xml_escape(val):
-                        s = str(val or "").replace("\x00", "")
-                        if re.match(r"^[\s]*[=+@-]", s) or re.match(r"^[\t\r\n]", s):
-                            s = f"'{s}"
-                        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&apos;")
-
+                if fmt in ("excel", "xls", "xlsx"):
                     raw_type = params.get("type", [""])[0].strip().lower()
                     sheets_data = []
                     if raw_type == "computadora":
@@ -806,49 +801,17 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                             sheets_data.append(("Computadoras", comps))
                         if prints:
                             sheets_data.append(("Impresoras", prints))
+                        others = [_row_for_device(d) for d in devices_data if format_device_type(d) not in ("Computadora", "Impresora") and d.get("type") not in ("Computadora", "Impresora")]
+                        if others and sheets_data:
+                            sheets_data.append(("Otros dispositivos", others))
                         if not sheets_data:
                             sheets_data.append(("Dispositivos", [_row_for_device(d) for d in devices_data]))
 
-                    xml_parts = [
-                        '<?xml version="1.0" encoding="UTF-8"?>',
-                        '<?mso-application progid="Excel.Sheet"?>',
-                        '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"',
-                        ' xmlns:o="urn:schemas-microsoft-com:office:office"',
-                        ' xmlns:x="urn:schemas-microsoft-com:office:excel"',
-                        ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"',
-                        ' xmlns:html="http://www.w3.org/TR/REC-html40">',
-                        '  <Styles>',
-                        '    <Style ss:ID="Default" ss:Name="Normal">',
-                        '      <Alignment ss:Vertical="Bottom"/>',
-                        '      <Borders/>',
-                        '      <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#000000"/>',
-                        '      <Interior/>',
-                        '      <NumberFormat/>',
-                        '      <Protection/>',
-                        '    </Style>',
-                        '    <Style ss:ID="Header">',
-                        '      <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#FFFFFF" ss:Bold="1"/>',
-                        '      <Interior ss:Color="#1E293B" ss:Pattern="Solid"/>',
-                        '      <Alignment ss:Vertical="Center" ss:Horizontal="Left"/>',
-                        '    </Style>',
-                        '  </Styles>'
-                    ]
-                    for s_name, s_rows in sheets_data:
-                        xml_parts.append(f'  <Worksheet ss:Name="{_xml_escape(s_name)}">')
-                        xml_parts.append('    <Table>')
-                        hdr_cells = "".join(f'<Cell ss:StyleID="Header"><Data ss:Type="String">{_xml_escape(col)}</Data></Cell>' for col in export_cols)
-                        xml_parts.append(f'      <Row ss:AutoFitHeight="0">{hdr_cells}</Row>')
-                        for row in s_rows:
-                            r_cells = "".join(f'<Cell><Data ss:Type="String">{_xml_escape(c)}</Data></Cell>' for c in row)
-                            xml_parts.append(f'      <Row ss:AutoFitHeight="0">{r_cells}</Row>')
-                        xml_parts.append('    </Table>')
-                        xml_parts.append('  </Worksheet>')
-                    xml_parts.append('</Workbook>')
-                    excel_bytes = "\n".join(xml_parts).encode('utf-8')
+                    excel_bytes = xlsx_bytes(export_cols, sheets_data)
 
                     self.send_response(200)
-                    self.send_header('Content-Type', 'application/vnd.ms-excel; charset=utf-8')
-                    self.send_header('Content-Disposition', f'attachment; filename="{fn_type}.xls"')
+                    self.send_header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                    self.send_header('Content-Disposition', f'attachment; filename="{fn_type}.xlsx"')
                     self.send_header('Content-Length', str(len(excel_bytes)))
                     self.end_headers()
                     self.wfile.write(excel_bytes)
@@ -859,7 +822,7 @@ class Handler(AccessRoutes, ReportRoutes, http.server.SimpleHTTPRequestHandler):
                 writer = csv.writer(out)
                 writer.writerow(export_cols)
                 for d in devices_data:
-                    writer.writerow(_row_for_device(d))
+                    writer.writerow([spreadsheet_scalar(value) for value in _row_for_device(d)])
                 csv_bytes = out.getvalue().encode('utf-8')
                 self.send_response(200)
                 self.send_header('Content-Type', 'text/csv; charset=utf-8')

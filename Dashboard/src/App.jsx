@@ -44,6 +44,8 @@ import {
 import {
   Badge,
   Button,
+  RecordDialog,
+  rowInteraction,
   Dialog,
   Empty,
   IconButton,
@@ -838,6 +840,15 @@ function IdfHub({
   }));
   const selectedId = canOpenIdfs ? viewState.selectedId : "";
   const [deviceLimit, setDeviceLimit] = useState(25);
+  const [deviceDetail, setDeviceDetail] = useState(null);
+  const deviceDetailColumns = [
+    { key: 'name', label: 'Dispositivo', value: row => row.name || row.desc || row.type },
+    { key: 'category', label: 'Categoría', value: row => row.category || row.type },
+    { key: 'ru', label: 'Nivel' },
+    { key: 'brand', label: 'Marca y modelo', value: row => row.brand || row.brandModel || row.model },
+    { key: 'serial', label: 'N.º serie' }, { key: 'mac', label: 'Dirección MAC' },
+    { key: 'ports', label: 'Puertos' }, { key: 'status', label: 'Estado' },
+  ];
   useEffect(() => setDeviceLimit(25), [selectedId]);
   const tab = viewState.tab;
   const idfs = useMemo(
@@ -1108,6 +1119,7 @@ function IdfHub({
                     {devices.slice(0, deviceLimit).map((device) => (
                       <tr
                         key={device.id}
+                        {...rowInteraction(() => setDeviceDetail(device))}
                         className={
                           device.status === "offline"
                             ? "device-row-offline"
@@ -1256,6 +1268,7 @@ function IdfHub({
           </section>
         )}
       </section>
+      <RecordDialog row={deviceDetail} columns={deviceDetailColumns} title="Información del dispositivo" onClose={() => setDeviceDetail(null)} />
     </>
   );
 }
@@ -1444,6 +1457,40 @@ export default function App() {
       loadController.current?.abort();
     };
   }, [demo, refresh]);
+  useEffect(() => {
+    if (demo || !reportsPath) return;
+    let active = true;
+    let controller = null;
+    const syncReports = async () => {
+      if (document.hidden || controller || mutationLock.current || !loadedResources.current.has('reports')) return;
+      controller = new AbortController();
+      const pending = controller;
+      const version = generation.current;
+      const timer = setTimeout(() => pending.abort(), QUERY_TIMEOUT_MS);
+      try {
+        const reports = await request(reportsPath, { signal: pending.signal });
+        // A local save or manual refresh takes precedence over an older snapshot.
+        if (!active || version !== generation.current || mutationLock.current) return;
+        setData(old => ({ ...old, reports, updatedAt: new Date().toISOString() }));
+        setErrors(old => { const next = { ...old }; delete next.reports; return next; });
+      } catch {
+        // Preserve the last successful snapshot and retry on the next cycle.
+      } finally {
+        clearTimeout(timer);
+        controller = null;
+      }
+    };
+    const interval = setInterval(syncReports, 60000);
+    window.addEventListener('focus', syncReports);
+    document.addEventListener('visibilitychange', syncReports);
+    return () => {
+      active = false;
+      clearInterval(interval);
+      controller?.abort();
+      window.removeEventListener('focus', syncReports);
+      document.removeEventListener('visibilitychange', syncReports);
+    };
+  }, [demo, reportsPath]);
   useEffect(() => {
     const enteredAudit = route.path === 'bitacora' && previousAuditRoute.current !== 'bitacora';
     previousAuditRoute.current = route.path;

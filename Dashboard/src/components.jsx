@@ -1,6 +1,7 @@
+import { makeXlsxWorkbook, XLSX_MIME_TYPE } from './excel.mjs';
 import React, { startTransition, useCallback, useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Search, X, ChevronLeft, ChevronRight, ArrowDownUp, Download, Info, RefreshCw, LoaderCircle, Eye, EyeOff } from 'lucide-react';
-import { EXCEL_MIME_TYPE, makeCsv, makeExcelWorkbook, number, paginate, selectRows, statusNames, statusTone } from './domain.mjs';
+import { Search, X, ChevronLeft, ChevronRight, ArrowDownUp, ArrowUp, ArrowDown, Download, Info, RefreshCw, LoaderCircle, Eye, EyeOff } from 'lucide-react';
+import { makeCsv, number, paginate, selectRows, spreadsheetValue, statusNames, statusTone } from './domain.mjs';
 
 export function Button({ children, icon: Icon, variant = 'secondary', busy = false, className = '', ...props }) {
   return <button type="button" {...props} disabled={props.disabled || busy} aria-busy={busy || undefined} className={`button button-${variant} ${className}`}>
@@ -52,9 +53,14 @@ export function Metric({ icon: Icon, label, value, caption, tone = 'brand', chil
 }
 export function Dialog({ open, onClose, title, children, footer, wide = false, busy = false, className = '', bodyLabel }) {
   const ref = useRef(null);
+  const backdropPress = useRef(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const titleId = useId();
+  const isOutside = event => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return event.target === event.currentTarget && (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom);
+  };
   useEffect(() => {
     const dialog = ref.current;
     if (!open) { if (dialog.open) dialog.close(); return; }
@@ -65,6 +71,12 @@ export function Dialog({ open, onClose, title, children, footer, wide = false, b
     return () => { dialog.close(); document.body.style.overflow = previous; if (trigger?.isConnected) trigger.focus(); };
   }, [open]);
   return <dialog ref={ref} className={`dialog ${wide ? 'dialog-wide' : ''} ${className}`} aria-labelledby={titleId}
+    onPointerDown={event => { backdropPress.current = isOutside(event); }}
+    onClick={event => {
+      const dismiss = backdropPress.current && isOutside(event);
+      backdropPress.current = false;
+      if (dismiss && !busy) onCloseRef.current();
+    }}
     onCancel={event => { event.preventDefault(); if (!busy) onCloseRef.current(); }}>
     <div className="dialog-header"><div className="dialog-heading"><span className="dialog-heading-icon"><Info size={21} strokeWidth={1.7} aria-hidden="true" /></span><div><p className="dialog-eyebrow">Centro Operativo</p><h2 id={titleId}>{title}</h2></div></div><IconButton icon={X} label="Cerrar diálogo" disabled={busy} onClick={onClose} /></div>
     <div className="dialog-body" tabIndex={0} role="region" aria-label={bodyLabel} aria-labelledby={bodyLabel ? undefined : titleId}>{children}</div>{footer && <div className="dialog-footer">{footer}</div>}
@@ -72,6 +84,30 @@ export function Dialog({ open, onClose, title, children, footer, wide = false, b
 }
 export function Empty({ title = 'Aún no hay registros', children = 'Los registros aparecerán aquí cuando estén disponibles.', action }) {
   return <div className="empty-state"><Search size={30} strokeWidth={1.4} aria-hidden="true" /><h3>{title}</h3><p>{children}</p>{action}</div>;
+}
+
+export function rowInteraction(open) {
+  return {
+    tabIndex: 0,
+    'data-open-detail': 'true',
+    title: 'Haz clic para ver la información',
+    onClick: event => {
+      const control = event.target.closest('button, a, input, select, textarea, summary, [role="button"]');
+      if (!control || control === event.currentTarget) open();
+    },
+    onKeyDown: event => {
+      if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+        event.preventDefault();
+        open();
+      }
+    },
+  };
+}
+
+export function RecordDialog({ row, columns, title = 'Información del registro', onClose }) {
+  return <Dialog open={Boolean(row)} title={title} onClose={onClose} wide>
+    {row && <dl className="detail-grid">{columns.filter(column => column.key !== 'actions').map(column => <div key={column.key}><dt>{column.label}</dt><dd>{String(spreadsheetValue(column, row) ?? '') || 'Sin registro'}</dd></div>)}</dl>}
+  </Dialog>;
 }
 export function Loading({ label = 'Consultando información…' }) {
   return <div className="loading-state" role="status"><LoaderCircle className="spinner" size={26} aria-hidden="true" />{label}</div>;
@@ -102,16 +138,19 @@ export function downloadCsv(name, columns, rows) {
   link.href = url; link.download = `${name}.csv`; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export function downloadExcel(name, sheets) {
-  const url = URL.createObjectURL(new Blob([makeExcelWorkbook(sheets)], { type: EXCEL_MIME_TYPE }));
+export async function downloadExcel(name, sheets) {
+  const url = URL.createObjectURL(new Blob([await makeXlsxWorkbook(sheets)], { type: XLSX_MIME_TYPE }));
   const link = document.createElement('a');
-  link.href = url; link.download = name.endsWith('.xls') ? name : `${name}.xls`; link.click();
+  link.href = url; link.download = `${name.replace(/\.xlsx?$/i, '')}.xlsx`; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export function DataTable({ title, rows, columns, state, noun = 'registros', pageSize = 10, paginated = true, infiniteScroll = true, resetKey, toolbar, exportable = false, loading = false, error, onRetry, emptyText, rowKey = 'id', onRowClick, rowClassName, className = '' }) {
+export function DataTable({ title, rows, columns, state, noun = 'registros', pageSize = 10, paginated = true, infiniteScroll = true, resetKey, toolbar, exportable = false, exportFormat = 'xlsx', loading = false, error, onRetry, emptyText, rowKey = 'id', onRowClick, rowClassName, className = '' }) {
+  const [detail, setDetail] = useState(null);
+  const openRow = onRowClick || setDetail;
   paginated = paginated && !infiniteScroll;
   const query = useDeferredValue(state.query);
-  const visible = useMemo(() => selectRows(rows, query, state.filters, state.sort, state.asc), [rows, query, state.filters, state.sort, state.asc]);
+  const sortValue = columns.find(column => column.key === state.sort)?.sortValue;
+  const visible = useMemo(() => selectRows(rows, query, state.filters, state.sort, state.asc, sortValue), [rows, query, state.filters, state.sort, state.asc, sortValue]);
   const page = paginated ? paginate(visible, state.page, pageSize) : { rows: visible, current: 1, total: visible.length, pages: 1 };
   const [renderLimit, setRenderLimit] = useState(100);
   const [windowStart, setWindowStart] = useState(0);
@@ -163,14 +202,14 @@ export function DataTable({ title, rows, columns, state, noun = 'registros', pag
   };
   useEffect(() => { if (paginated && !loading && !error && page.current !== state.page) state.setPage(page.current); }, [paginated, page.current, state.page, loading, error]);
   return <section className={`table-panel ${className}`} aria-label={title}>
-    {(toolbar || exportable) && <div className="table-panel-heading"><div>{toolbar}</div>{exportable && <Button icon={Download} onClick={() => downloadCsv(title, columns.filter(c => c.key !== 'actions'), visible)} disabled={!visible.length}>Exportar consulta</Button>}</div>}
+    {(toolbar || exportable) && <div className="table-panel-heading"><div>{toolbar}</div>{exportable && <Button icon={Download} onClick={() => exportFormat === 'xlsx' ? downloadExcel(title, [{ name: title, columns: columns.filter(c => c.key !== 'actions'), rows: visible }]) : downloadCsv(title, columns.filter(c => c.key !== 'actions'), visible)} disabled={!visible.length}>Exportar consulta</Button>}</div>}
     <div ref={scrollRef} onScroll={handleInfiniteScroll} className="table-scroll" tabIndex={0} role="region" aria-label={`${title}. Desplázate para ver todas las filas y columnas.`}>
       <table><caption className="sr-only">{title}</caption><thead><tr>{columns.map(column => <th key={column.key} scope="col" aria-sort={column.sortable !== false && state.sort === column.key ? state.asc ? 'ascending' : 'descending' : undefined}>
-        {column.header ?? (column.sortable === false ? column.label : <button type="button" className="sort-button" onClick={() => state.setSort(column.key)}>{column.label}<ArrowDownUp size={13} aria-hidden="true" /></button>)}
+        {column.header ?? (column.sortable === false ? column.label : <button type="button" className="sort-button" title={`Ordenar ${column.label}: ${state.sort === column.key && state.asc ? 'de mayor a menor' : 'de menor a mayor'}`} onClick={() => state.setSort(column.key)}>{column.label}{state.sort === column.key ? state.asc ? <ArrowUp size={13} aria-hidden="true" /> : <ArrowDown size={13} aria-hidden="true" /> : <ArrowDownUp size={13} aria-hidden="true" />}</button>)}
       </th>)}</tr></thead><tbody>{!loading && !error && renderedRows.map((row, index) => {
         const cls = typeof rowClassName === 'function' ? rowClassName(row) : rowClassName;
         const rowIndex = (infiniteScroll ? windowStart : 0) + index;
-        return <tr key={row[rowKey] || rowIndex} data-window-row={infiniteScroll ? 'true' : undefined} data-window-index={infiniteScroll ? rowIndex : undefined} className={cls} tabIndex={onRowClick ? 0 : undefined} onClick={onRowClick ? () => onRowClick(row) : undefined} onKeyDown={onRowClick ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(row); } } : undefined} title={onRowClick ? 'Haz clic para ver el detalle técnico' : undefined}>{columns.map(column => <td key={column.key}>{column.render ? column.render(row) : String(row[column.key] ?? '—')}</td>)}</tr>;
+        return <tr key={row[rowKey] || rowIndex} data-window-row={infiniteScroll ? 'true' : undefined} data-window-index={infiniteScroll ? rowIndex : undefined} className={cls} {...rowInteraction(() => openRow(row))}>{columns.map(column => <td key={column.key}>{column.render ? column.render(row) : String(row[column.key] ?? '—')}</td>)}</tr>;
       })}</tbody></table>
       {infiniteScroll && <span className="sr-only" role="status" aria-live="polite">{page.rows.length ? `Filas ${windowStart + 1} a ${windowEnd} de ${number(page.rows.length)}.` : ''}</span>}
       {loading ? <Loading /> : error ? <Empty title="No se pudo cargar la información" action={<Button icon={RefreshCw} onClick={onRetry}>Volver a intentar</Button>}>{error}</Empty> : !visible.length && <Empty title={rows.length ? 'No se encontraron resultados' : 'Aún no hay registros'} action={rows.length ? <Button onClick={state.reset}>Limpiar filtros</Button> : null}>{rows.length ? 'Prueba otra búsqueda o elimina los filtros activos.' : emptyText}</Empty>}
@@ -181,6 +220,7 @@ export function DataTable({ title, rows, columns, state, noun = 'registros', pag
         {Array.from({ length: Math.min(5, page.pages) }, (_, i) => Math.min(Math.max(1, page.current - 2), Math.max(1, page.pages - 4)) + i).map(p => <button type="button" key={p} className={p === page.current ? 'current' : ''} aria-label={`Página ${p}`} aria-current={p === page.current ? 'page' : undefined} onClick={() => state.setPage(p)}>{p}</button>)}
         <IconButton icon={ChevronRight} label="Página siguiente" disabled={page.current >= page.pages} onClick={() => state.setPage(page.current + 1)} />
       </nav></div>}
+    <RecordDialog row={detail} columns={columns} title={`Información · ${title}`} onClose={() => setDetail(null)} />
   </section>;
 }
 

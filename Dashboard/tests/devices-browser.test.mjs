@@ -36,7 +36,8 @@ try {
   assert.equal(await page.getByRole('columnheader', { name: 'Ubicación', exact: true }).count(), 0);
   assert.equal(await page.getByText('Selecciona cualquier fila para abrir el detalle técnico').count(), 0);
   await page.locator('table tbody tr').first().locator('td').first().click();
-  assert.equal(await page.locator('dialog[open]').count(), 0, 'Rows no longer open device details');
+  assert.equal(await page.locator('dialog[open]').count(), 1, 'Rows open device details');
+  await page.keyboard.press('Escape');
   await page.locator('table tbody tr').first().getByRole('button', { name: 'Ver', exact: true }).click();
   await page.waitForTimeout(500);
 

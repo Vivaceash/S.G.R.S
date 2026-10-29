@@ -45,6 +45,8 @@
   line-height: 1.5;
   scrollbar-gutter: stable;
 }
+[data-open-detail="true"] { cursor: pointer; }
+[data-open-detail="true"]:focus-visible { outline: 2px solid var(--color-brand); outline-offset: -2px; }
 *, *::before, *::after { box-sizing: border-box; }
 * { scrollbar-color: var(--scroll-thumb) var(--scroll-track); scrollbar-width: thin; }
 *::-webkit-scrollbar { width: 9px; height: 9px; }
@@ -116,10 +118,12 @@ svg { flex-shrink: 0; }
 }
 
 .header-search input:focus {
-  border-color: var(--color-brand);
-  box-shadow: 0 0 0 3px rgba(174, 18, 52, 0.1);
+  box-shadow: none;
   outline: none;
 }
+
+.header-search .search-field:focus-within { outline: none; }
+.header-search .search-field:has(input:focus-visible) { border-color: var(--color-brand); }
 
 .header-search-kbd {
   position: absolute;
@@ -4411,7 +4415,7 @@ td .button { min-height: 31px; font-size: 11px; padding: 6px 13px; border-radius
     overflow: visible;
   }
   .support-log-mobile-list,
-  .support-inventory-mobile-list {
+  .support-inventory-view .support-inventory-mobile-list {
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -7403,6 +7407,8 @@ button.altas-widget-value:hover { background: #faf3f6; }
 .altas-accounts-layout td { height: 60px; font-size: 13px; line-height: 1.5; border-bottom-color: #eee9e5; vertical-align: middle; }
 .altas-accounts-layout tbody tr:nth-child(even) { background: #fcfbfa; }
 .altas-accounts-layout tbody tr:hover { background: #f8f1f4; }
+.altas-accounts-table tbody tr[tabindex="0"] { cursor: pointer; }
+.altas-accounts-table tbody tr[tabindex="0"]:focus-visible { outline: 2px solid var(--color-brand); outline-offset: -2px; }
 .altas-accounts-layout .table-footer { flex-shrink: 0; min-height: 64px; padding: 12px 16px; gap: 10px; border-top-color: #e6dfda; background: #fcfbfa; flex-wrap: wrap; }
 .altas-accounts-layout .pagination { gap: 6px; }
 .altas-accounts-layout .pagination button { width: 36px; height: 36px; border-radius: 8px; }
@@ -8469,9 +8475,6 @@ button.altas-widget-value:hover { background: #faf3f6; }
 .account-device-match.is-matched { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 7%, var(--surface)); }
 .account-device-match strong, .account-device-match span { display: block; font-size: 11px; line-height: 1.5; }
 .account-device-match strong { font-weight: 650; }
-.account-device-forti { padding: 14px; border-top: 1px solid var(--border); }
-.account-device-forti h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; color: var(--color-brand); font-size: 12px; font-weight: 650; }
-.account-detail-dialog .account-device-forti .detail-grid { margin: 0; }
 .device-detail-content :is(.omni-detail-box, .forti-detail-box, .uptime-detail-box) { padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 .device-detail-content :is(.omni-detail-header, .forti-detail-header, .uptime-detail-header) { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
 .device-detail-content :is(.omni-detail-header, .forti-detail-header, .uptime-detail-header) h4 { color: var(--text); font-size: 13px; line-height: 1.5; }

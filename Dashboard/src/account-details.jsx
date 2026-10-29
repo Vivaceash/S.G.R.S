@@ -1,3 +1,4 @@
+import { accountDeviceFields } from './account-device-fields.mjs';
 import React from 'react';
 import { AlertCircle, CheckCircle2, Clock, FileText, HardDrive, Laptop, MapPin, Network, Package, ShieldCheck, Smartphone, Users, Wifi } from 'lucide-react';
 import { Badge, Empty } from './components.jsx';
@@ -37,31 +38,11 @@ function AccountDevice({ device }) {
       <strong>{device.deviceName || device.deviceMac || 'Dispositivo sin nombre'}</strong>
       <Badge status={device.forti?.status || device.status} />
     </header>
-    <DetailGrid className="account-device-fields" items={[
-      ['MAC', device.deviceMac || '—', Network, true],
-      ['Equipo OmniVista', device.lastAccessDeviceName || '—', Package],
-      ['Categoría / familia', [device.deviceCategory, device.deviceFamily].filter(Boolean).join(' · ') || '—', DeviceIcon],
-      ['Sistema operativo', device.deviceOS || '—', HardDrive],
-      ['Red OmniVista', device.lastAccessDeviceSSID || device.accessRoleProfile || '—', Wifi],
-      ['Ubicación', device.lastAccessLocation || '—', MapPin],
-      ['Última autenticación', device.lastAuthenticationTime ? dateTime(device.lastAuthenticationTime) : '—', Clock],
-      ['Descripción', device.description || '—', FileText],
-    ]} />
+    <DetailGrid className="account-device-fields" items={accountDeviceFields(device).map(([label, value, icon, mono]) => [label, value, { network: Network, package: Package, device: DeviceIcon, os: HardDrive, wifi: Wifi, location: MapPin, clock: Clock, file: FileText, shield: ShieldCheck }[icon], mono])} />
     <div className={`account-device-match ${matched ? 'is-matched' : ''}`}>
       {matched ? <CheckCircle2 size={17} aria-hidden="true" /> : <AlertCircle size={17} aria-hidden="true" />}
       <div><strong>Cotejo con FortiGate</strong><span>{device.cotejo || 'Sin verificar'}</span></div>
     </div>
-    {matched && <section className="account-device-forti">
-      <h4><ShieldCheck size={16} aria-hidden="true" />Información observada en FortiGate</h4>
-      <DetailGrid items={[
-        ['FortiGate · nombre', device.forti.hostname || device.forti.name || '—'],
-        ['FortiGate · fabricante / modelo', [device.forti.vendor, device.forti.model].filter(Boolean).join(' · ') || '—'],
-        ['FortiGate · sistema operativo', device.forti.os || '—'],
-        ['FortiGate · IP', device.forti.ip || '—', null, true],
-        ['FortiGate · tipo / interfaz', [device.forti.type, device.forti.interface].filter(Boolean).join(' · ') || '—'],
-        ['FortiGate · última detección', device.forti.last_seen || '—'],
-      ]} />
-    </section>}
   </article>;
 }
 

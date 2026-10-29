@@ -25,7 +25,7 @@ import {
   Wifi,
   X,
 } from 'lucide-react';
-import { Badge, Button, Dialog, Empty, InfiniteMore, Loading, IconButton, Notice, SearchField, downloadExcel } from './components.jsx';
+import { Badge, Button, Dialog, RecordDialog, rowInteraction, Empty, InfiniteMore, Loading, IconButton, Notice, SearchField, downloadExcel } from './components.jsx';
 import {
   SUPPORT_EXPORT_COLUMNS,
   SUPPORT_NETWORK_EXPORT_COLUMNS,
@@ -59,6 +59,7 @@ const WIDGET_ICONS = {
 };
 
 export function SupportDashboard({ data = {}, openEditor, loading, errors, refresh, demo }) {
+  const [selectedNetwork, setSelectedNetwork] = useState(null);
   const session = useSession();
   const userId = session?.user?.id || 'default';
   const storageKey = `sgrs:support-dashboard-layout:v1:${demo ? 'demo:' : ''}${userId}`;
@@ -350,7 +351,7 @@ export function SupportDashboard({ data = {}, openEditor, loading, errors, refre
     return 0;
   }), [filteredInstitutional, institutionalSort]);
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!hasAnyExportSelected) return;
     const sheets = buildSupportSheets({
       computers,
@@ -372,7 +373,7 @@ export function SupportDashboard({ data = {}, openEditor, loading, errors, refre
     else if (ambosChecked) filename = 'listado-soporte-dispositivos';
     else if (onlyNetworksChecked) filename = 'listado-soporte-redes';
 
-    downloadExcel(filename, sheets);
+    await downloadExcel(filename, sheets);
     setExportOpen(false);
   };
 
@@ -382,6 +383,7 @@ export function SupportDashboard({ data = {}, openEditor, loading, errors, refre
 
   return (
     <>
+      <RecordDialog row={selectedNetwork} columns={SUPPORT_NETWORK_EXPORT_COLUMNS} title="Información de la red" onClose={() => setSelectedNetwork(null)} />
       {data.networksPartial && <Notice title="Consulta de redes incompleta" tone="warning">Una fuente no está disponible. Usa el botón de actualización para volver a consultar.</Notice>}
       <PageHeading
         eyebrow="Atención y diagnóstico técnico"
@@ -622,7 +624,7 @@ export function SupportDashboard({ data = {}, openEditor, loading, errors, refre
                       const freeIps = segment.available_ips ?? (segment.capacity != null && segment.active_leases != null ? Math.max(0, Number(segment.capacity) - Number(segment.active_leases)) : null);
 
                       return (
-                        <article key={segmentKey(segment)} className="support-item-card support-network-card">
+                        <article key={segmentKey(segment)} className="support-item-card support-network-card" {...rowInteraction(() => setSelectedNetwork(segment))}>
                           <div className="support-card-header-row">
                             <div className="support-card-heading-group">
                               <div className="support-card-icon-pill network-pill">
@@ -730,14 +732,7 @@ export function SupportDashboard({ data = {}, openEditor, loading, errors, refre
                           key={`${pc.mac || pc.ip || idx}`}
                           className="support-item-card support-device-card"
                           role="button"
-                          tabIndex={0}
-                          onClick={() => openEditor?.('device-detail', pc)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              openEditor?.('device-detail', pc);
-                            }
-                          }}
+                          {...rowInteraction(() => openEditor?.('device-detail', pc))}
                           title={`Ver detalle técnico de ${displayName}`}
                         >
                           <div className="support-card-header-row">
@@ -835,14 +830,7 @@ export function SupportDashboard({ data = {}, openEditor, loading, errors, refre
                           key={`${printer.mac || printer.ip || idx}`}
                           className="support-item-card support-device-card support-printer-card"
                           role="button"
-                          tabIndex={0}
-                          onClick={() => openEditor?.('device-detail', printer)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              openEditor?.('device-detail', printer);
-                            }
-                          }}
+                          {...rowInteraction(() => openEditor?.('device-detail', printer))}
                           title={`Ver detalle técnico de ${displayName}`}
                         >
                           <div className="support-card-header-row">
@@ -976,14 +964,7 @@ export function SupportDashboard({ data = {}, openEditor, loading, errors, refre
                           key={`${instDev.mac || instDev.ip || idx}`}
                           className="support-item-card support-device-card support-institutional-card"
                           role="button"
-                          tabIndex={0}
-                          onClick={() => openEditor?.('device-detail', instDev)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              openEditor?.('device-detail', instDev);
-                            }
-                          }}
+                          {...rowInteraction(() => openEditor?.('device-detail', instDev))}
                           title={`Ver cotejo institucional de ${displayName}`}
                         >
                           <div className="support-card-header-row">
@@ -1096,7 +1077,7 @@ export function SupportDashboard({ data = {}, openEditor, loading, errors, refre
         }
       >
         <p className="dialog-description">
-          Descarga el reporte de soporte en formato Excel (.xls). Las categorías seleccionadas se exportarán en un único archivo Excel separadas en hojas independientes (&ldquo;Computadoras&rdquo;, &ldquo;Impresoras&rdquo;, &ldquo;Institucionales WiFi&rdquo;, etc.).
+          Descarga el reporte de soporte en formato Excel (.xlsx). Las categorías seleccionadas se exportarán en un único archivo Excel separadas en hojas independientes (&ldquo;Computadoras&rdquo;, &ldquo;Impresoras&rdquo;, &ldquo;Institucionales WiFi&rdquo;, etc.).
         </p>
 
         <div className="support-export-modal-body">

@@ -1,7 +1,7 @@
 import { QUERY_TIMEOUT_MS } from './query-policy.mjs';
 import React, { Children, useEffect, useState } from 'react';
 import { Activity, ArrowDown, ArrowUp, ArrowRight, Building2, Camera, Check, CheckCircle2, CircleAlert, Clock3, EyeOff, FileText, Layers3, LayoutDashboard, Monitor, Network, Package, Plus, RefreshCw, RotateCcw, Settings2, ShieldCheck, SlidersHorizontal, Trash2, Wifi } from 'lucide-react';
-import { Button, Empty, IconButton, Loading, Notice, SearchField } from './components.jsx';
+import { Button, RecordDialog, rowInteraction, Empty, IconButton, Loading, Notice, SearchField } from './components.jsx';
 import { dateTime, formatDeviceType, number, reportsFromData, request } from './domain.mjs';
 import { useSession } from './session.jsx';
 import { DEFAULT_WIDGET_LAYOUT, WIDGET_CATALOG, WIDGET_SIZES, expiringConcessions, networkPressure, sanitizeWidgetLayout, widgetAllowed } from './widgets-domain.mjs';
@@ -32,8 +32,11 @@ function Distribution({ values, label }) {
   return <div className="widget-distribution"><div className="widget-donut" style={{ background: `conic-gradient(${gradient})` }} role="img" aria-label={`${label}: ${values.map(item => `${item.label} ${number(item.value)}`).join(', ')}`}><div><strong>{number(total)}</strong><small>{label}</small></div></div><ul>{values.map(item => <li key={item.label}><i style={{ background: item.color }} /><span>{item.label}</span><strong>{number(item.value)}</strong></li>)}</ul></div>;
 }
 
+const SUMMARY_COLUMNS = [{ key: 'title', label: 'Registro' }, { key: 'subtitle', label: 'Información' }, { key: 'value', label: 'Valor' }];
+
 function BarRows({ rows, empty }) {
-  return rows.length ? <ul className="widget-bar-rows">{rows.slice(0, 5).map(row => <li key={row.id}><div><strong>{row.title}</strong><span>{row.value}</span></div><div className="widget-bar-track"><i style={{ width: `${Math.max(0, Math.min(100, row.percent))}%` }} /></div><small>{row.subtitle}</small></li>)}</ul> : <p className="widget-empty">{empty}</p>;
+  const [selected, setSelected] = useState(null);
+  return rows.length ? <><RecordDialog row={selected} columns={SUMMARY_COLUMNS} onClose={() => setSelected(null)} /><ul className="widget-bar-rows">{rows.slice(0, 5).map(row => <li key={row.id} {...rowInteraction(() => setSelected(row))}><div><strong>{row.title}</strong><span>{row.value}</span></div><div className="widget-bar-track"><i style={{ width: `${Math.max(0, Math.min(100, row.percent))}%` }} /></div><small>{row.subtitle}</small></li>)}</ul></> : <p className="widget-empty">{empty}</p>;
 }
 
 const REMOTE = {
@@ -86,7 +89,8 @@ function Numbers({ values }) {
   return <dl className="widget-numbers">{values.map(([label, value, tone]) => <div key={label}><dt>{label}</dt><dd className={tone || ''}>{value == null ? '—' : number(value)}</dd></div>)}</dl>;
 }
 function Rows({ rows, empty }) {
-  return rows.length ? <ul className="widget-rows">{rows.slice(0, 5).map((row, index) => <li key={row.id || index}><i className="widget-row-dot" aria-hidden="true" /><div><strong>{row.title}</strong><small>{row.subtitle}</small></div>{row.value != null && <span>{row.value}</span>}</li>)}</ul> : <div className="widget-empty"><CheckCircle2 size={25} aria-hidden="true" /><p>{empty}</p></div>;
+  const [selected, setSelected] = useState(null);
+  return rows.length ? <><RecordDialog row={selected} columns={SUMMARY_COLUMNS} onClose={() => setSelected(null)} /><ul className="widget-rows">{rows.slice(0, 5).map((row, index) => <li key={row.id || index} {...rowInteraction(() => setSelected(row))}><i className="widget-row-dot" aria-hidden="true" /><div><strong>{row.title}</strong><small>{row.subtitle}</small></div>{row.value != null && <span>{row.value}</span>}</li>)}</ul></> : <div className="widget-empty"><CheckCircle2 size={25} aria-hidden="true" /><p>{empty}</p></div>;
 }
 
 export function WidgetCard({ title, module, Icon, tone, loading, updatedAt, demo, onRefresh, footerAction, children, className = '', kind }) {

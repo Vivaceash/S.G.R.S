@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import os
 import stat
@@ -62,6 +63,12 @@ def test_ensure_environment_sets_permissions_on_private_dir(tmp_path, monkeypatc
     test_db.write_text("sqlite test content")
 
     monkeypatch.setattr(run_module, "ROOT_DIR", tmp_path)
+    monkeypatch.setattr(run_module, "ensure_dashboard", lambda: None)
+    lock = tmp_path / "requirements.lock"
+    lock.write_text("# permissions fixture\n")
+    stamp = tmp_path / ".venv/.sgrs-requirements.sha256"
+    stamp.parent.mkdir()
+    stamp.write_text(hashlib.sha256(lock.read_bytes()).hexdigest())
 
     # Solo comprobar permisos POSIX en sistemas no Windows
     if sys.platform != "win32":
@@ -83,15 +90,18 @@ def test_environment_installs_hashed_lockfile(tmp_path, monkeypatch):
     (tmp_path / "Dashboard/dist").mkdir(parents=True)
     (tmp_path / "Dashboard/dist/index.html").touch()
     monkeypatch.setattr(run_module, "ROOT_DIR", tmp_path)
+    monkeypatch.setattr(run_module, "ensure_dashboard", lambda: None)
     monkeypatch.setattr(run_module, "get_python_exe", lambda: str(python))
-    calls = Mock(side_effect=[subprocess.CompletedProcess([], 1), subprocess.CompletedProcess([], 0)])
+    calls = Mock(side_effect=[subprocess.CompletedProcess([], 1), *[subprocess.CompletedProcess([], 0)] * 3])
     monkeypatch.setattr(run_module.subprocess, "run", calls)
 
     run_module.ensure_environment()
 
-    calls.assert_called_with(
+    calls.assert_any_call(
         [str(python), "-m", "pip", "install", "--require-hashes", "-r", str(lock)], check=True
     )
+    calls.assert_any_call([str(python), "-m", "pip", "check"], check=True)
+    assert (python.parents[1] / ".sgrs-requirements.sha256").is_file()
 
 
 def test_main_handles_setup_command(monkeypatch, capsys):
@@ -103,6 +113,8 @@ def test_main_handles_setup_command(monkeypatch, capsys):
         setup_called = True
 
     monkeypatch.setattr(run_module, "ensure_environment", mock_ensure)
+    monkeypatch.setattr(run_module, "validate_configured_tls_bundles", lambda: None)
+    monkeypatch.setattr(run_module, "ensure_inventory_config", lambda py: None)
     run_module.main()
 
     assert setup_called is True
@@ -520,3 +532,94 @@ def test_windows_stop_keeps_registry_when_a_service_port_stays_busy(tmp_path, mo
         run_module.stop_services()
 
     assert registry.exists()
+
+
+def test_windows_prefers_npm_from_current_path(monkeypatch):
+    monkeypatch.setattr(run_module.sys, 'platform', 'win32')
+    monkeypatch.setattr(run_module.shutil, 'which', lambda name: 'C:/Custom Node/npm.cmd' if name == 'npm.cmd' else 'C:/Custom Node/node.exe')
+    monkeypatch.setattr(run_module.os.path, 'exists', lambda path: True)
+    monkeypatch.setenv('PATH', 'C:/Custom Node')
+    assert run_module.get_npm_exe() == 'C:/Custom Node/npm.cmd'
+    assert run_module.get_env('C:/Python/python.exe')['PATH'] == 'C:/Custom Node'
+
+
+def dashboard_fixture(tmp_path, monkeypatch):
+    monkeypatch.setattr(run_module, "ROOT_DIR", tmp_path)
+    dashboard = tmp_path / "Dashboard"
+    (dashboard / "src").mkdir(parents=True)
+    (dashboard / "src/App.jsx").write_text("export default 1")
+    (dashboard / "package-lock.json").write_text('{}')
+    monkeypatch.setattr(run_module, "get_npm_exe", lambda: 'npm.cmd')
+    return dashboard
+
+
+def test_dashboard_rebuilds_changed_sources_and_missing_assets(tmp_path, monkeypatch):
+    dashboard = dashboard_fixture(tmp_path, monkeypatch)
+    calls = []
+
+    def build(command, **kwargs):
+        calls.append(command)
+        if command[1:] == ['run', 'build', '--', '--manifest']:
+            (dashboard / 'dist/assets').mkdir(parents=True, exist_ok=True)
+            (dashboard / 'dist/index.html').write_text('<script src="/assets/app.js"></script>')
+            (dashboard / 'dist/assets/app.js').write_text('compiled')
+            (dashboard / 'dist/assets/export.js').write_text('dynamic export chunk')
+            (dashboard / 'dist/.vite').mkdir(exist_ok=True)
+            (dashboard / 'dist/.vite/manifest.json').write_text('{"index.html":{"file":"assets/app.js"},"export":{"file":"assets/export.js"}}')
+
+    monkeypatch.setattr(run_module.subprocess, 'run', build)
+    run_module.ensure_dashboard()
+    assert calls == [['npm.cmd', 'ci', '--include=dev', '--include=optional'], ['npm.cmd', 'run', 'build', '--', '--manifest']]
+    run_module.ensure_dashboard()
+    assert len(calls) == 2
+    (dashboard / 'src/App.jsx').write_text('export default 2')
+    run_module.ensure_dashboard()
+    assert len(calls) == 4
+    (dashboard / 'dist/assets/app.js').unlink()
+    run_module.ensure_dashboard()
+    assert len(calls) == 6
+    (dashboard / 'dist/assets/export.js').unlink()
+    run_module.ensure_dashboard()
+    assert len(calls) == 8
+
+
+def test_dashboard_install_failure_does_not_report_ready(tmp_path, monkeypatch):
+    dashboard = dashboard_fixture(tmp_path, monkeypatch)
+    monkeypatch.setattr(run_module.subprocess, 'run', Mock(side_effect=subprocess.CalledProcessError(1, 'npm')))
+    with pytest.raises(RuntimeError, match='el entorno no está listo'):
+        run_module.ensure_dashboard()
+    assert not (dashboard / 'dist/.sgrs-build.sha256').exists()
+
+
+def test_dashboard_requires_actual_build_output(tmp_path, monkeypatch):
+    dashboard_fixture(tmp_path, monkeypatch)
+    monkeypatch.setattr(run_module.subprocess, 'run', Mock())
+    with pytest.raises(RuntimeError, match='assets completos'):
+        run_module.ensure_dashboard()
+
+
+def test_dashboard_missing_node_fails_before_startup(tmp_path, monkeypatch):
+    dashboard_fixture(tmp_path, monkeypatch)
+    monkeypatch.setattr(run_module, 'get_npm_exe', lambda: 'npm')
+    monkeypatch.setattr(run_module.shutil, 'which', lambda name: None)
+    with pytest.raises(RuntimeError, match='Node.js/npm'):
+        run_module.ensure_dashboard()
+
+
+def test_windows_pid_check_preserves_64bit_handles(monkeypatch):
+    import ctypes
+    kernel = Mock()
+    handle = 0x100000001
+    kernel.OpenProcess.return_value = handle
+
+    def read_status(process_handle, pointer):
+        assert process_handle == handle
+        pointer._obj.value = 259
+        return 1
+
+    kernel.GetExitCodeProcess.side_effect = read_status
+    monkeypatch.setattr(ctypes, 'windll', Mock(kernel32=kernel), raising=False)
+    monkeypatch.setattr(run_module.sys, 'platform', 'win32')
+    assert run_module.is_pid_alive(123) is True
+    assert kernel.OpenProcess.restype is ctypes.wintypes.HANDLE
+    kernel.CloseHandle.assert_called_once_with(handle)

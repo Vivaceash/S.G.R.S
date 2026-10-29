@@ -1,0 +1,60 @@
+{
+  "index.html": {
+    "file": "assets/index-BF-1GbXc.js",
+    "name": "index",
+    "src": "index.html",
+    "isEntry": true,
+    "dynamicImports": [
+      "node_modules/exceljs/dist/exceljs.min.js"
+    ],
+    "css": [
+      "assets/index-gTnPZojA.css"
+    ],
+    "assets": [
+      "assets/plantilla_qr-BQYH52aY.jpg",
+      "assets/PLANTA_BAJA_FINAL-DoO4VSg6.png",
+      "assets/PISO1_FINAL-CoAi554a.png",
+      "assets/PISO2_FINAL-DpSa4E3G.png",
+      "assets/PISO3_FINAL-Dx8oNwZR.png",
+      "assets/ISSSTE_logo-DzqncXlC.png",
+      "assets/login-calendar-D3akkvMJ.webp"
+    ]
+  },
+  "node_modules/exceljs/dist/exceljs.min.js": {
+    "file": "assets/exceljs.min-QJf7X3DG.js",
+    "name": "exceljs.min",
+    "src": "node_modules/exceljs/dist/exceljs.min.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html"
+    ]
+  },
+  "src/assets/login-calendar.webp": {
+    "file": "assets/login-calendar-D3akkvMJ.webp",
+    "src": "src/assets/login-calendar.webp"
+  },
+  "src/assets/plantilla_qr.jpg": {
+    "file": "assets/plantilla_qr-BQYH52aY.jpg",
+    "src": "src/assets/plantilla_qr.jpg"
+  },
+  "src/assets/visuals/ISSSTE_logo.png": {
+    "file": "assets/ISSSTE_logo-DzqncXlC.png",
+    "src": "src/assets/visuals/ISSSTE_logo.png"
+  },
+  "src/assets/visuals/PISO1_FINAL.png": {
+    "file": "assets/PISO1_FINAL-CoAi554a.png",
+    "src": "src/assets/visuals/PISO1_FINAL.png"
+  },
+  "src/assets/visuals/PISO2_FINAL.png": {
+    "file": "assets/PISO2_FINAL-DpSa4E3G.png",
+    "src": "src/assets/visuals/PISO2_FINAL.png"
+  },
+  "src/assets/visuals/PISO3_FINAL.png": {
+    "file": "assets/PISO3_FINAL-Dx8oNwZR.png",
+    "src": "src/assets/visuals/PISO3_FINAL.png"
+  },
+  "src/assets/visuals/PLANTA_BAJA_FINAL.png": {
+    "file": "assets/PLANTA_BAJA_FINAL-DoO4VSg6.png",
+    "src": "src/assets/visuals/PLANTA_BAJA_FINAL.png"
+  }
+}

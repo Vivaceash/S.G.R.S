@@ -48,6 +48,10 @@ try {
   await page.getByRole('cell', { name: 'Cámara 1', exact: true }).waitFor();
   assert.equal(await page.locator('tbody tr').count(), 24);
   assert.equal(await page.locator('.pagination').count(), 0);
+  await page.getByRole('cell', { name: 'Cámara 1', exact: true }).click();
+  await page.getByRole('button', { name: 'Corregir datos físicos', exact: true }).waitFor();
+  assert.equal(await page.locator('dialog[open]').count(), 1);
+  await page.keyboard.press('Escape');
   await page.getByLabel('Buscar registros').fill('SERIE-23');
   await page.getByRole('cell', { name: 'Cámara 24', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Ver ficha', exact: true }).click();
@@ -83,6 +87,9 @@ try {
   await page.goto(`${base}/#aps`);
   await page.getByRole('tab', { name: /Catálogo documental/ }).click();
   await page.getByRole('cell', { name: 'AP documental', exact: true }).waitFor();
+  await page.getByRole('cell', { name: 'AP documental', exact: true }).click();
+  assert.equal(await page.locator('dialog[open]').count(), 1);
+  await page.keyboard.press('Escape');
   catalogFails = true;
   await page.locator('.header-refresh').click();
   await page.getByRole('heading', { name: 'No se pudo cargar la información', exact: true }).waitFor();

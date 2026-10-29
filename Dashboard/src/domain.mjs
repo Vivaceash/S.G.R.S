@@ -379,7 +379,42 @@ export function csvCell(value) {
   return `"${text.replaceAll('"', '""')}"`;
 }
 export function makeCsv(columns, rows) {
-  return '\uFEFF' + [columns.map(c => csvCell(c.label)).join(','), ...rows.map(row => columns.map(c => csvCell(c.value ? c.value(row) : row[c.key])).join(','))].join('\r\n');
+  return '\uFEFF' + [columns.map(c => csvCell(c.label)).join(','), ...rows.map(row => columns.map(c => csvCell(spreadsheetValue(c, row))).join(','))].join('\r\n');
+}
+
+// Shared by CSV and XLSX: exported data must be scalar and readable.
+export function spreadsheetValue(column, row) {
+  let value = typeof column.value === 'function' ? column.value(row) : row?.[column.key];
+  const key = column.key || '';
+  if (typeof value === 'string' && /^[\[{]/.test(value.trim())) {
+    try { value = JSON.parse(value); } catch { /* Keep ordinary text. */ }
+  }
+  if (key === 'devices' && Array.isArray(value)) return value.length;
+  if (/^(status|state|online|admission)$/i.test(key)) {
+    const labels = { ...statusNames, active: 'Activo', inactive: 'Inactivo', enabled: 'Habilitado', disabled: 'Deshabilitado', admitted: 'Admitido', 'not-admitted': 'No admitido', '1': 'Activo', '0': 'Inactivo' };
+    if (labels[String(value)]) return labels[String(value)];
+  }
+  if (typeof column.value === 'function' && typeof value === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(value)) return value;
+  if (value instanceof Date || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) || (key === 'activity' && /^\d{10,13}$/.test(String(value))) || /^(date|timestamp|created_?at|updated_?at|last_?seen|lastAuthenticationTime|dateOfEffective|omnivistaEffectiveDate|effectiveTime|lease_started_at)$/i.test(key) || /fecha/i.test(column.label || '')) {
+    if (value == null || value === '') return 'Sin registro';
+    const numeric = typeof value === 'number' || /^\d+(?:\.\d+)?$/.test(String(value)) ? Number(value) : NaN;
+    const date = value instanceof Date ? value : new Date(Number.isFinite(numeric) ? (numeric < 1e12 ? numeric * 1000 : numeric) : value);
+    if (Number.isFinite(date.getTime()) && (!Number.isFinite(numeric) || numeric > 0)) {
+      return new Intl.DateTimeFormat('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: TIME_ZONE }).format(date);
+    }
+    // Explicitly formatted values are already suitable for export.
+    return typeof column.value === 'function' && typeof value === 'string' ? value : 'Sin registro';
+  }
+  return spreadsheetScalar(value);
+}
+
+export function spreadsheetScalar(value) {
+  if (value == null) return '';
+  if (typeof value === 'boolean') return value ? 'Sí' : 'No';
+  if (typeof value === 'number') return Number.isFinite(value) ? value : '';
+  if (Array.isArray(value)) return value.map(spreadsheetScalar).filter(item => item !== '').join('; ');
+  if (typeof value === 'object') return Object.entries(value).map(([key, item]) => `${key}: ${spreadsheetScalar(item)}`).join('; ');
+  return String(value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
 }
 
 export const EXCEL_MIME_TYPE = 'application/vnd.ms-excel;charset=utf-8';
@@ -771,13 +806,13 @@ export function makeExcelWorkbook(sheets) {
     + `</Workbook>`;
 }
 
-export function selectRows(rows, query, filters = {}, sortKey = '', ascending = true) {
+export function selectRows(rows, query, filters = {}, sortKey = '', ascending = true, sortValue) {
   const q = query.trim().toLocaleLowerCase(LOCALE);
   return rows.filter(row => Object.entries(filters).every(([key, value]) => !value || String(row[key] ?? '') === value))
     .filter(row => !q || Object.values(row).some(value => typeof value !== 'object' && String(value ?? '').toLocaleLowerCase(LOCALE).includes(q)))
     .sort((a, b) => {
       if (!sortKey) return 0;
-      const left = a[sortKey], right = b[sortKey];
+      const left = sortValue ? sortValue(a) : a[sortKey], right = sortValue ? sortValue(b) : b[sortKey];
       const result = typeof left === 'number' && typeof right === 'number' ? left - right
         : String(left ?? '').localeCompare(String(right ?? ''), LOCALE, { numeric: true });
       return result * (ascending ? 1 : -1);

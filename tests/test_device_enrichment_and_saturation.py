@@ -245,12 +245,17 @@ def test_server_api_devices_enriches_matched_fields_and_supports_filtering(tmp_p
     # 5. Test Excel export of printers
     h_excel = DummyHandler("/api/devices/export?type=impresora&format=excel")
     h_excel.do_GET()
-    assert h_excel.headers_sent.get("Content-Type") == "application/vnd.ms-excel; charset=utf-8"
-    assert "impresora.xls" in h_excel.headers_sent.get("Content-Disposition", "")
-    excel_text = h_excel.raw_output.decode("utf-8")
-    assert '<?xml version="1.0" encoding="UTF-8"?>' in excel_text
-    assert 'Worksheet ss:Name="Impresoras"' in excel_text
-    assert 'Nombre de Equipo / Hostname' in excel_text
+    assert h_excel.headers_sent.get("Content-Type") == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert "impresora.xlsx" in h_excel.headers_sent.get("Content-Disposition", "")
+    import zipfile
+    import xml.etree.ElementTree as ET
+    with zipfile.ZipFile(io.BytesIO(h_excel.raw_output)) as archive:
+        workbook = ET.fromstring(archive.read('xl/workbook.xml'))
+        ns = {'s': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+        assert workbook.find('s:sheets/s:sheet', ns).get('name') == 'Impresoras'
+        sheet = archive.read('xl/worksheets/sheet1.xml').decode('utf-8')
+        assert 'Nombre de Equipo / Hostname' in sheet
+        assert 'IMP-URGENCIAS' in sheet
 
 
 def test_server_dhcp_pools_saturation_metrics(tmp_path, monkeypatch):

@@ -1,6 +1,7 @@
+import { accountExportDate, accountExportStatus, accountExportDeviceCount } from './account-export.mjs';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, AlertCircle, ArrowRight, ArrowUpDown, Building2, Calendar, Camera, Check, CheckCircle2, Eye, EyeOff, MessageSquareText, MoreHorizontal, Thermometer, ChevronDown, ChevronLeft, ChevronRight, Clock, Clock3, Copy, Download, FileText, Grid, HardDrive, Headset, Info, Laptop, Layers3, List, Monitor, Network, Package, Plus, Printer, Radio, RotateCcw, Router, Search, Server, ShieldCheck, Smartphone, Users, Wifi, TriangleAlert, ExternalLink, RefreshCw, X, LogIn, LogOut, UserPlus, KeyRound, PlugZap, MapPin, MapPinOff } from 'lucide-react';
-import { Badge, Button, DataTable, Dialog, Empty, Loading, InfiniteMore, IconButton, Metric, Note, Notice, SearchField, Select, downloadCsv, downloadExcel, useListState } from './components.jsx';
+import { Badge, Button, DataTable, RecordDialog, rowInteraction, Dialog, Empty, Loading, InfiniteMore, IconButton, Metric, Note, Notice, SearchField, Select, downloadExcel, useListState } from './components.jsx';
 import { dateTime, number, request, selectRows, segmentKey, deviceInSegment, getOverviewSegmentDevices, getSegmentAccounts, networkAccountStatus, isMeztliSegment, formatDeviceType, formatLocation, getUtilizationTone, getUtilizationColor, statusNames, formatUptime, getSaturationStatus, getSaturationLabel, SUPPORT_EXPORT_COLUMNS, buildSupportSheets, getSupportSegments, normalizeText, buildSegmentDeviceSheets } from './domain.mjs';
 import { useSession } from './session.jsx';
 import { DashboardWidgets } from './dashboard-widgets.jsx';
@@ -43,6 +44,10 @@ const cachePrincipalSegments = (key, value) => {
 export function Overview({ data, demo, navigate, loading, errors, userId, openEditor, refresh }) {
   const [activeSegmentKey, setActiveSegmentKey] = useState(null);
   const devicesPanelRef = useRef(null);
+  const showSegment = segment => {
+    setActiveSegmentKey(segmentKey(segment));
+    setTimeout(() => devicesPanelRef.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' }), 60);
+  };
   const { segments, ips, devices, resources } = data;
   const available = ips.filter(ip => ip.status === 'available').length;
   const online = devices.filter(d => d.status === 'online').length;
@@ -151,7 +156,7 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
       <Metric icon={Network} label={demo ? 'Disponibilidad de red' : 'Direcciones disponibles'} value={demo ? '98.7%' : loading ? '—' : number(available)} caption={demo ? '+2.3% vs. mes anterior · Ejemplo' : 'Sin asignar en el inventario IP'} />
       <Metric icon={Monitor} tone="success" label="Dispositivos activos" value={loading ? '—' : number(online)} caption={`De ${number(devices.length)} equipos consultados`} />
       <Metric icon={Users} label="Concesiones activas" value={loading ? '—' : number(segments.reduce((sum, s) => sum + (s.active_leases || 0), 0))} caption="Asignaciones reportadas por DHCP" />
-      <article className="network-pressure"><div className="network-pressure-header"><h3>Redes más cerca del límite</h3><small>uso de IPs</small></div>{pressureSegments.length ? <ol>{pressureSegments.map(segment => <li key={segmentKey(segment)}><span><strong>{segment.name || segment.interface || 'Red sin nombre'}</strong><small>{number(segment.active_leases)} / {number(segment.capacity)}</small></span><i><em style={{ width: `${Math.min(100, Math.max(0, segment.fillPercent))}%` }} /></i><b>{number(segment.fillPercent)}%</b></li>)}</ol> : <p className="muted">Sin datos de utilización por segmento.</p>}</article>
+      <article className="network-pressure"><div className="network-pressure-header"><h3>Redes más cerca del límite</h3><small>uso de IPs</small></div>{pressureSegments.length ? <ol>{pressureSegments.map(segment => <li key={segmentKey(segment)} {...rowInteraction(() => showSegment(segment))}><span><strong>{segment.name || segment.interface || 'Red sin nombre'}</strong><small>{number(segment.active_leases)} / {number(segment.capacity)}</small></span><i><em style={{ width: `${Math.min(100, Math.max(0, segment.fillPercent))}%` }} /></i><b>{number(segment.fillPercent)}%</b></li>)}</ol> : <p className="muted">Sin datos de utilización por segmento.</p>}</article>
     </section>
     <section data-widget-id="segments" className="segment-section"><div className="section-heading"><Layers3 className="section-icon" size={31} aria-hidden="true" /><div><h2>Redes, VLANs y perfiles de acceso</h2><p>Redes y perfiles publicados por FortiGate y OmniVista; capacidad cuando el proveedor la informa</p></div><div className="section-actions"><span>{number(segments.length)} segmentos</span><Button onClick={editSegments} icon={Plus} disabled={loading || preferenceBusy || !segments.length}>Elegir principales</Button><Button onClick={() => setAll(!all)} icon={ArrowRight}>{all ? 'Ver principales' : 'Ver todos'}</Button></div></div>
       {preferenceSaved && <Notice title="Preferencia guardada" role="status">{demo ? 'La selección se conserva en este navegador.' : 'La selección se conservará al volver a iniciar sesión.'}</Notice>}
@@ -160,7 +165,7 @@ export function Overview({ data, demo, navigate, loading, errors, userId, openEd
         const isSelected = activeSegmentKey === segmentKey(segment);
         const meterTone = getUtilizationTone(segment.utilization_percent);
         const meterColor = getUtilizationColor(segment.utilization_percent);
-        return <article className={`segment-card segment-${index % 3} ${isSelected ? 'segment-card-selected' : ''}`} key={`${segment.id}-${segment.interface}`}>
+        return <article className={`segment-card segment-${index % 3} ${isSelected ? 'segment-card-selected' : ''}`} key={`${segment.id}-${segment.interface}`} {...rowInteraction(() => showSegment(segment))}>
         <div className="segment-card-heading"><h3><span className="segment-dot" />{segment.name || segment.interface}</h3><Badge status={segment.status} /></div>
         <div className="segment-address"><small>{segment.vlan || segment.interface}</small><strong>{segment.subnet || segment.ip_ranges?.[0] || 'Rango no informado'}</strong></div>
         <dl className="segment-details"><div><dt><Router size={16} />Gateway</dt><dd className="font-mono">{segment.default_gateway || '—'}</dd></div><div><dt><Network size={16} />Máscara</dt><dd className="font-mono">{segment.netmask || '—'}</dd></div><div><dt><FileText size={16} />IPs asignadas</dt><dd><strong>{number(segment.active_leases)} / {number(segment.capacity)}</strong></dd></div></dl>
@@ -477,6 +482,7 @@ export function Requests({ demo, data }) {
     {
       key: 'omnivistaEffectiveDate',
       label: 'Fecha de alta',
+      value: accountExportDate,
       render: row => {
         const altaDate = row.omnivistaEffectiveDate ?? (row.customConcession ? null : row.dateOfEffective);
         return altaDate ? (
@@ -523,6 +529,7 @@ export function Requests({ demo, data }) {
     {
       key: 'status',
       label: 'Estado',
+      value: accountExportStatus,
       render: row => {
         const val = row.status;
         const isActive = val === 1 || val === '1' || val === 'online' || val === 'active' || val === 'normal';
@@ -537,7 +544,8 @@ export function Requests({ demo, data }) {
     {
       key: 'devices',
       label: 'Dispositivos',
-      sortable: false,
+      value: accountExportDeviceCount,
+      sortValue: accountExportDeviceCount,
       render: row => (Array.isArray(row.devices) && row.devices.length > 0) ? (
         <button
           type="button"
@@ -558,6 +566,7 @@ export function Requests({ demo, data }) {
     userColumns.push({
       key: 'adminCategory',
       label: 'Clasificación',
+      value: row => [row.adminAnnotation?.is_hidden ? 'Oculta' : '', row.adminAnnotation?.category].filter(Boolean).join(' · '),
       sortable: false,
       render: row => (
         <div className="altas-admin-tags">
@@ -612,6 +621,7 @@ export function Requests({ demo, data }) {
             infiniteScroll
             resetKey={`${snapshot.updatedAt || ''}:${analyticsFilter?.id || ''}:${analyticsFilter?.value || ''}:${networkProfile}:${departmentFilter}`}
             rowKey="username"
+            onRowClick={setSelectedUser}
             rows={filterAltasUsers(accountRows, analyticsFilter, now).filter(account => (!networkProfile || account.accessRoleProfile === networkProfile) && (!departmentFilter || (departmentFilter === '__none__' ? !account.department : account.department === departmentFilter)))}
             columns={userColumns}
             state={usersState}
@@ -620,6 +630,7 @@ export function Requests({ demo, data }) {
             error={snapshot.error}
             onRetry={() => setRevision(value => value + 1)}
             exportable={!demo}
+            exportFormat="xlsx"
             emptyText={analyticsFilter || networkProfile || departmentFilter ? 'No hay cuentas que coincidan con el indicador seleccionado.' : 'OmniVista no devolvió cuentas en esta consulta.'}
             toolbar={<div className="altas-accounts-tools"><SearchField defer value={usersState.query} onChange={usersState.setQuery} placeholder="Buscar cuenta, nombre o departamento…" /><Select label="Departamento" value={departmentFilter} onChange={event => { setDepartmentFilter(event.target.value); usersState.setPage(1); }}><option value="">Todos los departamentos</option>{options(accountSnapshotUsers.map(account => account.department))}{accountSnapshotUsers.some(account => !account.department) && <option value="__none__">Sin departamento</option>}</Select>{isSuperAdmin && <Select label="Visibilidad de cuentas" value={accountVisibility} onChange={event => setAccountVisibility(event.target.value)}><option value="all">Todas las cuentas</option><option value="visible">Visibles</option><option value="hidden">Ocultas</option></Select>}</div>}
           />
@@ -642,6 +653,7 @@ export function Requests({ demo, data }) {
               { key: 'actions', label: 'Acciones', sortable: false, render: user => <div className="altas-alert-row-actions"><IconButton icon={Calendar} label={`Modificar concesión de ${user.username}`} onClick={() => openConcessionModal(user)} />{user.devices?.length > 0 && <IconButton icon={Monitor} label={`Ver equipos de ${user.username}`} onClick={() => setSelectedUser(user)} />}</div> },
             ]}
             state={alertsState}
+            onRowClick={setSelectedUser}
             noun="alertas"
             loading={snapshot.loading}
             error={snapshot.error}
@@ -1012,7 +1024,7 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
             <Button
               icon={Download}
               disabled={!devices.length}
-              onClick={() => downloadCsv('Dispositivos-de-Red', columns.filter(column => column.key !== 'actions'), rows)}
+              onClick={() => downloadExcel('Dispositivos-de-Red', [{ name: 'Dispositivos', columns: columns.filter(column => column.key !== 'actions'), rows }])}
               className="devices-export-btn"
             >
               Exportar
@@ -1024,6 +1036,7 @@ export function Devices({ data, navigate, openEditor, loading, errors, refresh, 
 
       <DataTable
         title="Dispositivos de red"
+        onRowClick={row => openEditor('device-detail', row)}
         rows={rows}
         columns={columns}
         state={state}
@@ -1086,7 +1099,7 @@ export function MeztliManagement({ data, openEditor, loading, errors, refresh, c
     { key: 'ip', label: 'Dirección IP', value: row => row.ip || '—', render: row => <span className="ip-address">{row.ip || '—'}</span> },
     { key: 'mac', label: 'MAC', value: row => row.mac || '—', render: row => <span className="font-mono text-muted text-xs">{row.mac || '—'}</span> },
     { key: 'online', label: 'Estado', value: row => row.is_online === false ? 'offline' : 'online', render: row => <Badge status={row.is_online === false ? 'offline' : 'online'}>{row.is_online === false ? 'Sin conexión' : 'En línea'}</Badge> },
-    { key: 'uptime', label: 'Tiempo en línea', value: row => row.lease_started_at || 0, render: row => row.is_online === false ? detailText('Sin conexión', 'Concesión DHCP vigente') : detailText(elapsedSinceLease(row.lease_started_at), 'desde la última renovación DHCP') },
+    { key: 'uptime', label: 'Tiempo en línea', value: row => row.is_online === false ? 'Sin conexión' : elapsedSinceLease(row.lease_started_at), render: row => row.is_online === false ? detailText('Sin conexión', 'Concesión DHCP vigente') : detailText(elapsedSinceLease(row.lease_started_at), 'desde la última renovación DHCP') },
     { key: 'admission', label: 'Admisión', value: row => row.admission, render: row => row.admission === 'admitted' ? <span className="meztli-reservation-mark meztli-table-mark"><ShieldCheck size={13} /> Admitido</span> : <span className="meztli-unapproved-mark"><TriangleAlert size={13} /> No admitido</span> },
   ];
   return <>
@@ -1429,6 +1442,7 @@ export function AuditLog({
         title={consolidated ? 'Bitácora consolidada de visitas a IDFs' : idfView ? 'Reportes enviados desde móvil' : 'Bitácora institucional de visitas a IDFs'}
         className={`audit-table ${consolidated ? 'audit-table-consolidated' : ''}`}
         rows={enrichedRecords}
+        onRowClick={row => openEditor('report-detail', row, { readOnly: consolidated })}
         rowKey="key"
         columns={columns}
         state={state}
@@ -1539,12 +1553,12 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
   const handleQuery = setQuery;
   const handleStatus = e => setStatusFilter(e.target.value);
 
-  const handleExportDevicesExcel = () => {
+  const handleExportDevicesExcel = async () => {
     try {
-      const sheets = buildSegmentDeviceSheets(segment, filtered);
+      const sheets = buildSegmentDeviceSheets({ segment, allDevices: segmentDevices, filteredDevices: filtered });
       const safeName = (segment.name || segment.interface || 'segmento').toLowerCase().replace(/[^a-z0-9_-]/g, '_');
       const date = new Date().toISOString().slice(0, 10);
-      downloadExcel(`dispositivos_${safeName}_${date}.xls`, sheets);
+      await downloadExcel(`dispositivos_${safeName}_${date}.xlsx`, sheets);
     } catch (e) {
       console.error('Error al exportar dispositivos', e);
     }
@@ -1590,7 +1604,7 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
           onClick={handleExportDevicesExcel}
           disabled={!filtered.length}
           className="devices-export-btn segment-devices-export-btn"
-          title={`Descargar ${filtered.length} ${filtered.length === 1 ? 'dispositivo' : 'dispositivos'} en Excel (.xls)`}
+          title={`Descargar ${filtered.length} ${filtered.length === 1 ? 'dispositivo' : 'dispositivos'} en Excel (.xlsx)`}
           aria-label="Descargar listado de dispositivos en Excel"
         >
           Descargar Excel
@@ -1613,7 +1627,7 @@ export function SegmentDevicesPanel({ panelRef, segment, devices = [], onClose, 
             </tr>
           </thead>
           <tbody>
-            {filtered.slice(0, limit).map((d, index) => <tr key={`${d.mac || d.ip || d.id || index}`} className="segment-device-row" role="button" tabIndex={0} onClick={() => openEditor?.('device-detail', d)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEditor?.('device-detail', d); } }} title={`Haz clic para ver la información técnica de ${d.omnivista?.device_name || d.name || d.ip || 'este dispositivo'}`}>
+            {filtered.slice(0, limit).map((d, index) => <tr key={`${d.mac || d.ip || d.id || index}`} className="segment-device-row" role="button" {...rowInteraction(() => openEditor?.('device-detail', d))} title={`Haz clic para ver la información técnica de ${d.omnivista?.device_name || d.name || d.ip || 'este dispositivo'}`}>
               <td>
                 <div className="cell-detail">
                   <div className="flex items-center gap-2">
@@ -1721,7 +1735,7 @@ export function SupportMovements({ demo }) {
         </thead>
         <tbody>
           {visible.slice(0, limit).map(row => (
-            <tr key={row.id}>
+            <tr key={row.id} {...rowInteraction(() => showDetail(row))}>
               <td>
                 <div className="support-cell-idf">
                   <span className="support-idf-pill">{row.idf_name}</span>
@@ -1789,7 +1803,7 @@ export function SupportMovements({ demo }) {
       {/* Vista adaptativa en tarjetas para pantallas móviles */}
       <div className="support-log-mobile-list" aria-label="Lista de movimientos para pantallas pequeñas">
         {visible.slice(0, limit).map(row => (
-          <article key={row.id} className="support-log-mobile-card">
+          <article key={row.id} className="support-log-mobile-card" {...rowInteraction(() => showDetail(row))}>
             <div className="support-log-mobile-card-header">
               <div>
                 <strong>{row.idf_name}</strong>
@@ -1877,6 +1891,12 @@ export function SupportMovements({ demo }) {
 }
 
 export function SupportInventory({ canEdit = false }) {
+  const [selectedItem, setSelectedItem] = useState(null);
+  const detailColumns = [
+    { key: 'source_number', label: 'N.º' }, { key: 'description', label: 'Artículo' },
+    { key: 'quantity', label: 'Cantidad' }, { key: 'unit', label: 'Unidad' },
+    { key: 'status', label: 'Estado' }, { key: 'location', label: 'Ubicación' }, { key: 'notes', label: 'Observaciones' },
+  ];
   const [items, setItems] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -1909,6 +1929,7 @@ export function SupportInventory({ canEdit = false }) {
   };
   const visible = items.filter(item => !query || normalizeText(`${item.description} ${item.unit} ${item.status} ${item.notes}`).includes(normalizeText(query)));
   return <section className="support-inventory-view">
+    <RecordDialog row={selectedItem} columns={detailColumns} title="Información del artículo" onClose={() => setSelectedItem(null)} />
     <PageHeading eyebrow="IDF 3" title="Inventario soporte IDF 3" description="Inventario inicial del área de soporte" />
     {error && <Notice tone="danger">{error}</Notice>}
     {loading ? <Loading label="Cargando inventario…" /> : error && !items.length ? null : <>
@@ -1956,7 +1977,7 @@ export function SupportInventory({ canEdit = false }) {
           </thead>
           <tbody>
             {visible.slice(0, limit).map(item => (
-              <tr key={item.id}>
+              <tr key={item.id} {...rowInteraction(() => setSelectedItem(item))}>
                 <td>
                   <span className="support-inventory-number">{item.source_number}</span>
                 </td>
@@ -2007,7 +2028,7 @@ export function SupportInventory({ canEdit = false }) {
         {/* Tarjetas táctiles adaptadas a pantallas móviles (smartphones) */}
         <div className="support-inventory-mobile-list" aria-label="Lista de inventario para pantallas pequeñas">
           {visible.slice(0, limit).map(item => (
-            <article key={item.id} className="support-inventory-mobile-card">
+            <article key={item.id} className="support-inventory-mobile-card" {...rowInteraction(() => setSelectedItem(item))}>
               <div className="support-inventory-mobile-card-header">
                 <span className="support-inventory-number">#{item.source_number}</span>
                 <span className="support-inventory-status">{item.status || 'Sin verificar'}</span>
@@ -2427,6 +2448,7 @@ export function ProjectAuditLog({
         title="Historial de movimientos y eventos registrados"
         className="project-audit-table"
         rows={enrichedEvents}
+        onRowClick={setSelectedEvent}
         rowKey="key"
         columns={columns}
         state={state}

@@ -9,6 +9,24 @@ permissions:
   contents: read
 
 jobs:
+  windows-setup:
+    name: Clean Windows installation
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Set up supported Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version-file: .python-version
+      - name: Set up supported Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+      - name: Verify first installation and repeated setup without credentials
+        run: python tests/check_clean_setup.py --services
+
   verify:
     name: Backend, frontend and dependency checks
     runs-on: ubuntu-latest

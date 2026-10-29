@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import shutil
 import pytest
+from dotenv import dotenv_values
 from pydantic import ValidationError
 
 
@@ -118,15 +119,15 @@ def test_provider_refresh_preserves_production_settings_and_inventory_keys(tmp_p
 
     module.main()
 
-    updated = dict(line.split('=', 1) for line in env.read_text().splitlines())
+    updated = dotenv_values(env)
     for key, value in existing.items():
         assert updated[key] == value
     assert updated['INVENTARIOS_FORTI_KEY'] == 'new-forti-gateway-key'
     assert updated['INVENTARIOS_OMNI_KEY'] == 'new-omni-gateway-key'
 
 
-@pytest.mark.parametrize('url,expected', [('http://127.0.0.1:8002/api/v1', 'd' * 43), ('https://inventory.example/api/v1', 'saved-key')])
-def test_provisioning_synchronizes_only_managed_local_dashboard_connection(tmp_path, monkeypatch, url, expected):
+@pytest.mark.parametrize('url,expected', [('http://127.0.0.1:8002/api/v1', 'saved-key'), ('https://inventory.example/api/v1', 'saved-key')])
+def test_provisioning_preserves_saved_dashboard_connection(tmp_path, monkeypatch, url, expected):
     module = configure_module()
     service = tmp_path / 'API Inventarios'
     private = service / '.private'
@@ -140,6 +141,48 @@ def test_provisioning_synchronizes_only_managed_local_dashboard_connection(tmp_p
     module.main()
     value = access.connection('inventarios')
     assert value['secret'] == expected
-    assert value['version'] == (4 if url.startswith('http://127.0.0.1:') else 3)
-    env = dict(line.split('=', 1) for line in (private / '.env').read_text().splitlines())
+    assert value['version'] == 3
+    env = dotenv_values(private / '.env')
     assert env['INVENTARIOS_REFRESH_SECONDS'] == '0'
+
+
+@pytest.mark.parametrize('provider_secret', ['', 'replacement-key'])
+def test_startup_preserves_provider_credentials_and_shared_file(tmp_path, monkeypatch, provider_secret):
+    module = configure_module()
+    service = tmp_path / 'API Inventarios'
+    private = service / '.private'
+    private.mkdir(parents=True)
+    env = private / '.env'
+    env.write_text('INVENTARIOS_FORTI_KEY=saved-forti\nINVENTARIOS_OMNI_KEY=saved-omni\n')
+    shared = tmp_path / '.sgrs-private/inventarios-connection.json'
+    shared.parent.mkdir()
+    original = '{"url":"https://inventory.example/api/v1","secret":"saved-dashboard"}'
+    shared.write_text(original)
+    monkeypatch.setattr(module, '__file__', str(service / 'scripts/configure_local.py'))
+    monkeypatch.setattr(module.dashboard_access, 'PRIVATE', shared.parent)
+    monkeypatch.setattr(module.dashboard_access, 'connection', lambda name: {
+        'url': 'http://127.0.0.1:8001/api/v1', 'auth_mode': 'api-key', 'secret': provider_secret,
+    })
+    module.main()
+    updated = dotenv_values(env)
+    assert updated['INVENTARIOS_FORTI_KEY'] == 'saved-forti'
+    assert updated['INVENTARIOS_OMNI_KEY'] == 'saved-omni'
+    assert shared.read_text() == original
+
+
+def test_provisioning_preserves_keys_from_legacy_env(tmp_path, monkeypatch):
+    module = configure_module()
+    service = tmp_path / 'API Inventarios'
+    service.mkdir()
+    names = ('API_KEYS', 'WRITE_KEYS', 'EXPORT_KEYS', 'DASHBOARD_KEY')
+    (service / '.env').write_text(''.join(f'INVENTARIOS_{name}="legacy-{name}"\n' for name in names))
+    monkeypatch.setattr(module, '__file__', str(service / 'scripts/configure_local.py'))
+    monkeypatch.setattr(module.dashboard_access, 'PRIVATE', tmp_path / '.sgrs-private')
+    monkeypatch.setattr(module.dashboard_access, 'connection', lambda name: {
+        'url': 'http://127.0.0.1:8001/api/v1', 'auth_mode': 'api-key', 'secret': '',
+    })
+    module.main()
+    from dotenv import dotenv_values
+    updated = dotenv_values(service / '.private/.env')
+    for name in names:
+        assert updated[f'INVENTARIOS_{name}'] == f'legacy-{name}'

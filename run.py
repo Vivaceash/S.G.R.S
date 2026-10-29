@@ -1,4 +1,5 @@
 import json
+import hashlib
 import errno
 import ipaddress
 import os
@@ -75,13 +76,22 @@ def is_pid_alive(pid: int) -> bool:
     if sys.platform == "win32":
         try:
             import ctypes
+            from ctypes import wintypes
+            kernel = ctypes.windll.kernel32
+            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel.OpenProcess.restype = wintypes.HANDLE
+            kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+            kernel.GetExitCodeProcess.restype = wintypes.BOOL
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            kernel.CloseHandle.restype = wintypes.BOOL
             PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-            handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            handle = kernel.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
             if handle:
-                exit_code = ctypes.c_ulong()
-                ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code))
-                ctypes.windll.kernel32.CloseHandle(handle)
-                return exit_code.value == 259
+                try:
+                    exit_code = wintypes.DWORD()
+                    return bool(kernel.GetExitCodeProcess(handle, ctypes.byref(exit_code))) and exit_code.value == 259
+                finally:
+                    kernel.CloseHandle(handle)
             return False
         except Exception:
             try:
@@ -312,9 +322,12 @@ def ensure_supported_python():
 
 def get_npm_exe() -> str:
     """Detecta el ejecutable de npm en el sistema."""
+    found = shutil.which("npm.cmd" if sys.platform == "win32" else "npm")
+    if found:
+        return found
     if sys.platform == "win32" and os.path.exists(r"C:\Program Files\nodejs\npm.cmd"):
         return r"C:\Program Files\nodejs\npm.cmd"
-    return shutil.which("npm") or "npm"
+    return "npm"
 
 
 def get_env(py_exe: str) -> dict:
@@ -325,7 +338,7 @@ def get_env(py_exe: str) -> dict:
         "PYTHONIOENCODING": "utf-8",
     }
     node_path = r"C:\Program Files\nodejs"
-    if os.path.exists(node_path) and node_path not in env.get("PATH", ""):
+    if sys.platform == "win32" and not shutil.which("node") and os.path.exists(node_path) and node_path not in env.get("PATH", ""):
         env["PATH"] = f"{node_path};" + env.get("PATH", "")
 
     py_path = Path(py_exe)
@@ -921,7 +934,7 @@ def ensure_environment():
     py_exe = get_python_exe()
 
     # 2. Comprobar dependencias clave
-    test_deps_code = "import fastapi, uvicorn, httpx, requests, pydantic_settings; print('DEPS_OK')"
+    test_deps_code = "import fastapi, uvicorn, httpx, requests, dotenv, pydantic, pydantic_settings, scalar_fastapi, slowapi; print('DEPS_OK')"
     check_deps = subprocess.run(
         [py_exe, "-c", test_deps_code],
         stdout=subprocess.PIPE,
@@ -929,11 +942,20 @@ def ensure_environment():
         text=True,
     )
 
-    if check_deps.returncode != 0:
-        req_file = ROOT_DIR / "requirements.lock"
-        if req_file.exists():
+    req_file = ROOT_DIR / "requirements.lock"
+    stamp = venv_dir / ".sgrs-requirements.sha256"
+    fingerprint = hashlib.sha256(req_file.read_bytes()).hexdigest() if req_file.is_file() else None
+    locked = fingerprint and stamp.is_file() and stamp.read_text().strip() == fingerprint
+    if check_deps.returncode != 0 or not locked:
+        if req_file.is_file():
             print("[SGRS] Dependencias de Python no detectadas en el entorno virtual. Instalando requirements.lock...")
-            subprocess.run([py_exe, "-m", "pip", "install", "--require-hashes", "-r", str(req_file)], check=True)
+            try:
+                subprocess.run([py_exe, "-m", "pip", "install", "--require-hashes", "-r", str(req_file)], check=True)
+                subprocess.run([py_exe, "-m", "pip", "check"], check=True)
+                subprocess.run([py_exe, "-c", test_deps_code], check=True)
+            except (OSError, subprocess.CalledProcessError) as exc:
+                raise RuntimeError("No se pudieron verificar las dependencias Python; el entorno no está listo.") from exc
+            stamp.write_text(fingerprint + "\n", encoding="utf-8")
             print("[SGRS] [OK] Dependencias instaladas exitosamente.")
         else:
             raise RuntimeError("requirements.lock no encontrado; no se pueden instalar dependencias verificadas.")
@@ -957,31 +979,62 @@ def ensure_environment():
         except Exception as err:
             print(f"[SGRS] Aviso al configurar permisos en .sgrs-private: {err}")
 
-    # 4. Comprobar Dashboard/dist
-    dash_dir = ROOT_DIR / "Dashboard"
-    dash_dist = dash_dir / "dist"
-    index_file = dash_dist / "index.html"
+    ensure_dashboard()
 
-    if not index_file.exists():
-        npm_bin = shutil.which("npm")
-        if sys.platform == "win32" and not npm_bin:
-            npm_win = r"C:\Program Files\nodejs\npm.cmd"
-            if os.path.exists(npm_win):
-                npm_bin = npm_win
 
-        if npm_bin:
-            print("[SGRS] Compilado de Dashboard no detectado. Compilando interfaz web frontend...")
-            try:
-                if not (dash_dir / "node_modules").exists():
-                    print("[SGRS] Instalando dependencias de frontend con npm...")
-                    subprocess.run([npm_bin, "install"], cwd=str(dash_dir), check=True)
-                print("[SGRS] Compilando assets del frontend (npm run build)...")
-                subprocess.run([npm_bin, "run", "build"], cwd=str(dash_dir), check=True)
-                print("[SGRS] [OK] Dashboard frontend compilado exitosamente.")
-            except Exception as err:
-                print(f"[SGRS] Aviso: No se pudo compilar el Dashboard automáticamente: {err}")
-        else:
-            print("[SGRS] Aviso: Dashboard/dist no encontrado y npm no está disponible.")
+def dashboard_fingerprint():
+    dashboard = ROOT_DIR / "Dashboard"
+    paths = [dashboard / name for name in ("package.json", "package-lock.json", "index.html", "vite.config.js", ".npmrc")]
+    for folder in ("src", "public"):
+        paths.extend(path for path in (dashboard / folder).rglob("*") if path.is_file())
+    digest = hashlib.sha256()
+    for path in sorted(path for path in paths if path.is_file()):
+        digest.update(path.relative_to(dashboard).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def dashboard_assets_ready():
+    dashboard = ROOT_DIR / "Dashboard"
+    index = dashboard / "dist/index.html"
+    if not index.is_file():
+        return False
+    assets = re.findall(r'(?:src|href)=["\'](/assets/[^"\']+)["\']', index.read_text(encoding="utf-8"))
+    if not assets or not all((dashboard / "dist" / asset.lstrip("/")).is_file() for asset in assets):
+        return False
+    try:
+        manifest = json.loads((dashboard / "dist/.vite/manifest.json").read_text(encoding="utf-8"))
+        files = [path for entry in manifest.values() for path in [entry["file"], *entry.get("css", []), *entry.get("assets", [])]]
+        return bool(files) and all((dashboard / "dist" / path).is_file() for path in files)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return False
+
+
+def ensure_dashboard():
+    """Build the current sources reproducibly; never report a broken UI as ready."""
+    dashboard = ROOT_DIR / "Dashboard"
+    stamp = dashboard / "dist/.sgrs-build.sha256"
+    fingerprint = dashboard_fingerprint()
+    if dashboard_assets_ready() and stamp.is_file() and stamp.read_text().strip() == fingerprint:
+        return
+    npm = get_npm_exe()
+    if npm == "npm" and not shutil.which(npm):
+        raise RuntimeError("Falta Node.js/npm para preparar el Dashboard. Instala la versión de .nvmrc y abre una terminal nueva.")
+    if not (dashboard / "package-lock.json").is_file():
+        raise RuntimeError("Falta Dashboard/package-lock.json; restaura el archivo antes de preparar el entorno.")
+    print("[SGRS] Preparando Dashboard con las dependencias bloqueadas...")
+    env = get_env(get_python_exe())
+    env["npm_config_engine_strict"] = "true"
+    try:
+        subprocess.run([npm, "ci", "--include=dev", "--include=optional"], cwd=str(dashboard), env=env, check=True)
+        subprocess.run([npm, "run", "build", "--", "--manifest"], cwd=str(dashboard), env=env, check=True)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError("No se pudo preparar el Dashboard. Revisa el error de npm anterior; el entorno no está listo.") from exc
+    if not dashboard_assets_ready():
+        raise RuntimeError("La compilación no generó Dashboard/dist y sus assets completos; el entorno no está listo.")
+    stamp.write_text(fingerprint + "\n", encoding="utf-8")
+    print("[SGRS] [OK] Dashboard actualizado y verificado.")
 
 
 def start_services(detached: bool = True, dashboard_port=None):
@@ -1298,6 +1351,8 @@ def main():
         print("             Configuración y Preparación del Entorno")
         print("=" * 72)
         ensure_environment()
+        validate_configured_tls_bundles()
+        ensure_inventory_config(get_python_exe())
         print("\n[SGRS] [OK] El entorno está listo.")
         print("       Para instalar el comando global usa: python run.py install\n")
     elif cmd in ("stop", "down", "kill"):
@@ -1312,7 +1367,7 @@ def main():
         current = load_pids()
         previous_dashboard_port = current.get("dashboard_port")
         stop_services()
-        ports = [8000, 8001, get_inventory_port()]
+        ports = [service["port"] for service in service_specs()]
         if isinstance(previous_dashboard_port, int):
             ports.append(previous_dashboard_port)
         wait_for_ports_free(ports)
@@ -1345,6 +1400,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, RuntimeError) as exc:
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         print(f"[SGRS] ERROR: {exc}", file=sys.stderr)
         sys.exit(1)

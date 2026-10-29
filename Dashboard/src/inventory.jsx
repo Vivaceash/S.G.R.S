@@ -1,7 +1,7 @@
 import { QUERY_TIMEOUT_MS } from './query-policy.mjs';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, Save, Server, Camera, Wifi, TriangleAlert, Users, MapPin, Trash2, Power, Download } from 'lucide-react';
-import { Badge, Button, DataTable, Dialog, Field, Loading, Metric, Notice, SearchField, Select, downloadCsv, useListState } from './components.jsx';
+import { Badge, Button, DataTable, Dialog, RecordDialog, rowInteraction, Field, Loading, Metric, Notice, SearchField, Select, downloadExcel, useListState } from './components.jsx';
 import { PageHeading } from './pages.jsx';
 import { useForm } from './forms.jsx';
 import { dateTime, number, request, selectRows } from './domain.mjs';
@@ -509,6 +509,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
         <DataTable
           title="Puntos de acceso en red (OmniVista)"
           rows={omniAps}
+          onRowClick={setSelectedAp}
           columns={omniColumns}
           state={omniState}
           noun="access points"
@@ -590,11 +591,11 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
           {route === 'cctv' && dataset === 'cctv' && <Select label="Reubicación" value={state.filters.relocation || ''} onChange={e => state.setFilter('relocation', e.target.value)}><option value="">Todas</option><option>Reubicada</option><option>Por confirmar</option><option>Sin reubicación</option></Select>}
           {route === 'cctv' && dataset === 'cctv' && <button type="button" className={`camera-retired-filter ${state.filters.decommissioned === 'true' ? 'is-active' : ''}`} aria-pressed={state.filters.decommissioned === 'true'} onClick={() => state.setFilter('decommissioned', state.filters.decommissioned === 'true' ? '' : 'true')}><Power size={15} />Retiradas <b>{rows.filter(row => row.decommissioned).length}</b></button>}
           <SearchField defer value={state.query} onChange={state.setQuery} placeholder="Buscar descripción, serie, MAC o ubicación…" />
-          {route === 'cctv' ? <Button icon={Download} disabled={!canExport || loading || Boolean(error) || !exportRows.length} onClick={() => downloadCsv(title, columns.filter(column => column.key !== 'actions'), exportRows)}>Exportar consulta</Button> : <Button variant="primary" busy={checking} disabled={demo || loading || Boolean(error) || !catalog.assets.length} onClick={check}>Cotejar APIs</Button>}
+          {route === 'cctv' ? <Button icon={Download} disabled={!canExport || loading || Boolean(error) || !exportRows.length} onClick={() => downloadExcel(title, [{ name: title, columns: columns.filter(column => column.key !== 'actions'), rows: exportRows }])}>Exportar consulta</Button> : <Button variant="primary" busy={checking} disabled={demo || loading || Boolean(error) || !catalog.assets.length} onClick={check}>Cotejar APIs</Button>}
         </div>
         {networkError && <Notice title="No se pudo completar el cotejo" tone="warning">{networkError}</Notice>}
         {network && <Notice title={network.sources.every(s => s.available) ? 'Cotejo realizado' : 'Cotejo parcial · Fuentes no disponibles'} tone={network.sources.every(s => s.available) ? 'info' : 'warning'}>{network.sources.map(s => `${s.provider === 'forti' ? 'FortiGate' : 'OmniVista'}: ${s.available ? `${s.count} registros consultados` : 'no disponible'} · ${dateTime(s.observed_at)}`).join(' / ')}. {network.scope} {network.only_api.length} registros de API sin vínculo confirmado con el catálogo.</Notice>}
-        <DataTable title={title} className={route === 'cctv' ? 'cctv-table' : ''} rows={rows} columns={columns} state={{ ...state, filters: tableFilters }} rowClassName={route === 'cctv' ? row => row.decommissioned ? 'camera-row-decommissioned' : '' : undefined} loading={loading} error={error} onRetry={reload} exportable={route !== 'cctv' && canExport} />
+        <DataTable title={title} className={route === 'cctv' ? 'cctv-table' : ''} rows={rows} columns={columns} onRowClick={asset => setModal({ type: 'detail', asset })} state={{ ...state, filters: tableFilters }} rowClassName={route === 'cctv' ? row => row.decommissioned ? 'camera-row-decommissioned' : '' : undefined} loading={loading} error={error} onRetry={reload} exportable={route !== 'cctv' && canExport} />
         <Button disabled={loading || Boolean(error)} onClick={() => setModal({ type: 'sources' })}>Fuentes y discrepancias documentales</Button>
         {network?.only_api.length > 0 && <Button onClick={() => setModal({ type: 'unlinked' })}>Ver registros de API sin vínculo confirmado</Button>}
         <Dialog open={Boolean(modal)} onClose={close} title={modal?.type === 'edit' ? 'Corregir datos físicos' : modal?.type === 'unlinked' ? 'API sin vínculo confirmado' : modal?.type === 'sources' ? 'Fuentes documentales' : 'Ficha del recurso'} wide busy={busy}>
@@ -646,6 +647,7 @@ export function DocumentaryInventory({ route, demo, navigate, canWrite, canExpor
 }
 
 function Sources({ catalog, canExport }) {
+  const [selectedSource, setSelectedSource] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   const controller = useRef(null);
@@ -668,10 +670,11 @@ function Sources({ catalog, canExport }) {
   const documentedCameras = catalog.assets.filter(a => a.dataset === 'cctv').length;
   const structureTotal = catalog.structure?.camera_counts?.reduce((sum, r) => sum + r.installed, 0);
   return <>
+    <RecordDialog row={selectedSource} columns={[{ key: 'file', label: 'Documento' }, { key: 'sha256', label: 'Identificador del documento' }]} title="Información del documento" onClose={() => setSelectedSource(null)} />
     <Notice title="Documentos históricos">El cotejo de red da prioridad a las APIs. El catálogo físico conserva la procedencia y las correcciones por separado. PACS e IDF 13 no se han fusionado.</Notice>
     {structureTotal != null && <Notice title="Conteos CCTV por conciliar" tone="warning">El libro de estructura registra {structureTotal} cámaras y el catálogo actualizado contiene {documentedCameras}. Esta diferencia documental no acredita faltantes físicos.</Notice>}
     {error && <Notice title="Descarga no completada" tone="danger">{error}</Notice>}
-    <ul className="detail-list">{catalog.sources.map(s => <li key={s.sha256}><span>{s.file}</span>{canExport && s.file !== 'Estructura.xlsm' && <Button busy={busy === s.sha256} disabled={Boolean(busy)} onClick={() => download(s)}>Descargar original</Button>}</li>)}</ul>
+    <ul className="detail-list">{catalog.sources.map(s => <li key={s.sha256} {...rowInteraction(() => setSelectedSource(s))}><span>{s.file}</span>{canExport && s.file !== 'Estructura.xlsm' && <Button busy={busy === s.sha256} disabled={Boolean(busy)} onClick={() => download(s)}>Descargar original</Button>}</li>)}</ul>
     <p className="muted">El libro de estructura se limita a resúmenes permitidos; no se publica el archivo con datos de acceso.</p>
     {(catalog.structure?.camera_counts || []).map(c => <p key={c.site}>{c.site === 'MDF' || c.site === 'CASETA' ? c.site : `IDF ${c.site}`}: {c.installed} cámaras registradas en el libro de estructura.</p>)}
   </>;
